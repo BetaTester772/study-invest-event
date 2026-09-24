@@ -101,6 +101,7 @@ study-invest purge-images                    # 이벤트 종료 후 인증 사�
 | `STUDY_INVEST_BATCH_POOL_SIZE` | `2` | 배치 풀 크기 |
 | `STUDY_INVEST_CPU_WORKERS` | `1` | 시뮬레이터용 프로세스 수(0이면 스레드) |
 | `STUDY_INVEST_LOOP_GUARD` | `warn` | 이벤트 루프에서 SQL 실행 시 `warn`/`raise`/`off` |
+| `STUDY_INVEST_EVENT_START` / `_EVENT_END` | `2026-10-06` / `2026-10-16` | 이벤트 기간(YYYY-MM-DD, 양 끝 포함). 테스트·QA 서버에서만 바꾼다 |
 | `STUDY_INVEST_FRONTEND_DIST` | (없음) | 빌드된 프론트엔드를 백엔드가 직접 제공할 때 경로 |
 
 ### 프론트엔드
