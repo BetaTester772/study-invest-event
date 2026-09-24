@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from ..event_calendar import EventCalendar, to_kst
 from ..instruments import BY_CODE, INSTRUMENTS, InstrumentKind
 from ..models import (
-    Holding,
     Order,
     OrderStatus,
     Participant,
@@ -21,10 +20,17 @@ from ..models import (
     Side,
 )
 from ..money import exact, round_half_up
-from ..params import INITIAL_CASH, EventParams
-from .common import current_prices, lock_market_day, prices_on, total_assets
+from ..params import INITIAL_CASH, QUANTITY_MAX, EventParams
+from .common import (
+    current_prices,
+    holding_of,
+    lock_market_day,
+    lock_participant,
+    prices_on,
+    total_assets,
+)
 
-MAX_QUANTITY = 1_000_000_000
+MAX_QUANTITY = QUANTITY_MAX
 
 
 def bought_today(s: Session, participant_id: int, day: date) -> dict[str, int]:
@@ -46,15 +52,6 @@ def buy_limit_amount(total: int, params: EventParams) -> int:
     return int(exact(params.daily_buy_limit_ratio) * total)
 
 
-def _holding(participant: Participant, code: str) -> Holding:
-    for h in participant.holdings:
-        if h.code == code:
-            return h
-    h = Holding(code=code, quantity=0, cost=0)
-    participant.holdings.append(h)
-    return h
-
-
 def place_order(
     s: Session,
     participant: Participant,
@@ -66,10 +63,8 @@ def place_order(
     params: EventParams,
 ) -> Order:
     """주문을 검증하고 즉시 체결한다. 거부된 주문도 사유와 함께 기록한다(F-09)."""
-    # 동시 주문: 참가자 행을 잠근 뒤 최신 값으로 다시 읽는다. 인증 의존성이 요청 초반에 읽은
-    # 현금·보유는 그사이 다른 주문이 바꿨을 수 있다(lost update 방지). SQLite는 잠금 없음.
-    s.refresh(participant, with_for_update=True)
-    s.expire(participant, ["holdings"])
+    # 요청 초반(인증 의존성)에 읽은 현금·보유는 그사이 다른 주문·보상이 바꿨을 수 있다.
+    participant = lock_participant(s, participant.id)
     trade_day = to_kst(now).date()
     reason: RejectReason | None = None
     price: int | None = None
@@ -111,7 +106,7 @@ def place_order(
 
     amount: int | None = price * quantity if price is not None and reason is None else None
     if amount is not None:
-        holding = _holding(participant, code)
+        holding = holding_of(participant, code)
         if side is Side.BUY:
             participant.cash -= amount
             holding.quantity += quantity

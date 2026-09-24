@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { adminApi, ApiError, type SimulationReport } from '../../api';
+import { adminApi, ApiError, useApi, type SimulateOptions, type SimulationReport } from '../../api';
+import { LoadError } from '../../components/app/LoadError';
 import {
   Alert,
   Button,
@@ -8,6 +9,7 @@ import {
   Grid,
   NumberField,
   Percent,
+  Skeleton,
   Stack,
   Stat,
   StatGroup,
@@ -86,8 +88,16 @@ function Report({ r }: { r: SimulationReport }) {
 }
 
 export function SimulatorTab() {
-  const [paths, setPaths] = useState(10000);
-  const [rounds, setRounds] = useState(10);
+  // 입력 범위·기본값은 서버가 정한다(서버 스키마가 유일한 출처).
+  const options = useApi(() => adminApi.simulateOptions(), []);
+  if (options.error) return <LoadError error={options.error} onRetry={options.refetch} what="시뮬레이터 설정" />;
+  if (!options.data) return <Skeleton lines={4} />;
+  return <SimulatorForm options={options.data} />;
+}
+
+function SimulatorForm({ options }: { options: SimulateOptions }) {
+  const [paths, setPaths] = useState(options.paths.default);
+  const [rounds, setRounds] = useState(options.rounds.default);
   const [seed, setSeed] = useState('');
   const [useCap, setUseCap] = useState(false);
   const [running, setRunning] = useState(false);
@@ -132,12 +142,20 @@ export function SimulatorTab() {
                 label="경로 수"
                 value={paths}
                 onChange={setPaths}
-                min={100}
-                max={1_000_000}
+                min={options.paths.min}
+                max={options.paths.max}
                 step={1000}
                 suffix="개"
+                hint={`${formatNumber(options.paths.min)}~${formatNumber(options.paths.max)}개`}
               />
-              <NumberField label="회차" value={rounds} onChange={setRounds} min={1} max={30} suffix="회" />
+              <NumberField
+                label="회차"
+                value={rounds}
+                onChange={setRounds}
+                min={options.rounds.min}
+                max={options.rounds.max}
+                suffix="회"
+              />
               <TextField
                 label="시드"
                 hint="비우면 무작위"

@@ -321,7 +321,31 @@ class AuditEntry(Schema):
 
 
 class SimulateRequest(BaseModel):
+    # 입력 한계는 여기 한 곳에만 둔다. 화면은 GET /api/admin/simulate/options로 받아 쓴다.
     paths: int = Field(default=10_000, ge=1, le=100_000)
     rounds: int = Field(default=10, ge=1, le=100)
     seed: int | None = None
     use_price_cap: bool = False
+
+
+class IntRange(Schema):
+    min: int
+    max: int
+    default: int
+
+
+class SimulateOptions(Schema):
+    paths: IntRange
+    rounds: IntRange
+
+
+def int_range(model: type[BaseModel], field: str) -> IntRange:
+    """모델 필드의 ge/le 제약과 기본값을 그대로 꺼낸다(한계를 한 곳에서만 정의)."""
+    info = model.model_fields[field]
+    bounds: dict[str, int] = {}
+    for meta in info.metadata:
+        if getattr(meta, "ge", None) is not None:
+            bounds["min"] = meta.ge
+        if getattr(meta, "le", None) is not None:
+            bounds["max"] = meta.le
+    return IntRange(min=bounds["min"], max=bounds["max"], default=info.default)

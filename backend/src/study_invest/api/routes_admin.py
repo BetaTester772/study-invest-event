@@ -236,6 +236,15 @@ def audit_log(
     return [schemas.AuditEntry.model_validate(r) for r in rows]
 
 
+@router.get("/simulate/options", response_model=schemas.SimulateOptions)
+async def simulate_options() -> schemas.SimulateOptions:  # I/O 없음 → async
+    """시뮬레이터 입력 한계와 기본값. 화면 입력 범위의 유일한 출처."""
+    return schemas.SimulateOptions(
+        paths=schemas.int_range(schemas.SimulateRequest, "paths"),
+        rounds=schemas.int_range(schemas.SimulateRequest, "rounds"),
+    )
+
+
 @router.post("/simulate")
 async def simulate(
     body: schemas.SimulateRequest, state: StateDep, params: ParamsDep

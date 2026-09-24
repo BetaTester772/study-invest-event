@@ -37,7 +37,11 @@ export interface RequestOptions {
 type UnauthorizedListener = (mode: AuthMode) => void;
 const unauthorizedListeners = new Set<UnauthorizedListener>();
 
-/** Subscribe to 401 responses (used by AuthContext to drop a stale session). */
+/**
+ * Subscribe to 401 responses that reject the **current** credential (used by AuthContext / admin gate
+ * to drop the session). A 401 for a request sent with an older token or key — e.g. one still in flight
+ * across logout → login — is not reported, so it can never end the newer session.
+ */
 export function onUnauthorized(listener: UnauthorizedListener): () => void {
   unauthorizedListeners.add(listener);
   return () => unauthorizedListeners.delete(listener);
@@ -82,23 +86,28 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   return qs ? `${url}?${qs}` : url;
 }
 
-export function authHeaders(auth: AuthMode): Record<string, string> {
+/** The credential a request is sent with (Bearer token or admin key), or null. */
+function credentialFor(auth: AuthMode): string | null {
+  if (auth === 'participant' || auth === 'optional') return tokenStore.get();
+  if (auth === 'admin') return adminKeyStore.get();
+  return null;
+}
+
+export function authHeaders(auth: AuthMode, credential: string | null = credentialFor(auth)): Record<string, string> {
   const headers: Record<string, string> = {};
-  if (auth === 'participant' || auth === 'optional') {
-    const token = tokenStore.get();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  } else if (auth === 'admin') {
-    const key = adminKeyStore.get();
-    if (key) headers['X-Admin-Key'] = key;
-  }
+  if (!credential) return headers;
+  if (auth === 'participant' || auth === 'optional') headers.Authorization = `Bearer ${credential}`;
+  else if (auth === 'admin') headers['X-Admin-Key'] = credential;
   return headers;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, form, query, auth = 'none', signal, responseType = 'json' } = options;
+  // 이 요청이 실제로 보낸 자격 증명. 401은 이것이 아직 현재 값일 때만 세션 거절로 본다.
+  const credential = credentialFor(auth);
   const headers: Record<string, string> = {
     Accept: responseType === 'json' ? 'application/json' : '*/*',
-    ...authHeaders(auth),
+    ...authHeaders(auth, credential),
   };
   let payload: BodyInit | undefined;
   if (form) {
@@ -124,7 +133,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       /* non-JSON error body */
     }
     const { code, message } = parseErrorBody(res.status, parsed);
-    if (res.status === 401 && auth !== 'none') unauthorizedListeners.forEach((l) => l(auth));
+    if (res.status === 401 && credential !== null && credential === credentialFor(auth)) {
+      unauthorizedListeners.forEach((l) => l(auth));
+    }
     throw new ApiError(res.status, code, message, parsed);
   }
 

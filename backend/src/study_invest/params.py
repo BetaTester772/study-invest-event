@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from datetime import date, time, timedelta, timezone
@@ -22,6 +23,20 @@ EVENT_END = date(2026, 10, 16)
 
 MARKET_OPEN = time(9, 0)
 MARKET_CLOSE = time(18, 0)
+
+# --- 수치 한계 -------------------------------------------------------------------
+# 모든 가격·수량·금액이 DB의 BIGINT(최대 약 9.2×10^18)와 정수 연산 범위 안에 머물도록 하는 상한.
+# 가격 × 수량 ≤ PRICE_MAX × QUANTITY_MAX = 10^18 이므로 한 주문의 금액도 BIGINT를 넘지 않는다.
+PRICE_MAX = 1_000_000_000
+"""모든 가격의 상한(10억 원). 가격 산정 결과·수동 개입가·가격 파라미터에 적용."""
+QUANTITY_MAX = 1_000_000_000
+"""한 주문 수량의 상한."""
+REWARD_QUANTITY_MAX = 1_000
+"""인증 1건당 보상 수량 상한. 11일 모두 받아도 보유 수량이 한계에 닿지 않는다."""
+AMOUNT_MAX = 10**15
+"""금액 파라미터(가상 유동성 등)의 상한."""
+COIN_CAP_MAX = 10.0
+"""코인 일일 상승 상한 파라미터의 최대값(+1000%)."""
 
 STOCK_DAILY_LIMIT = Fraction(3, 10)
 """주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 감도 계수와 별개로 고정."""
@@ -67,25 +82,46 @@ class EventParams:
     """인증 접수 마감 시각. 해당 분(分)까지 당일로 집계한다."""
 
     def __post_init__(self) -> None:
+        floats = {
+            "coin_p_up": self.coin_p_up,
+            "coin_up_exp": self.coin_up_exp,
+            "coin_down_exp": self.coin_down_exp,
+            "coin_cap": self.coin_cap,
+            "coin_floor": self.coin_floor,
+            "stock_sensitivity": self.stock_sensitivity,
+            "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
+        }
+        for name, value in floats.items():  # NaN·Infinity는 모든 계산을 깨뜨린다
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be a finite number")
+
+        def price_ok(v: int) -> bool:
+            return PRICE_UNIT <= v <= PRICE_MAX and v % PRICE_UNIT == 0
+
         checks = [
             (0 < self.coin_p_up < 1, "coin_p_up must be in (0, 1)"),
-            (self.coin_up_exp > 0, "coin_up_exp must be positive"),
-            (self.coin_down_exp > 0, "coin_down_exp must be positive"),
-            (self.coin_cap > 0, "coin_cap must be positive"),
+            (0 < self.coin_up_exp <= 100, "coin_up_exp must be in (0, 100]"),
+            (0 < self.coin_down_exp <= 100, "coin_down_exp must be in (0, 100]"),
+            (0 < self.coin_cap <= COIN_CAP_MAX, f"coin_cap must be in (0, {COIN_CAP_MAX:g}]"),
             (-1 < self.coin_floor < 0, "coin_floor must be in (-1, 0)"),
             (
-                self.coin_price_cap is None
-                or (self.coin_price_cap >= PRICE_UNIT and self.coin_price_cap % PRICE_UNIT == 0),
-                "coin_price_cap must be a positive multiple of 10 or None",
+                self.coin_price_cap is None or price_ok(self.coin_price_cap),
+                f"coin_price_cap must be a multiple of 10 in [10, {PRICE_MAX:,}] or None",
             ),
-            (self.stock_sensitivity > 0, "stock_sensitivity must be positive"),
+            (0 < self.stock_sensitivity <= 10, "stock_sensitivity must be in (0, 10]"),
             (
-                self.stock_min_price > 0 and self.stock_min_price % PRICE_UNIT == 0,
-                "stock_min_price must be a positive multiple of 10",
+                price_ok(self.stock_min_price),
+                f"stock_min_price must be a multiple of 10 in [10, {PRICE_MAX:,}]",
             ),
-            (self.virtual_liquidity >= 0, "virtual_liquidity must be non-negative"),
+            (
+                0 <= self.virtual_liquidity <= AMOUNT_MAX,
+                f"virtual_liquidity must be in [0, {AMOUNT_MAX:,}]",
+            ),
             (0 < self.daily_buy_limit_ratio <= 1, "daily_buy_limit_ratio must be in (0, 1]"),
-            (self.reward_coin_quantity >= 0, "reward_coin_quantity must be non-negative"),
+            (
+                0 <= self.reward_coin_quantity <= REWARD_QUANTITY_MAX,
+                f"reward_coin_quantity must be in [0, {REWARD_QUANTITY_MAX:,}]",
+            ),
         ]
         for ok, message in checks:
             if not ok:

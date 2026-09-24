@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import unicodedata
 from datetime import date, time
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -12,10 +14,18 @@ from conftest import PNG, Clock, StubRandom, open_day, order, register, settle_d
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from study_invest.api.schemas import SimulateRequest
 from study_invest.config import Settings
 from study_invest.event_calendar import EventCalendar
 from study_invest.models import Participant
-from study_invest.params import EventParams
+from study_invest.params import (
+    AMOUNT_MAX,
+    COIN_CAP_MAX,
+    PRICE_MAX,
+    REWARD_QUANTITY_MAX,
+    EventParams,
+)
+from study_invest.pricing import next_coin_price, next_stock_price
 from study_invest.services import certification
 
 D1, D2, D3 = date(2026, 10, 6), date(2026, 10, 7), date(2026, 10, 8)
@@ -228,3 +238,79 @@ def test_settings_default_pool_design() -> None:
     s = Settings()
     assert (s.api_pool.size, s.api_pool.max_overflow, s.batch_pool.size) == (20, 0, 2)
     assert s.batch_pool.url == s.database_url and s.migration_url == s.database_url
+
+
+class TestNumericLimits:
+    """모든 가격·수량·금액이 BIGINT와 정수 연산 범위 안에 머문다."""
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("reward_coin_quantity", 2**63),
+            ("reward_coin_quantity", REWARD_QUANTITY_MAX + 1),
+            ("stock_min_price", PRICE_MAX + 10),
+            ("coin_price_cap", PRICE_MAX + 10),
+            ("virtual_liquidity", AMOUNT_MAX + 1),
+            ("coin_cap", COIN_CAP_MAX * 2),
+        ],
+    )
+    def test_params_out_of_range_rejected(
+        self, client: TestClient, admin: dict[str, str], field: str, value: float
+    ) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        r = client.put("/api/admin/params", json=dict(params, **{field: value}), headers=admin)
+        assert r.status_code == 422, (field, value)
+
+    @pytest.mark.parametrize("value", ["Infinity", "NaN"])
+    def test_non_finite_float_params_rejected(
+        self, client: TestClient, admin: dict[str, str], value: str
+    ) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        body = json.dumps(dict(params, coin_cap=0)).replace('"coin_cap": 0', f'"coin_cap": {value}')
+        r = client.put(
+            "/api/admin/params",
+            content=body,
+            headers={**admin, "content-type": "application/json"},
+        )
+        assert r.status_code == 422
+
+    def test_rejected_params_leave_batches_working(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        client.put(
+            "/api/admin/params", json=dict(params, reward_coin_quantity=2**63), headers=admin
+        )
+        assert client.get("/api/admin/params", headers=admin).json()["reward_coin_quantity"] == 1
+        open_day(client, clock, D1)  # 09:00 배치가 막히지 않는다
+
+    def test_computed_prices_never_exceed_price_max(self) -> None:
+        uncapped = EventParams(coin_price_cap=None, coin_cap=COIN_CAP_MAX)
+        assert next_coin_price(PRICE_MAX, COIN_CAP_MAX, uncapped) == PRICE_MAX
+        assert next_stock_price(PRICE_MAX, Fraction(3, 10), 1_000) == PRICE_MAX
+
+    def test_manual_price_above_max_rejected(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        open_day(client, clock, D1)
+        r = client.put(
+            f"/api/admin/prices/{D2}/LB",
+            json={"price": PRICE_MAX + 10, "reason": "x"},
+            headers=admin,
+        )
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "INVALID_PRICE"
+
+
+class TestSimulateOptions:
+    def test_options_come_from_request_schema(
+        self, client: TestClient, admin: dict[str, str]
+    ) -> None:
+        opts = client.get("/api/admin/simulate/options", headers=admin).json()
+        fields = SimulateRequest.model_fields
+        assert opts["paths"]["default"] == fields["paths"].default
+        # 화면이 받은 최대값은 API가 받아들이고, 그보다 크면 거부된다(두 곳이 같은 한계)
+        ok = {"paths": opts["paths"]["max"], "rounds": 1, "seed": 1}
+        too_many = dict(ok, paths=opts["paths"]["max"] + 1)
+        assert client.post("/api/admin/simulate", json=too_many, headers=admin).status_code == 422
+        assert opts["rounds"]["max"] == 100 and opts["paths"]["min"] == 1
+        assert ok["paths"] == 100_000

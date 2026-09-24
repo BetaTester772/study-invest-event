@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, parseErrorBody, request } from '../client';
+import { ApiError, onUnauthorized, parseErrorBody, request } from '../client';
 import { adminKeyStore, tokenStore } from '../storage';
 
 afterEach(() => {
@@ -68,5 +68,54 @@ describe('request', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const err = await request<never>('/event').catch((e: unknown) => e as ApiError);
     expect(err.code).toBe('NETWORK_ERROR');
+  });
+});
+
+describe('401 handling', () => {
+  function deferredFetch() {
+    let resolve!: (r: Response) => void;
+    const fetchMock = vi.fn().mockReturnValue(new Promise<Response>((r) => (resolve = r)));
+    vi.stubGlobal('fetch', fetchMock);
+    return { fetchMock, respond401: () => resolve(new Response(null, { status: 401 })) };
+  }
+
+  it('reports a 401 that rejects the current token', async () => {
+    tokenStore.set('token-a');
+    const listener = vi.fn();
+    const off = onUnauthorized(listener);
+    const { respond401 } = deferredFetch();
+    const pending = request('/me', { auth: 'participant' }).catch(() => undefined);
+    respond401();
+    await pending;
+    off();
+    expect(listener).toHaveBeenCalledWith('participant');
+  });
+
+  it('ignores a 401 for a request sent with a previous token (logout → login in between)', async () => {
+    tokenStore.set('token-a');
+    const listener = vi.fn();
+    const off = onUnauthorized(listener);
+    const { fetchMock, respond401 } = deferredFetch();
+    const pending = request('/me/orders', { auth: 'participant' }).catch(() => undefined);
+    expect(fetchMock.mock.calls[0]?.[1].headers.Authorization).toBe('Bearer token-a');
+    tokenStore.set('token-b'); // 새 세션 시작
+    respond401();
+    await pending;
+    off();
+    expect(listener).not.toHaveBeenCalled();
+    expect(tokenStore.get()).toBe('token-b');
+  });
+
+  it('ignores a 401 for a request sent with a previous admin key', async () => {
+    adminKeyStore.set('old-key');
+    const listener = vi.fn();
+    const off = onUnauthorized(listener);
+    const { respond401 } = deferredFetch();
+    const pending = request('/admin/params', { auth: 'admin' }).catch(() => undefined);
+    adminKeyStore.set('new-key');
+    respond401();
+    await pending;
+    off();
+    expect(listener).not.toHaveBeenCalled();
   });
 });

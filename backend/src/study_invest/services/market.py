@@ -28,7 +28,7 @@ from ..models import (
     Side,
 )
 from ..money import PRICE_UNIT
-from ..params import MARKET_CLOSE, MARKET_OPEN
+from ..params import MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
 from ..pricing import draw_coin, settle_stocks
 from . import certification
 from .common import (
@@ -334,8 +334,10 @@ def set_manual_price(
         raise DomainError("NOT_OPERATING_DAY", f"{day}는 운영일이 아닙니다.", 422)
     if market_day(s, day) is not None:
         raise DomainError("DAY_ALREADY_OPENED", "이미 공시된 운영일의 가격은 바꿀 수 없습니다.")
-    if price < PRICE_UNIT or price % PRICE_UNIT:
-        raise DomainError("INVALID_PRICE", "가격은 10원 단위의 양수여야 합니다.", 422)
+    if not (PRICE_UNIT <= price <= PRICE_MAX) or price % PRICE_UNIT:
+        raise DomainError(
+            "INVALID_PRICE", f"가격은 10원 단위로 10원~{PRICE_MAX:,}원이어야 합니다.", 422
+        )
     if not reason.strip():
         raise DomainError("REASON_REQUIRED", "개입 사유를 입력하세요.", 422)
     previous = _published_price_before(s, code, day)  # 잠정값. 공시(open_day) 때 다시 확정

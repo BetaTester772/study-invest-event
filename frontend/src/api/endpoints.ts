@@ -24,6 +24,7 @@ import type {
   ReviewRequest,
   SettlementLog,
   SimulationReport,
+  SimulateOptions,
   SimulationRequest,
 } from './types';
 
@@ -79,6 +80,7 @@ export const adminApi = {
   batchRunDue: () => request<BatchResult[]>('/admin/batch/run-due', { method: 'POST', auth: 'admin' }),
   settlements: () => request<SettlementLog[]>('/admin/settlements', { auth: 'admin' }),
   audit: (limit = 200) => request<AuditEntry[]>('/admin/audit', { auth: 'admin', query: { limit } }),
+  simulateOptions: () => request<SimulateOptions>('/admin/simulate/options', { auth: 'admin' }),
   simulate: (body: SimulationRequest) =>
     request<SimulationReport>('/admin/simulate', { method: 'POST', auth: 'admin', body }),
 };

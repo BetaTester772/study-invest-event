@@ -23,8 +23,8 @@ from fastapi.testclient import TestClient
 from study_invest.api import routes_admin, routes_me, routes_public
 from study_invest.services import certification
 
-ASYNC_ROUTES = {"health", "simulate"}
-"""health: I/O 없음. simulate: CPU 작업을 프로세스 풀에 맡기고 await만 한다."""
+ASYNC_ROUTES = {"health", "simulate", "simulate_options"}
+"""health·simulate_options: I/O 없음. simulate: CPU 작업을 프로세스 풀에 맡기고 await만 한다."""
 ASYNC_DEPENDENCIES = {
     "get_state",
     "get_now",

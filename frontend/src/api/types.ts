@@ -241,6 +241,17 @@ export interface SimulationReport {
   };
 }
 
+/** 시뮬레이터 입력 한계(서버 스키마에서 생성). */
+export interface IntRange {
+  min: number;
+  max: number;
+  default: number;
+}
+export interface SimulateOptions {
+  paths: IntRange;
+  rounds: IntRange;
+}
+
 export interface SimulationRequest {
   paths?: number;
   rounds?: number;

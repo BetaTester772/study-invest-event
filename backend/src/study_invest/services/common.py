@@ -9,7 +9,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..instruments import INSTRUMENTS
-from ..models import AuditLog, MarketDay, ParamsRecord, Participant, PriceHistory
+from ..models import AuditLog, Holding, MarketDay, ParamsRecord, Participant, PriceHistory
 from ..params import EventParams
 
 
@@ -76,6 +76,44 @@ def lock_market_day(s: Session, day: date, *, shared: bool) -> MarketDay | None:
         .with_for_update(read=shared)
         .execution_options(populate_existing=True)
     ).first()
+
+
+# --- 참가자 자산 변경 -------------------------------------------------------------
+
+
+def lock_participant(s: Session, participant_id: int) -> Participant:
+    """참가자 행을 FOR UPDATE로 잠그고 최신 값(현금·보유)으로 다시 읽는다.
+
+    참가자의 현금·보유를 바꾸는 모든 경로(주문 체결, 인증 보상)는 반드시 이 함수를 먼저
+    거친다. 그래서 어떤 두 변경도 같은 참가자에 대해 동시에 진행되지 않고, 요청 초반에 읽은
+    오래된 값 위에 덮어쓰지 않는다. (SQLite는 잠금이 없어 직렬화만 보장되지 않는다.)
+    """
+    participant = s.scalars(
+        select(Participant)
+        .where(Participant.id == participant_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
+    # 보유 행도 잠금 이후 값으로 다시 읽는다. 세션에 이미 있던 Holding 객체는 그냥 조회하면
+    # 옛 값이 그대로 돌아오므로(identity map) populate_existing으로 덮어쓴다.
+    s.scalars(
+        select(Holding)
+        .where(Holding.participant_id == participant_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).all()
+    s.expire(participant, ["holdings"])  # 컬렉션 목록(새로 생긴 종목 포함)도 다시 구성
+    return participant
+
+
+def holding_of(participant: Participant, code: str) -> Holding:
+    """잠근 참가자의 종목 보유 행. 없으면 수량 0으로 만든다(같은 세션에서 중복 생성 없음)."""
+    for holding in participant.holdings:
+        if holding.code == code:
+            return holding
+    holding = Holding(code=code, quantity=0, cost=0)
+    participant.holdings.append(holding)
+    return holding
 
 
 # --- 장 상태·가격 -----------------------------------------------------------------

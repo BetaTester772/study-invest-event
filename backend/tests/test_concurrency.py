@@ -280,3 +280,56 @@ class TestSchedulers:
                 )
                 == 1
             )
+
+
+class TestRewardsShareTheParticipantLock:
+    def test_reward_payment_waits_for_an_inflight_order(
+        self, factory: sessionmaker[Session]
+    ) -> None:
+        """보상 지급은 주문과 같은 참가자 잠금을 거친다: 주문 트랜잭션이 끝날 때까지 기다린다.
+
+        이미 병더리움을 가진 참가자라 보상은 기존 보유 행 UPDATE다(새 행 INSERT라면 FK 검사가
+        참가자 행을 잠가 우연히 기다리게 되므로, 잠금 누락을 드러내지 못한다).
+        """
+        pid = setup_participant(factory)
+        with factory() as s:
+            s.add(Holding(participant_id=pid, code="BYUNG", quantity=2, cost=0))
+            s.add(
+                StudyCertification(
+                    participant_id=pid,
+                    target_date=D1,
+                    image_path=None,
+                    image_content_type="image/png",
+                    image_hash="r",
+                    status=CertStatus.APPROVED,
+                    submitted_at=at(D1, 12),
+                )
+            )
+            s.commit()
+        locked = threading.Event()
+        timeline: list[str] = []
+
+        def order() -> None:
+            with factory() as s:
+                me = s.get(Participant, pid)
+                assert me is not None
+                trading.place_order(s, me, "LB", Side.BUY, 1, at(D1, 17), CAL, EventParams())
+                locked.set()
+                time_mod.sleep(0.5)
+                timeline.append("order-commit")
+                s.commit()
+
+        def reward() -> None:
+            locked.wait(5)
+            with factory() as s:
+                certification.pay_rewards(s, D2, at(D2, 9), EventParams())
+                timeline.append("reward-done")
+                s.commit()
+
+        run_together(order, reward)
+        assert timeline == ["order-commit", "reward-done"]
+        with factory() as s:
+            coin = s.get(Holding, (pid, "BYUNG"))
+            lb = s.get(Holding, (pid, "LB"))
+            assert coin is not None and coin.quantity == 3
+            assert lb is not None and lb.quantity == 1

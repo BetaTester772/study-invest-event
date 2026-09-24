@@ -12,7 +12,7 @@ from fractions import Fraction
 from typing import Literal
 
 from .money import PRICE_UNIT, exact, round_half_up
-from .params import STOCK_DAILY_LIMIT, EventParams
+from .params import PRICE_MAX, STOCK_DAILY_LIMIT, EventParams
 
 # --- 병더리움 (03-pricing §1) -----------------------------------------------------
 
@@ -39,12 +39,10 @@ def coin_rate(p: float, x: float, params: EventParams) -> tuple[Literal["up", "d
 
 
 def next_coin_price(price: int, rate: float, params: EventParams) -> int:
-    """P' = round(P × (1 + r), 10원). 표시 상한을 적용하고 최소 10원을 보장한다."""
+    """P' = round(P × (1 + r), 10원). 표시 상한을 적용하고 [10원, PRICE_MAX]를 보장한다."""
     new = round_half_up(Fraction(price) * (1 + Fraction(rate)))
-    new = max(PRICE_UNIT, new)
-    if params.coin_price_cap is not None:
-        new = min(new, params.coin_price_cap)
-    return new
+    cap = params.coin_price_cap if params.coin_price_cap is not None else PRICE_MAX
+    return max(PRICE_UNIT, min(new, cap, PRICE_MAX))
 
 
 def draw_coin(price: int, params: EventParams, rng: random.Random) -> CoinMove:
@@ -79,8 +77,8 @@ def stock_rate(concentration: Fraction, sensitivity: float) -> Fraction:
 
 
 def next_stock_price(price: int, rate: Fraction, min_price: int) -> int:
-    """새 가격 = max(하한, round(현재가 × (1 + 변동률), 10원))."""
-    return max(min_price, round_half_up(Fraction(price) * (1 + rate)))
+    """새 가격 = max(하한, round(현재가 × (1 + 변동률), 10원)). PRICE_MAX를 넘지 않는다."""
+    return max(min_price, min(round_half_up(Fraction(price) * (1 + rate)), PRICE_MAX))
 
 
 def settle_stocks(

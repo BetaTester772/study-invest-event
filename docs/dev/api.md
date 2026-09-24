@@ -196,6 +196,8 @@ interface AdminCertification extends Certification {
   duplicate_of: number | null;   // 같은 이미지 해시의 최초 인증 ID(중복 의심)
   image_url: string | null;      // /api/admin/certifications/{id}/image
 }
+// 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_coin_quantity 0~1,000,
+// virtual_liquidity 0~10^15, coin_cap (0, 10], 실수 파라미터는 유한값만(NaN·Infinity는 422).
 interface Params {
   coin_p_up: number; coin_up_exp: number; coin_down_exp: number;
   coin_cap: number; coin_floor: number; coin_price_cap: number | null;
@@ -238,4 +240,5 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | GET | `/api/admin/settlements` | – | `SettlementLog[]` |
 | GET | `/api/admin/audit` | `?limit=200` | `AuditEntry[]` |
 | GET | `/api/admin/db-pools` | – | `{api: PoolStatus, batch: PoolStatus}` — 앱 연결 풀 현황(`size` 설정 크기, `opened` 열린 연결, `checked_out` 사용 중, `idle`, `overflow` 초과분, `timeout`) |
+| GET | `/api/admin/simulate/options` | – | `{paths: IntRange, rounds: IntRange}` (`IntRange = {min, max, default}`) — 시뮬레이터 입력 한계. 서버 스키마에서 생성되며 화면 입력 범위의 유일한 출처 |
 | POST | `/api/admin/simulate` | `{paths?=10000, rounds?=10, seed?, use_price_cap?=false}` | `SimulationReport` |

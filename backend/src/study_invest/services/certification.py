@@ -19,13 +19,12 @@ from ..event_calendar import EventCalendar, to_kst
 from ..instruments import COIN
 from ..models import (
     CertStatus,
-    Holding,
     Participant,
     ParticipantStatus,
     StudyCertification,
 )
 from ..params import EventParams
-from .common import DomainError, audit
+from .common import DomainError, audit, holding_of, lock_participant
 
 # 매직 바이트로 형식을 확인한다(Content-Type 헤더는 신뢰하지 않는다).
 IMAGE_TYPES: dict[str, str] = {
@@ -201,14 +200,10 @@ def pay_rewards(s: Session, day: date, now: datetime, params: EventParams) -> li
     ).all()
     quantity = params.reward_coin_quantity
     paid: list[dict[str, int]] = []
-    for cert in certs:
-        holding = s.get(Holding, (cert.participant_id, COIN.code))
-        if holding is None:
-            holding = Holding(
-                participant_id=cert.participant_id, code=COIN.code, quantity=0, cost=0
-            )
-            s.add(holding)
-        holding.quantity += quantity
+    # 참가자 id 순으로 잠근다(잠금 순서 고정). 주문과 같은 잠금을 거쳐 보유를 바꾼다.
+    for cert in sorted(certs, key=lambda c: (c.participant_id, c.id)):
+        participant = lock_participant(s, cert.participant_id)
+        holding_of(participant, COIN.code).quantity += quantity
         cert.rewarded_at = now
         cert.reward_quantity = quantity
         paid.append(
