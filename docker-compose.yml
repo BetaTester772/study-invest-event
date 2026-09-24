@@ -1,0 +1,56 @@
+# 로컬·단일 서버 실행용 구성.
+#   cp .env.example .env   # 관리자 키 등 설정
+#   docker compose up --build
+# 웹: http://localhost:8080  (API는 같은 주소의 /api, 직접 접근은 http://localhost:8000)
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-study_invest}
+      POSTGRES_USER: ${POSTGRES_USER:-study}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-study}
+      TZ: Asia/Seoul
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      STUDY_INVEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-study}:${POSTGRES_PASSWORD:-study}@db:5432/${POSTGRES_DB:-study_invest}
+      STUDY_INVEST_ADMIN_KEY: ${STUDY_INVEST_ADMIN_KEY:?STUDY_INVEST_ADMIN_KEY를 .env에 설정하세요}
+      STUDY_INVEST_SCHEDULER: ${STUDY_INVEST_SCHEDULER:-1}
+      STUDY_INVEST_UPLOAD_DIR: /data/uploads
+      TZ: Asia/Seoul
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
