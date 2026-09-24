@@ -1,4 +1,4 @@
-FROM alpine:3.20
+FROM alpine:3.24
 # 헬스체크가 쓰는 nc(busybox 애플릿)가 이미지에 실제로 있는지 빌드 때 확인한다.
 # 베이스 이미지가 바뀌어 없어지면 런타임에 영구 unhealthy가 되는 대신 빌드가 실패한다.
 RUN apk add --no-cache pgbouncer \
