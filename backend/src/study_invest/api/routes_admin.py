@@ -33,7 +33,7 @@ from ..services.common import (
 from ..services.market import BatchResult
 from ..simulator import run as run_simulation
 from . import schemas, views
-from .deps import NowDep, ParamsDep, SessionDep, StateDep, require_admin
+from .deps import BatchSessionDep, NowDep, ParamsDep, SessionDep, StateDep, require_admin
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 
@@ -149,7 +149,7 @@ def manual_price(
     code: str,
     body: schemas.ManualPriceRequest,
     state: StateDep,
-    s: SessionDep,
+    s: BatchSessionDep,
     now: NowDep,
 ) -> schemas.PricePoint:
     record = market.set_manual_price(s, day, code, body.price, body.reason, now, state.calendar)
@@ -168,7 +168,7 @@ def _batch(result: BatchResult) -> schemas.BatchResult:
 
 @router.post("/batch/open", response_model=schemas.BatchResult)
 def batch_open(
-    body: schemas.BatchRequest, state: StateDep, s: SessionDep, now: NowDep
+    body: schemas.BatchRequest, state: StateDep, s: BatchSessionDep, now: NowDep
 ) -> schemas.BatchResult:
     day = body.day or to_kst(now).date()
     result = market.open_day(s, day, now, state.calendar)
@@ -178,7 +178,7 @@ def batch_open(
 
 @router.post("/batch/settle", response_model=schemas.BatchResult)
 def batch_settle(
-    body: schemas.BatchRequest, state: StateDep, s: SessionDep, now: NowDep
+    body: schemas.BatchRequest, state: StateDep, s: BatchSessionDep, now: NowDep
 ) -> schemas.BatchResult:
     day = body.day or to_kst(now).date()
     result = market.settle_day(s, day, now, state.calendar, state.rng)
@@ -188,7 +188,7 @@ def batch_settle(
 
 @router.post("/batch/run-due", response_model=list[schemas.BatchResult])
 def batch_run_due(state: StateDep, now: NowDep) -> list[schemas.BatchResult]:
-    results = market.run_due(state.session_factory, now, state.calendar, state.rng)
+    results = market.run_due(state.batch_session_factory, now, state.calendar, state.rng)
     out = []
     for r in results:
         if isinstance(r, BatchResult):
@@ -220,6 +220,12 @@ def settlements(s: SessionDep) -> list[schemas.SettlementLog]:
         )
         for r in rows
     ]
+
+
+@router.get("/db-pools")
+def db_pools(state: StateDep) -> dict[str, dict[str, object]]:
+    """앱 쪽 연결 풀(api·batch) 사용 현황. PgBouncer 쪽은 pgAdmin·SHOW POOLS로 본다."""
+    return {name: dict(stat) for name, stat in state.pools.status().items()}
 
 
 @router.get("/audit", response_model=list[schemas.AuditEntry])

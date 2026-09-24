@@ -13,15 +13,11 @@ from sqlalchemy.orm import Session
 
 from ..event_calendar import EventCalendar, to_kst
 from ..models import AuthSession, Participant
+from ..normalize import normalize_identity, normalize_nickname
 from ..params import INITIAL_CASH
 from .common import DomainError, audit
 
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
-
-
-def normalize_identity(identity: str) -> str:
-    """1인 1계정 식별자 정규화: 앞뒤 공백 제거, 대소문자 무시."""
-    return identity.strip().casefold()
 
 
 def hash_password(password: str) -> str:
@@ -72,7 +68,7 @@ def register(
     if to_kst(now).date() > calendar.end:
         raise DomainError("REGISTRATION_CLOSED", "이벤트가 종료되어 참가 신청을 받지 않습니다.")
     norm = normalize_identity(identity)
-    nickname = nickname.strip()
+    nickname = normalize_nickname(nickname)
     if not norm:
         raise DomainError("INVALID_IDENTITY", "식별자를 입력하세요.", 422)
     if s.scalar(select(Participant.id).where(Participant.identity == norm)):

@@ -64,16 +64,16 @@ export function CertificationPage() {
   const toast = useToast();
   const event = useApi(() => publicApi.event(), [], { refreshInterval: 60_000 });
   const certs = useApi(() => meApi.certifications(), []);
+  const status = useApi(() => meApi.certificationStatus(), [], { refreshInterval: 60_000 });
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<Certification | null>(null);
 
   const e = event.data;
-  const target = e?.certification.target_date;
+  const st = status.data;
+  const target = st?.target_date;
   const rewardQty = e?.certification.reward_coin_quantity;
-  const existing = certs.data?.find((c) => c.target_date === target && c.status !== 'rejected');
-  const outsideEvent = e != null && target != null && (target < e.start || target > e.end);
   const approvedDays = (certs.data ?? []).filter((c) => c.status === 'approved').map((c) => c.target_date);
 
   const upload = async () => {
@@ -86,10 +86,12 @@ export function CertificationPage() {
       setFile(null);
       certs.setData((prev) => [created, ...(prev ?? [])]);
       void certs.refetch();
+      void status.refetch();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '잠시 뒤 다시 시도해 주세요.';
       setUploadError(msg);
       toast.error('인증 사진을 올리지 못했어요', msg);
+      void status.refetch();
     } finally {
       setUploading(false);
     }
@@ -138,25 +140,34 @@ export function CertificationPage() {
         {event.error && <LoadError error={event.error} onRetry={event.refetch} what="인증 일정" />}
         <Grid sidebar="minmax(16rem, 22rem)" gap={6}>
           <Card title="오늘 인증하기">
-            {!e ? (
+            {status.error ? (
+              <LoadError error={status.error} onRetry={status.refetch} what="인증 가능 여부" />
+            ) : !e || !st ? (
               <Skeleton lines={4} />
-            ) : outsideEvent ? (
+            ) : st.reason === 'OUTSIDE_EVENT' ? (
               <Alert title="지금은 인증 기간이 아니에요">
                 인증은 {formatDay(e.start)}부터 {formatDay(e.end)}까지 받아요.
               </Alert>
-            ) : existing ? (
+            ) : st.reason === 'DISQUALIFIED' ? (
+              <Alert tone="danger" title="인증을 올릴 수 없어요">
+                {st.message}
+              </Alert>
+            ) : st.existing ? (
               <Stack gap={4}>
                 <Alert
-                  tone={existing.status === 'approved' ? 'success' : 'info'}
-                  title={`${formatDay(existing.target_date)} 인증은 이미 올렸어요`}
+                  tone={
+                    st.existing.status === 'approved' ? 'success' : st.existing.status === 'rejected' ? 'warning' : 'info'
+                  }
+                  title={`${formatDay(st.existing.target_date)} 인증은 이미 올렸어요`}
                 >
-                  {existing.status === 'approved'
-                    ? `승인됐어요. ${rewardText(existing, rewardQty)}.`
-                    : '검수를 기다리는 중이에요. 결과는 아래 목록에서 볼 수 있어요.'}
+                  {st.existing.status === 'approved'
+                    ? `승인됐어요. ${rewardText(st.existing, rewardQty)}.`
+                    : st.existing.status === 'rejected'
+                      ? `반려됐어요(${st.existing.reject_reason ?? '사유 없음'}). 인증은 하루 한 번이라 이 날짜는 다시 올릴 수 없어요.`
+                      : '검수를 기다리는 중이에요. 결과는 아래 목록에서 볼 수 있어요.'}
                 </Alert>
                 <Text size="sm" tone="muted">
-                  인증은 하루 한 번만 올릴 수 있어요. 오늘 {e.certification.cutoff}이 지나면 다음 날짜 인증을 올릴 수
-                  있어요.
+                  오늘 {st.cutoff}이 지나면 다음 날짜 인증을 올릴 수 있어요.
                 </Text>
               </Stack>
             ) : (

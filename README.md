@@ -5,6 +5,7 @@
 - 시스템 규격서: [docs/spec/README.md](docs/spec/README.md) (v0.3)
 - API 계약: [docs/dev/api.md](docs/dev/api.md)
 - 구현 해석·가정: [docs/dev/implementation-notes.md](docs/dev/implementation-notes.md)
+- DB 연결 풀 설계: [docs/dev/db-pools.md](docs/dev/db-pools.md)
 - 원본 규격서(docx): [docs/source/](docs/source/)
 
 ## 구성
@@ -13,7 +14,8 @@
 |---|---|
 | `backend/` | FastAPI + SQLAlchemy + PostgreSQL. 가격 산정·정산 배치·인증 검수·시뮬레이터(F-13) |
 | `frontend/` | React + TypeScript + Vite. 공용 컴포넌트 라이브러리(`src/components/ui`) 위에 페이지 구성 |
-| `docker-compose.yml` | PostgreSQL · 백엔드 · 프론트엔드(nginx) |
+| `infra/` | PgBouncer(연결 풀) 이미지, pgAdmin·PostgreSQL 초기화 스크립트 |
+| `docker-compose.yml` | PostgreSQL · PgBouncer · 백엔드 · 프론트엔드(nginx) · pgAdmin |
 
 ## Docker Compose로 실행
 
@@ -23,6 +25,8 @@ docker compose up --build
 ```
 
 - 웹: http://localhost:8080 (관리자 화면은 `/admin`, `.env`의 관리자 키로 접속)
+- pgAdmin: http://localhost:5050 (이 PC에서만). 서버 "study_invest (pgAdmin 풀)"이 등록되어 있고, 비밀번호는 `.env`의 `PGADMIN_DB_PASSWORD`
+- DB 연결은 PgBouncer를 거친다: api 풀 20, batch 풀 2, pgAdmin 풀 5. [docs/dev/db-pools.md](docs/dev/db-pools.md)
 - API: http://localhost:8080/api (백엔드 직접 접근은 http://localhost:8000, 문서는 `/docs`)
 - 백엔드 컨테이너는 시작할 때 `alembic upgrade head`를 실행하고, `STUDY_INVEST_SCHEDULER=1`이면 09:00 공시·18:00 정산을 자동으로 돌린다.
 
@@ -72,7 +76,10 @@ study-invest purge-images                    # 이벤트 종료 후 인증 사�
 | `STUDY_INVEST_SCHEDULER_INTERVAL` | `30` | 스케줄러 확인 주기(초) |
 | `STUDY_INVEST_AUTO_CREATE_SCHEMA` | `0` | `1`이면 시작 시 `create_all`(마이그레이션 대신, 테스트용) |
 | `STUDY_INVEST_THREADPOOL_SIZE` | `40` | 동기 라우트 스레드풀 크기 |
-| `STUDY_INVEST_DB_POOL_SIZE` / `_DB_MAX_OVERFLOW` | `10` / `30` | DB 연결 풀(합이 스레드풀 이상) |
+| `STUDY_INVEST_BATCH_DATABASE_URL` | (= DATABASE_URL) | 배치 전용 풀 URL(운영: PgBouncer `study_invest_batch`) |
+| `STUDY_INVEST_MIGRATION_DATABASE_URL` | (= DATABASE_URL) | Alembic 직접 연결(PgBouncer 우회) |
+| `STUDY_INVEST_API_POOL_SIZE` / `_API_POOL_TIMEOUT` | `20` / `10` | api 풀 크기·대기 초(넘으면 503) |
+| `STUDY_INVEST_BATCH_POOL_SIZE` | `2` | 배치 풀 크기 |
 | `STUDY_INVEST_CPU_WORKERS` | `1` | 시뮬레이터용 프로세스 수(0이면 스레드) |
 | `STUDY_INVEST_LOOP_GUARD` | `warn` | 이벤트 루프에서 SQL 실행 시 `warn`/`raise`/`off` |
 | `STUDY_INVEST_FRONTEND_DIST` | (없음) | 빌드된 프론트엔드를 백엔드가 직접 제공할 때 경로 |

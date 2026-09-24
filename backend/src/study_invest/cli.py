@@ -60,7 +60,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
-    factory = make_session_factory(make_engine(settings.database_url))
+    factory = make_session_factory(make_engine(settings.batch_pool))  # 배치 전용 풀
     if args.command == "run-due":
         results = market.run_due(factory, now, calendar, rng)
         _print([r.__dict__ if isinstance(r, market.BatchResult) else r for r in results])

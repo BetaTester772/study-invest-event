@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, datetime, time
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_serializer,
+    field_validator,
+)
 
 from ..event_calendar import to_kst
 from ..models import (
+    BIGINT_MAX,
+    BIGINT_MIN,
     CertStatus,
     OrderStatus,
     ParticipantStatus,
@@ -16,6 +27,7 @@ from ..models import (
     RejectReason,
     Side,
 )
+from ..normalize import normalize_identity, normalize_nickname
 
 
 class Schema(BaseModel):
@@ -94,22 +106,28 @@ class Ranking(Schema):
 # --- 인증 ---------------------------------------------------------------------
 
 
-class RegisterRequest(BaseModel):
-    identity: str = Field(min_length=1, max_length=128)
-    nickname: str = Field(min_length=2, max_length=20)
-    password: str = Field(min_length=8, max_length=128)
+def _before(fn: Callable[[str], str]) -> BeforeValidator:
+    """문자열이면 정규화한 뒤 길이 등 제약을 검사한다(타입 오류는 pydantic에 맡김)."""
+    return BeforeValidator(lambda v: fn(v) if isinstance(v, str) else v)
 
-    @field_validator("identity", "nickname")
-    @classmethod
-    def _strip(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("공백만 입력할 수 없습니다.")
-        return v
+
+# 정규화 → 길이 검사 순서. 길이 상한은 DB 컬럼(participants.identity 128, nickname 32) 이내.
+Identity = Annotated[
+    str, _before(normalize_identity), StringConstraints(min_length=1, max_length=128)
+]
+Nickname = Annotated[
+    str, _before(normalize_nickname), StringConstraints(min_length=2, max_length=20)
+]
+
+
+class RegisterRequest(BaseModel):
+    identity: Identity
+    nickname: Nickname
+    password: str = Field(min_length=8, max_length=128)
 
 
 class LoginRequest(BaseModel):
-    identity: str = Field(min_length=1, max_length=128)
+    identity: Identity
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -159,9 +177,11 @@ class Portfolio(Schema):
 
 
 class OrderRequest(BaseModel):
+    # 저장 가능한 값만 받는다: 코드는 orders.code(16자), 수량은 orders.quantity(BIGINT) 범위.
+    # 범위 안의 잘못된 수량(0, 음수, 상한 초과)은 거부 주문으로 기록된다(INVALID_QUANTITY).
     code: str = Field(min_length=1, max_length=16)
     side: Side
-    quantity: int = Field(strict=True)
+    quantity: int = Field(strict=True, ge=BIGINT_MIN, le=BIGINT_MAX)
 
 
 class Order(Schema):
@@ -188,6 +208,15 @@ class Certification(Schema):
     rewarded_at: datetime | None
     reward_quantity: int | None
     image_url: str | None
+
+
+class CertificationStatus(Schema):
+    target_date: date
+    cutoff: str
+    can_submit: bool
+    reason: Literal["DISQUALIFIED", "OUTSIDE_EVENT", "ALREADY_CERTIFIED"] | None
+    message: str | None
+    existing: Certification | None
 
 
 # --- 관리자 ---------------------------------------------------------------------

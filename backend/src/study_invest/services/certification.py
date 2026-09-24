@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..db import track_new_file
 from ..event_calendar import EventCalendar, to_kst
 from ..instruments import COIN
 from ..models import (
@@ -44,6 +48,49 @@ def sniff_image(data: bytes) -> str | None:
     return None
 
 
+BlockReason = Literal["DISQUALIFIED", "OUTSIDE_EVENT", "ALREADY_CERTIFIED"]
+
+
+@dataclass(frozen=True)
+class SubmissionStatus:
+    """지금 인증을 올릴 수 있는지. 제출 검사와 화면 표시가 같은 판단을 쓰도록 한 곳에서 계산한다."""
+
+    target_date: date
+    can_submit: bool
+    reason: BlockReason | None
+    message: str | None
+    http_status: int
+    existing: StudyCertification | None
+    """집계 날짜에 이미 낸 인증(상태 무관). 1인 1일 1회라 반려돼도 다시 낼 수 없다."""
+
+
+def submission_status(
+    s: Session,
+    participant: Participant,
+    now: datetime,
+    calendar: EventCalendar,
+    params: EventParams,
+) -> SubmissionStatus:
+    target = calendar.certification_target_date(now, params.certification_cutoff)
+    existing = s.scalars(
+        select(StudyCertification).where(
+            StudyCertification.participant_id == participant.id,
+            StudyCertification.target_date == target,
+        )
+    ).first()
+
+    def blocked(reason: BlockReason, message: str, status: int) -> SubmissionStatus:
+        return SubmissionStatus(target, False, reason, message, status, existing)
+
+    if participant.status is ParticipantStatus.DISQUALIFIED:
+        return blocked("DISQUALIFIED", "실격 처리된 참가자는 인증할 수 없습니다.", 403)
+    if not calendar.is_operating_day(target):
+        return blocked("OUTSIDE_EVENT", f"{target}는 이벤트 기간이 아닙니다.", 422)
+    if existing is not None:
+        return blocked("ALREADY_CERTIFIED", f"{target} 인증은 이미 제출했습니다(1일 1회).", 409)
+    return SubmissionStatus(target, True, None, None, 200, None)
+
+
 def submit(
     s: Session,
     participant: Participant,
@@ -55,8 +102,11 @@ def submit(
     max_bytes: int,
 ) -> StudyCertification:
     """인증 사진 1장 제출. 1인 1일 1회, 마감 시각 이후는 다음 날짜로 집계한다."""
-    if participant.status is ParticipantStatus.DISQUALIFIED:
-        raise DomainError("DISQUALIFIED", "실격 처리된 참가자는 인증할 수 없습니다.", 403)
+    status = submission_status(s, participant, now, calendar, params)
+    if not status.can_submit:
+        assert status.reason is not None and status.message is not None
+        raise DomainError(status.reason, status.message, status.http_status)
+    target = status.target_date
     if not data or len(data) > max_bytes:
         raise DomainError(
             "INVALID_IMAGE", f"사진은 {max_bytes // (1024 * 1024)}MB 이하여야 합니다.", 422
@@ -64,17 +114,6 @@ def submit(
     content_type = sniff_image(data)
     if content_type is None:
         raise DomainError("INVALID_IMAGE", "JPEG·PNG·WEBP·HEIC 사진만 올릴 수 있습니다.", 422)
-    target = calendar.certification_target_date(now, params.certification_cutoff)
-    if not calendar.is_operating_day(target):
-        raise DomainError("OUTSIDE_EVENT", f"{target}는 이벤트 기간이 아닙니다.", 422)
-    exists = s.scalar(
-        select(StudyCertification.id).where(
-            StudyCertification.participant_id == participant.id,
-            StudyCertification.target_date == target,
-        )
-    )
-    if exists:
-        raise DomainError("ALREADY_CERTIFIED", f"{target} 인증은 이미 제출했습니다(1일 1회).")
 
     digest = hashlib.sha256(data).hexdigest()
     duplicate_of = s.scalar(
@@ -103,7 +142,9 @@ def submit(
             "ALREADY_CERTIFIED", f"{target} 인증은 이미 제출했습니다(1일 1회)."
         ) from exc
     upload_dir.mkdir(parents=True, exist_ok=True)
-    (upload_dir / filename).write_bytes(data)
+    path = upload_dir / filename
+    track_new_file(s, path)  # 커밋되지 않으면 파일도 지운다(개인정보가 DB 밖에 남지 않게)
+    path.write_bytes(data)
     audit(
         s,
         now,
@@ -191,21 +232,33 @@ def pay_rewards(s: Session, day: date, now: datetime, params: EventParams) -> li
     return paid
 
 
+STORED_IMAGE = re.compile(r"^[0-9a-f]{32}\.(jpg|png|webp|heic)$")
+"""이 서비스가 저장하는 파일 이름(uuid4 hex + 확장자). 삭제는 이 형식만 대상으로 한다."""
+
+
 def purge_images(
     s: Session, upload_dir: Path, now: datetime, calendar: EventCalendar, force: bool = False
 ) -> int:
-    """개인정보: 이벤트 종료 후 인증 사진을 삭제한다(05-certification §4, 30일 이내)."""
+    """개인정보: 이벤트 종료 후 인증 사진을 **모두** 삭제한다(05-certification §4, 30일 이내).
+
+    DB가 가리키는 파일만이 아니라 업로드 디렉터리의 인증 사진 파일 전부를 지운다. 커밋 전에
+    프로세스가 죽어 DB에 기록되지 않은 파일도 남지 않는다. 해시는 감사용으로 보존한다.
+    """
     if not force and to_kst(now).date() <= calendar.end:
         raise DomainError("EVENT_NOT_ENDED", "이벤트 종료 후에 삭제할 수 있습니다.")
     certs = s.scalars(
         select(StudyCertification).where(StudyCertification.image_path.is_not(None))
     ).all()
     for cert in certs:
-        assert cert.image_path is not None
-        (upload_dir / cert.image_path).unlink(missing_ok=True)
         cert.image_path = None
-    audit(s, now, "system", "certification.purge_images", count=len(certs))
-    return len(certs)
+    removed = 0
+    if upload_dir.is_dir():
+        for path in upload_dir.iterdir():
+            if path.is_file() and STORED_IMAGE.match(path.name):
+                path.unlink(missing_ok=True)
+                removed += 1
+    audit(s, now, "system", "certification.purge_images", records=len(certs), files_removed=removed)
+    return removed
 
 
 def image_file(cert: StudyCertification, upload_dir: Path) -> Path | None:

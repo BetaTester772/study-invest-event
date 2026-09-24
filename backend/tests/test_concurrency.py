@@ -19,6 +19,7 @@ from conftest import PNG, TEST_DB_URL
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from study_invest.config import PoolSpec
 from study_invest.db import Base, make_engine, make_session_factory
 from study_invest.event_calendar import EventCalendar
 from study_invest.models import (
@@ -51,7 +52,7 @@ def at(d: date, h: int, m: int = 0, s: int = 0) -> datetime:
 
 @pytest.fixture
 def factory() -> Iterator[sessionmaker[Session]]:
-    engine = make_engine(TEST_DB_URL)
+    engine = make_engine(PoolSpec("test", TEST_DB_URL, size=20))
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     yield make_session_factory(engine)

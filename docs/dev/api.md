@@ -15,7 +15,9 @@
 | 401 | `UNAUTHORIZED` | 토큰/관리자 키 없음·불일치 |
 | 403 | `DISQUALIFIED` | 실격 참가자 |
 | 404 | `NOT_FOUND` | 리소스 없음 |
-| 409 | `CONFLICT` 계열 | 중복 등록, 중복 인증, 배치 순서 위반 등 |
+| 409 | `CONFLICT` 계열 | 중복 등록, 중복 인증, 배치 순서 위반, 동시 요청 충돌(`CONFLICT`) |
+| 413 | `PAYLOAD_TOO_LARGE` | 요청 본문이 한도 초과(업로드 10MB+여유, 그 외 1MiB). 본문을 받기 전에 거부 |
+| 503 | `DB_BUSY`, `DB_UNAVAILABLE` | api 연결 풀이 가득 참(10초 대기 초과) / DB 연결 불가. `Retry-After: 2` |
 
 ## 공용 타입
 
@@ -108,6 +110,15 @@ interface Certification {
   image_url: string | null;     // 참가자: /api/me/certifications/{id}/image, 삭제 후 null
 }
 
+interface CertificationStatus {
+  target_date: string;           // 지금 올리면 집계되는 날짜
+  cutoff: string;                // "23:59"
+  can_submit: boolean;
+  reason: "DISQUALIFIED" | "OUTSIDE_EVENT" | "ALREADY_CERTIFIED" | null;
+  message: string | null;
+  existing: Certification | null; // 그 날짜에 이미 낸 인증(반려 포함, 1인 1일 1회라 재제출 불가)
+}
+
 interface EventInfo {
   start: string; end: string;
   operating_days: string[];
@@ -156,8 +167,8 @@ interface RankingEntry {
 | POST | `/api/auth/login` | `{identity, password}` | `{token, participant}` / 401 `INVALID_CREDENTIALS` |
 | POST | `/api/auth/logout` | – | 204 |
 
-- `identity`: 1인 1계정 식별자(사내 계정·학번 등). 앞뒤 공백 제거·대소문자 무시로 정규화해 중복 검사.
-- `nickname`: 2~20자, 랭킹 공개명. `password`: 8자 이상.
+- `identity`: 1인 1계정 식별자(사내 계정·학번 등). NFKC 정규화·대소문자 무시·앞뒤 공백 제거 **후** 1~128자. 전각 `ＡＬＩＣＥ`와 `alice`는 같은 식별자.
+- `nickname`: NFC 정규화·앞뒤 공백 제거 **후** 2~20자, 랭킹 공개명(조합형·완성형 한글은 같은 닉네임). `password`: 8자 이상.
 
 ## 참가자 (Bearer)
 
@@ -166,8 +177,9 @@ interface RankingEntry {
 | GET | `/api/me` | – | `Participant` |
 | GET | `/api/me/portfolio` | – | `Portfolio` |
 | GET | `/api/me/orders` | `?limit=100` | `Order[]` (최신순) |
-| POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분) |
+| POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분). `code`는 1~16자, `quantity`는 정수(64비트 범위 밖이면 422) |
 | GET | `/api/me/certifications` | – | `Certification[]` (최신순) |
+| GET | `/api/me/certification-status` | – | `CertificationStatus` — 지금 올릴 수 있는지(제출 API와 같은 판단). 화면은 이 값만 따른다 |
 | POST | `/api/me/certifications` | multipart `file` (image/jpeg·png·webp·heic, ≤10MB) | 201 `Certification` / 409 `ALREADY_CERTIFIED`, 422 `OUTSIDE_EVENT`, `INVALID_IMAGE` |
 | GET | `/api/me/certifications/{id}/image` | – | 이미지 바이너리 |
 
@@ -225,4 +237,5 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | POST | `/api/admin/batch/run-due` | – | `BatchResult[]` (현재 시각에 밀린 배치 실행) |
 | GET | `/api/admin/settlements` | – | `SettlementLog[]` |
 | GET | `/api/admin/audit` | `?limit=200` | `AuditEntry[]` |
+| GET | `/api/admin/db-pools` | – | `{api: PoolStatus, batch: PoolStatus}` — 앱 연결 풀 현황(`size` 설정 크기, `opened` 열린 연결, `checked_out` 사용 중, `idle`, `overflow` 초과분, `timeout`) |
 | POST | `/api/admin/simulate` | `{paths?=10000, rounds?=10, seed?, use_price_cap?=false}` | `SimulationReport` |

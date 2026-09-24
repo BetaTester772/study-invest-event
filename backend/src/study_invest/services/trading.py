@@ -124,9 +124,9 @@ def place_order(
 
     order = Order(
         participant_id=participant.id,
-        code=code[:16],
+        code=code,
         side=side,
-        quantity=quantity if isinstance(quantity, int) else 0,
+        quantity=quantity,
         price=price,
         amount=amount,
         status=OrderStatus.REJECTED if reason else OrderStatus.FILLED,

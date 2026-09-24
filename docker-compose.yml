@@ -1,18 +1,32 @@
-# 로컬·단일 서버 실행용 구성.
-#   cp .env.example .env   # 관리자 키 등 설정
+# 로컬·단일 서버 실행용 구성. 연결 풀 설계는 docs/dev/db-pools.md 참고.
+#   cp .env.example .env   # 비밀번호·관리자 키 설정
 #   docker compose up --build
-# 웹: http://localhost:8080  (API는 같은 주소의 /api, 직접 접근은 http://localhost:8000)
+# 웹: http://localhost:8080   pgAdmin: http://localhost:5050 (이 PC에서만)
+
+x-db-credentials: &db-credentials
+  POSTGRES_DB: ${POSTGRES_DB:-study_invest}
+  POSTGRES_USER: ${POSTGRES_USER:-study}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD를 .env에 설정하세요}
+  PGADMIN_DB_USER: ${PGADMIN_DB_USER:-pgadmin}
+  PGADMIN_DB_PASSWORD: ${PGADMIN_DB_PASSWORD:?PGADMIN_DB_PASSWORD를 .env에 설정하세요}
 
 services:
   db:
     image: postgres:16-alpine
+    # 연결 예산(api 25 + batch 2 + pgAdmin 5 + 마이그레이션 1 + superuser 예약 3 = 36 ≤ 50).
+    # PgBouncer가 시작할 때 같은 값으로 예산을 검사한다.
+    command:
+      - postgres
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-50}
+      - -c
+      - superuser_reserved_connections=3
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-study_invest}
-      POSTGRES_USER: ${POSTGRES_USER:-study}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-study}
+      <<: *db-credentials
       TZ: Asia/Seoul
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -20,10 +34,36 @@ services:
       retries: 10
     restart: unless-stopped
 
+  pgbouncer:
+    build: ./infra/pgbouncer
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-study_invest}
+      DB_USER: ${POSTGRES_USER:-study}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      PGADMIN_DB_USER: ${PGADMIN_DB_USER:-pgadmin}
+      PGADMIN_DB_PASSWORD: ${PGADMIN_DB_PASSWORD}
+      API_POOL_SIZE: ${API_POOL_SIZE:-20}
+      API_RESERVE_POOL: "5"
+      BATCH_POOL_SIZE: ${BATCH_POOL_SIZE:-2}
+      PGADMIN_POOL_SIZE: "5"
+      PG_MAX_CONNECTIONS: ${PG_MAX_CONNECTIONS:-50}
+      PG_SUPERUSER_RESERVED: "3"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   backend:
     build: ./backend
     environment:
-      STUDY_INVEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-study}:${POSTGRES_PASSWORD:-study}@db:5432/${POSTGRES_DB:-study_invest}
+      # api 풀·batch 풀은 PgBouncer 경유, 마이그레이션만 DB에 직접 연결
+      STUDY_INVEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-study}:${POSTGRES_PASSWORD}@pgbouncer:6432/study_invest_api
+      STUDY_INVEST_BATCH_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-study}:${POSTGRES_PASSWORD}@pgbouncer:6432/study_invest_batch
+      STUDY_INVEST_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-study}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-study_invest}
+      STUDY_INVEST_API_POOL_SIZE: ${API_POOL_SIZE:-20}
+      STUDY_INVEST_BATCH_POOL_SIZE: ${BATCH_POOL_SIZE:-2}
       STUDY_INVEST_ADMIN_KEY: ${STUDY_INVEST_ADMIN_KEY:?STUDY_INVEST_ADMIN_KEY를 .env에 설정하세요}
       STUDY_INVEST_SCHEDULER: ${STUDY_INVEST_SCHEDULER:-1}
       STUDY_INVEST_UPLOAD_DIR: /data/uploads
@@ -34,6 +74,8 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       db:
+        condition: service_healthy
+      pgbouncer:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -51,6 +93,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    entrypoint: ["/bin/sh", "/study-invest/entrypoint.sh"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-study_invest}
+      PGADMIN_DB_USER: ${PGADMIN_DB_USER:-pgadmin}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD를 .env에 설정하세요}
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: "30"
+      # 기본값은 IPv6 [::]. IPv6가 없는 도커 네트워크에서도 뜨도록 IPv4로 듣는다.
+      PGADMIN_LISTEN_ADDRESS: 0.0.0.0
+    volumes:
+      - ./infra/pgadmin/entrypoint.sh:/study-invest/entrypoint.sh:ro
+      - pgadmin:/var/lib/pgadmin
+    ports:
+      # 관리 도구는 이 PC(localhost)에서만 연다
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
   uploads:
+  pgadmin:

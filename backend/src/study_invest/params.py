@@ -7,6 +7,8 @@ from dataclasses import dataclass, field, fields
 from datetime import date, time, timedelta, timezone
 from fractions import Fraction
 
+from .money import PRICE_UNIT
+
 # --- 고정 상수 (02-parameters §1) -------------------------------------------------
 
 KST = timezone(timedelta(hours=9), "KST")
@@ -72,11 +74,15 @@ class EventParams:
             (self.coin_cap > 0, "coin_cap must be positive"),
             (-1 < self.coin_floor < 0, "coin_floor must be in (-1, 0)"),
             (
-                self.coin_price_cap is None or self.coin_price_cap > 0,
-                "coin_price_cap must be positive or None",
+                self.coin_price_cap is None
+                or (self.coin_price_cap >= PRICE_UNIT and self.coin_price_cap % PRICE_UNIT == 0),
+                "coin_price_cap must be a positive multiple of 10 or None",
             ),
             (self.stock_sensitivity > 0, "stock_sensitivity must be positive"),
-            (self.stock_min_price > 0, "stock_min_price must be positive"),
+            (
+                self.stock_min_price > 0 and self.stock_min_price % PRICE_UNIT == 0,
+                "stock_min_price must be a positive multiple of 10",
+            ),
             (self.virtual_liquidity >= 0, "virtual_liquidity must be non-negative"),
             (0 < self.daily_buy_limit_ratio <= 1, "daily_buy_limit_ratio must be in (0, 1]"),
             (self.reward_coin_quantity >= 0, "reward_coin_quantity must be non-negative"),

@@ -7,6 +7,7 @@ import type {
   BatchResult,
   CertStatus,
   Certification,
+  CertificationStatus,
   EventInfo,
   Instrument,
   LoginRequest,
@@ -49,6 +50,8 @@ export const meApi = {
   orders: (limit = 100) => request<Order[]>('/me/orders', { auth: 'participant', query: { limit } }),
   placeOrder: (body: OrderRequest) => request<Order>('/me/orders', { method: 'POST', auth: 'participant', body }),
   certifications: () => request<Certification[]>('/me/certifications', { auth: 'participant' }),
+  certificationStatus: () =>
+    request<CertificationStatus>('/me/certification-status', { auth: 'participant' }),
   uploadCertification: (file: File) => {
     const form = new FormData();
     form.append('file', file);

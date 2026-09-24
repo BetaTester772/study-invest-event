@@ -1,4 +1,4 @@
-"""Alembic 환경. DB URL은 STUDY_INVEST_DATABASE_URL(없으면 Settings 기본값)."""
+"""Alembic 환경. DB URL은 STUDY_INVEST_MIGRATION_DATABASE_URL(없으면 STUDY_INVEST_DATABASE_URL)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ from study_invest.db import Base
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-config.set_main_option("sqlalchemy.url", Settings.from_env().database_url)
+# 마이그레이션은 PgBouncer(transaction 풀)를 거치지 않고 DB에 직접 붙는다.
+config.set_main_option("sqlalchemy.url", Settings.from_env().migration_url)
 target_metadata = Base.metadata
 
 

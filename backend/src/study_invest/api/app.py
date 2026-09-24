@@ -15,11 +15,12 @@ from pathlib import Path
 import anyio.to_thread
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ..config import Settings
-from ..db import create_schema, install_event_loop_guard, make_engine, make_session_factory
+from ..db import DatabasePools, create_schema, make_session_factory
 from ..event_calendar import EventCalendar, seconds_until_next_batch
 from ..params import KST
 from ..services.common import DomainError
@@ -37,6 +38,14 @@ MULTIPART_OVERHEAD = 64 * 1024
 """multipart 경계·헤더용 여유(바이트)."""
 
 
+def _unavailable(code: str, message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "2"},
+        content={"detail": {"code": code, "message": message}},
+    )
+
+
 def _now() -> datetime:
     return datetime.now(KST)
 
@@ -49,7 +58,7 @@ async def _scheduler(state: AppState) -> None:
     while True:
         try:
             results = await asyncio.to_thread(
-                run_due, state.session_factory, state.clock(), state.calendar, state.rng
+                run_due, state.batch_session_factory, state.clock(), state.calendar, state.rng
             )
             for r in results:
                 log.info("batch: %s", r)
@@ -68,13 +77,14 @@ def create_app(
     calendar: EventCalendar | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
-    engine = make_engine(settings.database_url, settings.db_pool_size, settings.db_max_overflow)
-    install_event_loop_guard(engine, settings.loop_guard)
+    pools = DatabasePools.create(settings)
     if settings.auto_create_schema:
-        create_schema(engine)
+        create_schema(pools.api)
     state = AppState(
         settings=settings,
-        session_factory=make_session_factory(engine),
+        pools=pools,
+        session_factory=make_session_factory(pools.api),
+        batch_session_factory=make_session_factory(pools.batch),
         calendar=calendar or EventCalendar(),
         clock=clock or _now,
         rng=rng or random.SystemRandom(),
@@ -100,10 +110,26 @@ def create_app(
             if state.cpu_executor is not None:
                 state.cpu_executor.shutdown(wait=False, cancel_futures=True)
                 state.cpu_executor = None
-            engine.dispose()
+            pools.dispose()
 
     app = FastAPI(title="공부장려 모의투자 이벤트", version="0.1.0", lifespan=lifespan)
     app.state.study_invest = state
+
+    @app.exception_handler(PoolTimeoutError)  # I/O 없음 → async
+    async def _pool_exhausted(_: Request, exc: PoolTimeoutError) -> JSONResponse:
+        # api 풀이 가득 차 pool_timeout 동안 연결을 못 받음 → 무한 대기 대신 즉시 503.
+        log.warning("api pool exhausted: %s", exc)
+        return _unavailable(
+            "DB_BUSY", "요청이 많아 잠시 처리할 수 없습니다. 잠시 후 다시 시도하세요."
+        )
+
+    @app.exception_handler(OperationalError)  # I/O 없음 → async
+    async def _db_unavailable(_: Request, exc: OperationalError) -> JSONResponse:
+        # DB·PgBouncer 연결 실패, PgBouncer query_wait_timeout 등.
+        log.error("database unavailable: %s", exc.orig)
+        return _unavailable(
+            "DB_UNAVAILABLE", "데이터베이스에 연결할 수 없습니다. 잠시 후 다시 시도하세요."
+        )
 
     @app.exception_handler(IntegrityError)  # I/O 없음 → async
     async def _integrity_error(_: Request, exc: IntegrityError) -> JSONResponse:

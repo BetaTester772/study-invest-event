@@ -12,7 +12,7 @@ from ..models import Order, StudyCertification
 from ..services import certification, trading
 from ..services.common import DomainError, get_params
 from . import schemas, views
-from .deps import MeDep, NowDep, SessionDep, StateDep
+from .deps import MeDep, NowDep, ParamsDep, SessionDep, StateDep
 
 router = APIRouter(prefix="/api/me")
 
@@ -59,6 +59,22 @@ def certifications(participant: MeDep, s: SessionDep) -> list[schemas.Certificat
         .order_by(StudyCertification.target_date.desc())
     )
     return [views.certification(c) for c in rows]
+
+
+@router.get("/certification-status", response_model=schemas.CertificationStatus)
+def certification_status(
+    participant: MeDep, state: StateDep, s: SessionDep, now: NowDep, params: ParamsDep
+) -> schemas.CertificationStatus:
+    """지금 인증을 올릴 수 있는지(제출 API와 같은 판단). 화면은 이 결과만 따른다."""
+    st = certification.submission_status(s, participant, now, state.calendar, params)
+    return schemas.CertificationStatus(
+        target_date=st.target_date,
+        cutoff=params.certification_cutoff.strftime("%H:%M"),
+        can_submit=st.can_submit,
+        reason=st.reason,
+        message=st.message,
+        existing=views.certification(st.existing) if st.existing else None,
+    )
 
 
 @router.post("/certifications", response_model=schemas.Certification, status_code=201)

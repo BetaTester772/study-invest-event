@@ -19,6 +19,7 @@ from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import Settings
+from ..db import DatabasePools
 from ..event_calendar import EventCalendar
 from ..models import Participant
 from ..params import EventParams
@@ -29,7 +30,11 @@ from ..services.common import DomainError, get_params
 @dataclass
 class AppState:
     settings: Settings
+    pools: DatabasePools
     session_factory: sessionmaker[Session]
+    """api 풀 세션(HTTP 요청)."""
+    batch_session_factory: sessionmaker[Session]
+    """batch 풀 세션(공시·정산·수동 가격, 스케줄러)."""
     calendar: EventCalendar
     clock: Callable[[], datetime]
     rng: random.Random
@@ -60,6 +65,19 @@ def get_session(state: StateDep) -> Iterator[Session]:
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+def get_batch_session(state: StateDep) -> Iterator[Session]:
+    """배치 전용 풀의 세션. 관리자 배치 API가 api 풀 대기열 뒤에 서지 않게 한다."""
+    with state.batch_session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            session.rollback()
+            raise
+
+
+BatchSessionDep = Annotated[Session, Depends(get_batch_session)]
 
 
 async def get_now(state: StateDep) -> datetime:
@@ -106,5 +124,10 @@ async def require_admin(
     state: StateDep, x_admin_key: Annotated[str | None, Header()] = None
 ) -> None:
     expected = state.settings.admin_key
-    if not expected or not x_admin_key or not secrets.compare_digest(x_admin_key, expected):
+    # 바이트로 비교한다. str 비교는 비ASCII 헤더에서 TypeError(500)가 난다.
+    if (
+        not expected
+        or not x_admin_key
+        or not secrets.compare_digest(x_admin_key.encode(), expected.encode())
+    ):
         raise DomainError("UNAUTHORIZED", "관리자 키가 올바르지 않습니다.", 401)

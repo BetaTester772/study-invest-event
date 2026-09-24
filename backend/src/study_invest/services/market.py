@@ -50,9 +50,14 @@ class BatchResult:
     detail: dict[str, Any] = field(default_factory=dict)
 
 
-def _price_before(s: Session, code: str, day: date) -> int | None:
+def _published_price_before(s: Session, code: str, day: date) -> int | None:
+    """day 이전에 **공시된** 마지막 시작가. 전일 대비 변동률의 기준이다.
+
+    공시되지 않은 날의 가격(미래 날짜의 수동 개입가, 공시 전 정산 결과)은 기준이 될 수 없다.
+    """
     return s.scalar(
         select(PriceHistory.price)
+        .join(MarketDay, MarketDay.day == PriceHistory.day)
         .where(PriceHistory.code == code, PriceHistory.day < day)
         .order_by(PriceHistory.day.desc())
         .limit(1)
@@ -82,10 +87,14 @@ def open_day(s: Session, day: date, now: datetime, calendar: EventCalendar) -> B
     existing = {r.code: r for r in s.scalars(select(PriceHistory).where(PriceHistory.day == day))}
     sources: dict[str, str] = {}
     for inst in INSTRUMENTS:
+        previous = _published_price_before(s, inst.code, day)
         if inst.code in existing:
-            sources[inst.code] = existing[inst.code].source.value
+            # 전일 대비 기준은 공시 시점에 확정한다. 며칠 앞서 넣은 수동 개입가도 그사이 정산된
+            # 전일 가격을 기준으로 다시 계산된다.
+            record = existing[inst.code]
+            record.previous_price = previous
+            sources[inst.code] = record.source.value
             continue
-        previous = _price_before(s, inst.code, day)
         if previous is None:  # 1일차(또는 이력 없음): 종목 마스터 시작가
             price, prev, source = inst.initial_price, None, PriceSource.INITIAL
         else:  # 전일 정산 없음: 전일 가격 유지
@@ -329,7 +338,7 @@ def set_manual_price(
         raise DomainError("INVALID_PRICE", "가격은 10원 단위의 양수여야 합니다.", 422)
     if not reason.strip():
         raise DomainError("REASON_REQUIRED", "개입 사유를 입력하세요.", 422)
-    previous = _price_before(s, code, day)
+    previous = _published_price_before(s, code, day)  # 잠정값. 공시(open_day) 때 다시 확정
     record = s.merge(
         PriceHistory(
             code=code,

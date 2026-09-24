@@ -86,6 +86,17 @@ export interface Order {
   created_at: string;
 }
 
+/** 지금 인증을 올릴 수 있는지. 서버가 제출 검사와 같은 규칙으로 계산한다(화면은 이 값만 따른다). */
+export interface CertificationStatus {
+  target_date: string;
+  cutoff: string;
+  can_submit: boolean;
+  reason: 'DISQUALIFIED' | 'OUTSIDE_EVENT' | 'ALREADY_CERTIFIED' | null;
+  message: string | null;
+  /** 집계 날짜에 이미 낸 인증(반려 포함). 1인 1일 1회라 반려돼도 다시 낼 수 없다. */
+  existing: Certification | null;
+}
+
 export interface Certification {
   id: number;
   target_date: string;

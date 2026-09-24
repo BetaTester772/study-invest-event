@@ -42,6 +42,11 @@ class AwareDateTime(TypeDecorator[datetime]):
         return None if value is None else value.replace(tzinfo=UTC)
 
 
+BIGINT_MIN = -(2**63)
+BIGINT_MAX = 2**63 - 1
+"""BigInteger 컬럼이 담을 수 있는 범위. API 입력은 이 범위 밖을 받지 않는다."""
+
+
 def _enum(cls: type[StrEnum]) -> Enum:
     return Enum(cls, native_enum=False, length=32, values_callable=lambda e: [m.value for m in e])
 
