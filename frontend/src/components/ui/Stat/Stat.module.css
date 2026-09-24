@@ -1,0 +1,58 @@
+.group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sheet);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.stat {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  min-width: 0;
+  /* Hairline dividers between tiles that survive wrapping. */
+  box-shadow:
+    -1px 0 0 var(--color-border),
+    0 -1px 0 var(--color-border);
+}
+
+.label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.value {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+
+.sub {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.emphasis .value {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-3xl);
+  color: var(--color-ink);
+}
+
+@media (max-width: 640px) {
+  .stat {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .emphasis .value {
+    font-size: var(--text-2xl);
+  }
+}

@@ -1,0 +1,27 @@
+.stack {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--grid-min), 100%), 1fr));
+  gap: var(--grid-gap);
+  min-width: 0;
+}
+
+.sidebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--grid-side);
+  gap: var(--grid-gap);
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
