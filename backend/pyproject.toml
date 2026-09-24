@@ -17,7 +17,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "httpx>=0.27"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    # 테스트 클라이언트(fastapi.testclient). Starlette는 1.2부터 httpx2를 쓰고 httpx는 deprecated.
+    "httpx2>=2.13",
+    "starlette>=1.2",
+]
 
 [project.scripts]
 study-invest = "study_invest.cli:main"
