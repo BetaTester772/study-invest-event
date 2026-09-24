@@ -9,6 +9,8 @@ ENV VITE_SITE_URL=$VITE_SITE_URL
 RUN npm run build
 
 FROM caddy:2.11-alpine
+# 로그 시각을 compose의 TZ(Asia/Seoul)로 찍기 위한 시간대 데이터
+RUN apk add --no-cache tzdata
 COPY Caddyfile /etc/caddy/Caddyfile
 # 설정 오류는 컨테이너가 뜬 뒤가 아니라 빌드 때 드러나게 한다.
 RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

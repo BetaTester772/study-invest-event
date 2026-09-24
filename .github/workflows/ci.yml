@@ -305,6 +305,17 @@ jobs:
             | grep -qx pgadmin
       - name: PgBouncer connection budget
         run: docker compose logs pgbouncer | grep "connection budget"
+      - name: Container timezone (KST)
+        run: |
+          set -eu
+          # 로그 시각을 한국 시간으로 찍는다. tzdata가 빠지면 TZ를 줘도 UTC로 돌아간다.
+          for s in db backend pgbouncer frontend pgadmin; do
+            tz=$(docker compose exec -T "$s" date +%Z)
+            echo "$s: $tz"
+            test "$tz" = "KST"
+          done
+          docker compose logs --no-log-prefix pgbouncer | grep ' KST \[1\] LOG ' > /dev/null
+          docker compose logs --no-log-prefix frontend | grep '"ts":"[0-9-]*T[0-9:.]*+0900"' > /dev/null
       - name: Logs
         if: failure()
         run: docker compose logs --no-color

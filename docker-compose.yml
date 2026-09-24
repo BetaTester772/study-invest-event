@@ -50,6 +50,7 @@ services:
       PGADMIN_POOL_SIZE: "5"
       PG_MAX_CONNECTIONS: ${PG_MAX_CONNECTIONS:-50}
       PG_SUPERUSER_RESERVED: "3"
+      TZ: Asia/Seoul
     depends_on:
       db:
         condition: service_healthy
@@ -92,6 +93,8 @@ services:
       context: ./frontend
       args:
         VITE_SITE_URL: ${VITE_SITE_URL:-}
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
@@ -114,6 +117,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD를 .env에 설정하세요}
       PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: "30"
+      TZ: Asia/Seoul
       # 기본값은 IPv6 [::]. IPv6가 없는 도커 네트워크에서도 뜨도록 IPv4로 듣는다.
       PGADMIN_LISTEN_ADDRESS: 0.0.0.0
     volumes:
