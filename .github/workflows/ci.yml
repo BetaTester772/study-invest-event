@@ -23,37 +23,26 @@ env:
   PG_DB: study_invest_test
 
 jobs:
-  # 바뀐 영역만 검사한다. 건너뛴 작업은 성공으로 취급되므로 브랜치 보호의 필수 검사는
-  # 맨 아래 `ci-ok` 하나만 지정하면 된다.
+  # 바뀐 영역만 검사한다(.github/scripts/changed-areas.sh). 건너뛴 작업은 성공으로 취급되므로
+  # 브랜치 보호의 필수 검사는 맨 아래 `ci-ok` 하나만 지정하면 된다.
   changes:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       stack: ${{ steps.filter.outputs.stack }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
+      - uses: actions/checkout@v5
         with:
-          filters: |
-            backend:
-              - 'backend/**'
-              - 'infra/**'
-              - '.github/workflows/ci.yml'
-            frontend:
-              - 'frontend/**'
-              - '.github/workflows/ci.yml'
-            stack:
-              - 'backend/**'
-              - 'frontend/**'
-              - 'infra/**'
-              - 'docker-compose.yml'
-              - '.env.example'
-              - '.github/workflows/ci.yml'
+          fetch-depth: 0 # 비교 대상 커밋까지 받아야 git diff가 된다
+      - name: Detect changed areas
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          # PR: base 브랜치 커밋, push: 푸시 전 커밋
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: sh .github/scripts/changed-areas.sh
 
   backend-lint:
     needs: changes
@@ -63,8 +52,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -107,8 +96,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -191,8 +180,8 @@ jobs:
     env:
       STUDY_INVEST_DATABASE_URL: postgresql+psycopg://study:study@localhost:5432/study_invest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -215,8 +204,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -236,7 +225,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare .env (.env.example 값만 CI용으로 교체)
         run: |
           sed \
