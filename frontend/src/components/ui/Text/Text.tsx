@@ -5,7 +5,7 @@ import styles from './Text.module.css';
 export interface TextProps extends HTMLAttributes<HTMLElement> {
   as?: 'p' | 'span' | 'div' | 'strong' | 'small';
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
-  tone?: 'default' | 'muted' | 'subtle' | 'up' | 'down' | 'danger' | 'success';
+  tone?: 'default' | 'ink' | 'muted' | 'subtle' | 'up' | 'down' | 'danger' | 'success';
   weight?: 'regular' | 'medium' | 'semibold' | 'bold';
   /** Display face (Do Hyeon) for prices and big numbers. */
   display?: boolean;

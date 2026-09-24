@@ -45,14 +45,20 @@ export interface GridProps extends HTMLAttributes<HTMLDivElement> {
   gap?: Space;
   /** Fixed "sidebar" layout: main + side column (side width), stacks under 860px. */
   sidebar?: string;
+  /** With `sidebar`: when stacked on small screens, show the side column first. */
+  sideFirstOnMobile?: boolean;
 }
 
-export function Grid({ min = '16rem', gap = 4, sidebar, className, style, ...rest }: GridProps) {
+export function Grid({ min = '16rem', gap = 4, sidebar, sideFirstOnMobile, className, style, ...rest }: GridProps) {
   const s = {
     '--grid-min': min,
     '--grid-gap': `var(--space-${gap})`,
     '--grid-side': sidebar,
     ...style,
   } as CSSProperties;
-  return <div className={cx(sidebar ? styles.sidebar : styles.grid, className)} style={s} {...rest} />;
+  return <div
+      className={cx(sidebar ? styles.sidebar : styles.grid, sidebar && sideFirstOnMobile && styles.sideFirst, className)}
+      style={s}
+      {...rest}
+    />;
 }

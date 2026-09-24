@@ -9,8 +9,8 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
   if (status === 'loading') {
     return (
-      <Container>
-        <Stack align="center" style={{ paddingBlock: 'var(--space-16)' }}>
+      <Container padTop>
+        <Stack align="center">
           <Spinner size="lg" label="로그인 정보를 확인하는 중" />
         </Stack>
       </Container>

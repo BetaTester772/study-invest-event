@@ -20,8 +20,16 @@
   max-width: calc(var(--container-xl) + 2 * var(--space-6));
 }
 
+.padTop {
+  padding-top: var(--space-8);
+}
+
 @media (max-width: 640px) {
   .container {
     padding-inline: var(--space-4);
+  }
+
+  .padTop {
+    padding-top: var(--space-5);
   }
 }

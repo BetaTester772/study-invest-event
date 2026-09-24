@@ -120,3 +120,10 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
+
+/** Pick the right Korean object particle: 을 after a final consonant, 를 otherwise. */
+export function withObjectParticle(word: string): string {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return `${word}를`;
+  return (last - 0xac00) % 28 === 0 ? `${word}를` : `${word}을`;
+}

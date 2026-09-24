@@ -38,6 +38,10 @@
   color: var(--color-text);
 }
 
+.tone-ink {
+  color: var(--color-ink);
+}
+
 .tone-muted {
   color: var(--color-text-muted);
 }

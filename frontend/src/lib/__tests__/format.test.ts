@@ -9,6 +9,7 @@ import {
   formatPercent,
   formatQuantity,
   formatWon,
+  withObjectParticle,
 } from '../format';
 
 describe('formatWon', () => {
@@ -75,5 +76,13 @@ describe('misc formatters', () => {
     expect(formatDay(null)).toBe('—');
     expect(formatDayShort('2026-10-06')).toBe('10.06');
     expect(formatBytes(10 * 1024 * 1024)).toBe('10.0MB');
+  });
+});
+
+describe('withObjectParticle', () => {
+  it('chooses 을/를 by final consonant', () => {
+    expect(withObjectParticle('시세')).toBe('시세를');
+    expect(withObjectParticle('가격 이력')).toBe('가격 이력을');
+    expect(withObjectParticle('ABC')).toBe('ABC를');
   });
 });
