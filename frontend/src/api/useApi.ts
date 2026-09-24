@@ -25,9 +25,25 @@ function toApiError(err: unknown): ApiError {
   return new ApiError(0, 'UNKNOWN', err instanceof Error ? err.message : '알 수 없는 오류가 생겼어요.');
 }
 
+/** 두 의존성 목록이 같은지(Object.is로 항목별 비교, React 의존성 규칙과 같음). */
+function sameDeps(a: DependencyList, b: DependencyList): boolean {
+  return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+}
+
+/** 결과(data·error)는 그것을 요청한 의존성 목록에 묶어 둔다. */
+interface Entry<T> {
+  deps: DependencyList;
+  data: T | undefined;
+  error: ApiError | undefined;
+}
+
 /**
  * Minimal query hook: runs `fetcher` on mount and whenever `deps` change,
  * ignores stale responses, and exposes loading/error/refetch.
+ *
+ * 결과는 요청한 의존성(`deps`)에 묶인다. 의존성이 바뀌거나 `enabled`가 false가 되면 그 즉시
+ * (같은 렌더에서) 이전 결과를 돌려주지 않고, 진행 중이던 요청의 응답도 버린다. 그래서 로그아웃·
+ * 계정 전환 뒤에 이전 사용자의 데이터가 한 순간도 보이지 않는다.
  */
 export function useApi<T>(
   fetcher: () => Promise<T>,
@@ -35,41 +51,44 @@ export function useApi<T>(
   options: UseApiOptions = {},
 ): UseApiResult<T> {
   const { enabled = true, refreshInterval } = options;
-  const [data, setDataState] = useState<T | undefined>(undefined);
-  const [error, setError] = useState<ApiError | undefined>(undefined);
+  const [entry, setEntry] = useState<Entry<T> | undefined>(undefined);
   const [fetching, setFetching] = useState(enabled);
-  const [loaded, setLoaded] = useState(false);
   const requestId = useRef(0);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  const depsRef = useRef(deps);
+  depsRef.current = deps;
 
   const run = useCallback(async (): Promise<T | undefined> => {
     const id = ++requestId.current;
+    const requestDeps = depsRef.current;
     setFetching(true);
     try {
       const result = await fetcherRef.current();
-      if (id === requestId.current) {
-        setDataState(result);
-        setError(undefined);
-      }
+      if (id === requestId.current) setEntry({ deps: requestDeps, data: result, error: undefined });
       return result;
     } catch (err) {
-      if (id === requestId.current) setError(toApiError(err));
+      if (id === requestId.current) {
+        setEntry((prev) => ({
+          deps: requestDeps,
+          // 같은 의존성으로 다시 불렀다 실패하면 이전 데이터는 유지(재시도 중 화면 유지)
+          data: prev && sameDeps(prev.deps, requestDeps) ? prev.data : undefined,
+          error: toApiError(err),
+        }));
+      }
       return undefined;
     } finally {
-      if (id === requestId.current) {
-        setFetching(false);
-        setLoaded(true);
-      }
+      if (id === requestId.current) setFetching(false);
     }
   }, []);
 
   useEffect(() => {
     if (!enabled) {
+      requestId.current += 1; // 진행 중인 응답 무시
+      setEntry(undefined);
       setFetching(false);
       return;
     }
-    setLoaded(false);
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, run, ...deps]);
@@ -83,10 +102,25 @@ export function useApi<T>(
   }, [enabled, refreshInterval, run]);
 
   const setData = useCallback((updater: T | ((prev: T | undefined) => T)) => {
-    setDataState((prev) => (typeof updater === 'function' ? (updater as (p: T | undefined) => T)(prev) : updater));
+    setEntry((prev) => {
+      const current = prev && sameDeps(prev.deps, depsRef.current) ? prev.data : undefined;
+      const data =
+        typeof updater === 'function' ? (updater as (p: T | undefined) => T)(current) : updater;
+      return { deps: depsRef.current, data, error: undefined };
+    });
   }, []);
 
-  return { data, error, loading: enabled && !loaded && fetching, fetching, refetch: run, setData };
+  // 렌더 시점에 현재 의존성과 맞는 결과만 노출한다(effect가 돌기 전 첫 렌더에서도).
+  const current = enabled && entry && sameDeps(entry.deps, deps) ? entry : undefined;
+  return {
+    data: current?.data,
+    error: current?.error,
+    // 현재 의존성에 대한 결과(성공·실패)가 아직 없으면 로딩 중
+    loading: enabled && current === undefined,
+    fetching,
+    refetch: run,
+    setData,
+  };
 }
 
 /** Load an auth-protected image into an object URL; revoked on change/unmount. */

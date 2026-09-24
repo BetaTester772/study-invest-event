@@ -11,7 +11,8 @@ export interface TabItem<V extends string = string> {
 }
 
 export interface TabsProps<V extends string = string> {
-  items: TabItem<V>[];
+  /** 탭은 하나 이상이어야 한다(첫 탭이 기본 선택). */
+  items: readonly [TabItem<V>, ...TabItem<V>[]];
   /** Controlled value. */
   value?: V;
   defaultValue?: V;
@@ -30,7 +31,7 @@ export function Tabs<V extends string = string>({
   label,
   className,
 }: TabsProps<V>) {
-  const [internal, setInternal] = useState<V>(defaultValue ?? items[0]?.value);
+  const [internal, setInternal] = useState<V>(defaultValue ?? items[0].value);
   const value = controlled ?? internal;
   const baseId = useId();
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -48,8 +49,10 @@ export function Tabs<V extends string = string>({
     else if (e.key === 'Home') next = 0;
     else if (e.key === 'End') next = items.length - 1;
     else return;
+    const target = items[next];
+    if (!target) return;
     e.preventDefault();
-    select(items[next].value);
+    select(target.value);
     refs.current[next]?.focus();
   };
 

@@ -45,6 +45,7 @@ export function SegmentedControl<V extends string>({
     if (e.key === 'Home') next = 0;
     if (e.key === 'End') next = enabled.length - 1;
     const target = enabled[next];
+    if (!target) return;
     onChange(target.value);
     refs.current[options.indexOf(target)]?.focus();
   };

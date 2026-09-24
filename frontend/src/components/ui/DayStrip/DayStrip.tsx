@@ -17,9 +17,13 @@ export interface DayStripProps {
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+/** 'YYYY-MM-DD'의 요일. 형식이 틀리면 빈 문자열. */
 function weekday(day: string): string {
-  const [y, m, d] = day.split('-').map(Number);
-  return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) return '';
+  const [, y, m, d] = match.map(Number);
+  if (y === undefined || m === undefined || d === undefined) return '';
+  return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] ?? '';
 }
 
 /**

@@ -59,12 +59,12 @@ export function Modal({
       }
       if (e.key !== 'Tab' || !dialog) return;
       const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (items.length === 0) {
+      const firstEl = items[0];
+      const lastEl = items[items.length - 1];
+      if (!firstEl || !lastEl) {
         e.preventDefault();
         return;
       }
-      const firstEl = items[0];
-      const lastEl = items[items.length - 1];
       if (e.shiftKey && document.activeElement === firstEl) {
         e.preventDefault();
         lastEl.focus();

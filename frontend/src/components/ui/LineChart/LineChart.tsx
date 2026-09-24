@@ -77,13 +77,15 @@ export function LineChart({
     return () => ro.disconnect();
   }, []);
 
-  const dir = tone ?? (points.length > 1 ? direction(points[points.length - 1].y - points[0].y) : 'flat');
+  const first = points[0];
+  const last = points[points.length - 1];
+  const dir = tone ?? (first && last && points.length > 1 ? direction(last.y - first.y) : 'flat');
 
   const geo = useMemo(() => {
     const ys = points.map((p) => p.y);
     const ticks = niceTicks(Math.min(...ys, Infinity), Math.max(...ys, -Infinity));
-    const yMin = ticks[0];
-    const yMax = ticks[ticks.length - 1];
+    const yMin = ticks[0] ?? 0;
+    const yMax = ticks[ticks.length - 1] ?? yMin;
     const plotW = width - PAD.left - PAD.right;
     const plotH = height - PAD.top - PAD.bottom;
     const xAt = (i: number) => PAD.left + (points.length <= 1 ? plotW / 2 : (i / (points.length - 1)) * plotW);
@@ -95,7 +97,7 @@ export function LineChart({
     return { ticks, plotW, plotH, xAt, yAt, path, cols, rows };
   }, [points, width, height]);
 
-  if (points.length === 0) {
+  if (!first || !last) {
     return (
       <div ref={wrapRef} className={cx(styles.wrap, styles.empty, className)} style={{ height }}>
         아직 가격 이력이 없어요.
@@ -132,8 +134,7 @@ export function LineChart({
     }
   };
 
-  const last = points[points.length - 1];
-  const summary = `${label}: ${formatX(points[0].x)} ${formatY(points[0].y)}에서 ${formatX(last.x)} ${formatY(last.y)}`;
+  const summary = `${label}: ${formatX(first.x)} ${formatY(first.y)}에서 ${formatX(last.x)} ${formatY(last.y)}`;
   const a = active != null ? points[active] : null;
 
   return (
@@ -178,18 +179,22 @@ export function LineChart({
               </text>
             </g>
           ))}
-          {xLabelIdx.map((i) => (
-            <text
-              key={i}
-              x={geo.xAt(i)}
-              y={height - 8}
-              textAnchor={
-                points.length <= 1 ? 'middle' : i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'
-              }
-            >
-              {formatX(points[i].x)}
-            </text>
-          ))}
+          {xLabelIdx.map((i) => {
+            const p = points[i];
+            if (!p) return null;
+            return (
+              <text
+                key={i}
+                x={geo.xAt(i)}
+                y={height - 8}
+                textAnchor={
+                  points.length <= 1 ? 'middle' : i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'
+                }
+              >
+                {formatX(p.x)}
+              </text>
+            );
+          })}
         </g>
         {points.length > 1 && <path d={geo.path} className={styles.line} />}
         <circle cx={geo.xAt(points.length - 1)} cy={geo.yAt(last.y)} r={4} className={styles.dot} />

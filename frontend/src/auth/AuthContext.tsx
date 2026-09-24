@@ -1,10 +1,21 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, authApi, meApi, onUnauthorized, tokenStore, type Participant } from '../api';
 
+/**
+ * 세션 상태는 **토큰**이 정한다. 프로필(/me)은 세션에 딸린 데이터일 뿐이다.
+ * - loading: 토큰이 있고 첫 /me 결과를 기다리는 중
+ * - authenticated: 토큰이 있고 서버가 거절하지 않음(프로필은 아직 못 받았을 수도 있음)
+ * - anonymous: 토큰 없음, 또는 서버가 401/403으로 거절
+ * 네트워크 오류·5xx는 세션을 끝내지 않는다(프로필만 다시 시도).
+ */
 type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
+
+/** 프로필 재시도 간격(ms). 실패할 때마다 늘리고 마지막 값에서 멈춘다. */
+const PROFILE_RETRY_MS = [2_000, 5_000, 15_000, 30_000];
 
 export interface AuthContextValue {
   status: AuthStatus;
+  /** 서버에서 받은 프로필. 세션은 있지만 아직 못 받았으면 null. */
   participant: Participant | null;
   login: (identity: string, password: string) => Promise<Participant>;
   register: (identity: string, nickname: string, password: string) => Promise<Participant>;
@@ -15,38 +26,60 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function isRejection(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 401 || err.status === 403);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [status, setStatus] = useState<AuthStatus>(() => (tokenStore.get() ? 'loading' : 'anonymous'));
+  const retry = useRef<{ timer: number | undefined; attempt: number }>({ timer: undefined, attempt: 0 });
+  /** 로그인·로그아웃마다 증가. 이전 세션의 /me 응답이 새 세션을 덮지 않게 한다. */
+  const session = useRef(0);
+
+  const cancelRetry = useCallback(() => {
+    window.clearTimeout(retry.current.timer);
+    retry.current = { timer: undefined, attempt: 0 };
+  }, []);
 
   const clear = useCallback(() => {
+    session.current += 1;
+    cancelRetry();
     tokenStore.set(null);
     setParticipant(null);
     setStatus('anonymous');
-  }, []);
+  }, [cancelRetry]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<void> => {
     if (!tokenStore.get()) {
       clear();
       return;
     }
+    const mySession = session.current;
+    window.clearTimeout(retry.current.timer);
     try {
       const me = await meApi.me();
+      if (mySession !== session.current) return;
+      retry.current.attempt = 0;
       setParticipant(me);
       setStatus('authenticated');
     } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      if (mySession !== session.current) return;
+      if (isRejection(err)) {
         clear();
-      } else {
-        // Network hiccup: keep the token, treat as signed in with unknown profile.
-        setStatus(participant ? 'authenticated' : 'anonymous');
+        return;
       }
+      // 서버가 토큰을 거절하지 않았다 → 세션 유지, 프로필만 나중에 다시 받는다.
+      setStatus('authenticated');
+      const delay = PROFILE_RETRY_MS[Math.min(retry.current.attempt, PROFILE_RETRY_MS.length - 1)];
+      retry.current.attempt += 1;
+      retry.current.timer = window.setTimeout(() => void refresh(), delay);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clear]);
 
   useEffect(() => {
     void refresh();
+    return () => window.clearTimeout(retry.current.timer);
   }, [refresh]);
 
   useEffect(
@@ -57,21 +90,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [clear],
   );
 
+  const startSession = useCallback(
+    (token: string, me: Participant) => {
+      session.current += 1;
+      cancelRetry();
+      tokenStore.set(token);
+      setParticipant(me);
+      setStatus('authenticated');
+    },
+    [cancelRetry],
+  );
+
   const login = useCallback(async (identity: string, password: string) => {
     const res = await authApi.login({ identity, password });
-    tokenStore.set(res.token);
-    setParticipant(res.participant);
-    setStatus('authenticated');
+    startSession(res.token, res.participant);
     return res.participant;
-  }, []);
+  }, [startSession]);
 
   const register = useCallback(async (identity: string, nickname: string, password: string) => {
     const res = await authApi.register({ identity, nickname, password });
-    tokenStore.set(res.token);
-    setParticipant(res.participant);
-    setStatus('authenticated');
+    startSession(res.token, res.participant);
     return res.participant;
-  }, []);
+  }, [startSession]);
 
   const logout = useCallback(async () => {
     try {

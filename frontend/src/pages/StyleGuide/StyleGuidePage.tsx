@@ -55,11 +55,11 @@ const SWATCHES = [
 ] as const;
 
 const SAMPLE_DAYS = Array.from({ length: 11 }, (_, i) => `2026-10-${String(6 + i).padStart(2, '0')}`);
-const SAMPLE_POINTS = [75000, 71200, 73900, 80100, 78400, 82000, 79300, 85600].map((y, i) => ({
-  x: SAMPLE_DAYS[i],
-  y,
-}));
-const SAMPLE_DOWN = [250000, 212000, 198500, 460000, 301000, 244000].map((y, i) => ({ x: SAMPLE_DAYS[i], y }));
+/** 날짜와 값을 짝지어 차트 점으로 만든다. 짧은 쪽 길이에 맞춘다. */
+const zipPoints = (ys: number[]) =>
+  SAMPLE_DAYS.slice(0, ys.length).map((x, i) => ({ x, y: ys[i] ?? 0 }));
+const SAMPLE_POINTS = zipPoints([75000, 71200, 73900, 80100, 78400, 82000, 79300, 85600]);
+const SAMPLE_DOWN = zipPoints([250000, 212000, 198500, 460000, 301000, 244000]);
 
 interface RankRow {
   rank: number;

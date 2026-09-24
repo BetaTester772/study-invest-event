@@ -33,7 +33,7 @@ describe('request', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: 1 }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     await expect(request('/me', { auth: 'participant', query: { limit: 5 } })).resolves.toEqual({ ok: 1 });
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(url).toBe('/api/me?limit=5');
     expect(init.headers.Authorization).toBe('Bearer abc');
   });
@@ -43,7 +43,7 @@ describe('request', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
     await request('/admin/params', { auth: 'admin', method: 'PUT', body: { a: 1 } });
-    const init = fetchMock.mock.calls[0][1];
+    const init = fetchMock.mock.calls[0]?.[1];
     expect(init.headers['X-Admin-Key']).toBe('secret');
     expect(init.headers['Content-Type']).toBe('application/json');
   });
