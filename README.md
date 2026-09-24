@@ -70,6 +70,10 @@ study-invest purge-images                    # 이벤트 종료 후 인증 사�
 | `STUDY_INVEST_SCHEDULER` | `0` | `1`이면 앱 안에서 배치 자동 실행 |
 | `STUDY_INVEST_SCHEDULER_INTERVAL` | `30` | 스케줄러 확인 주기(초) |
 | `STUDY_INVEST_AUTO_CREATE_SCHEMA` | `0` | `1`이면 시작 시 `create_all`(마이그레이션 대신, 테스트용) |
+| `STUDY_INVEST_THREADPOOL_SIZE` | `40` | 동기 라우트 스레드풀 크기 |
+| `STUDY_INVEST_DB_POOL_SIZE` / `_DB_MAX_OVERFLOW` | `10` / `30` | DB 연결 풀(합이 스레드풀 이상) |
+| `STUDY_INVEST_CPU_WORKERS` | `1` | 시뮬레이터용 프로세스 수(0이면 스레드) |
+| `STUDY_INVEST_LOOP_GUARD` | `warn` | 이벤트 루프에서 SQL 실행 시 `warn`/`raise`/`off` |
 | `STUDY_INVEST_FRONTEND_DIST` | (없음) | 빌드된 프론트엔드를 백엔드가 직접 제공할 때 경로 |
 
 ### 프론트엔드

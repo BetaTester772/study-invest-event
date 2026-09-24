@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import functools
 from datetime import date
 from typing import Annotated
 
@@ -31,7 +33,7 @@ from ..services.common import (
 from ..services.market import BatchResult
 from ..simulator import run as run_simulation
 from . import schemas, views
-from .deps import NowDep, SessionDep, StateDep, require_admin
+from .deps import NowDep, ParamsDep, SessionDep, StateDep, require_admin
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 
@@ -229,6 +231,17 @@ def audit_log(
 
 
 @router.post("/simulate")
-def simulate(body: schemas.SimulateRequest, s: SessionDep) -> dict[str, object]:
-    report = run_simulation(body.paths, body.rounds, body.seed, body.use_price_cap, get_params(s))
+async def simulate(
+    body: schemas.SimulateRequest, state: StateDep, params: ParamsDep
+) -> dict[str, object]:
+    """CPU 바운드(수 초)라 스레드에서 돌리면 GIL을 잡아 다른 요청까지 느려진다.
+    프로세스 풀에서 실행하고 이벤트 루프는 결과만 기다린다. 파라미터 조회(DB)는
+    동기 의존성(ParamsDep)이 스레드풀에서 끝낸 뒤 넘겨준다."""
+    job = functools.partial(
+        run_simulation, body.paths, body.rounds, body.seed, body.use_price_cap, params
+    )
+    if state.cpu_executor is None:
+        report = await asyncio.to_thread(job)
+    else:
+        report = await asyncio.get_running_loop().run_in_executor(state.cpu_executor, job)
     return report.to_dict()

@@ -70,6 +70,7 @@ def client(tmp_path: Path, clock: Clock, rng: StubRandom) -> Iterator[TestClient
         admin_key=ADMIN_KEY,
         upload_dir=tmp_path / "uploads",
         auto_create_schema=True,
+        loop_guard="raise",  # 이벤트 루프에서 DB를 부르면 테스트 실패
     )
     app = create_app(settings, clock=clock, rng=rng)
     engine = app.state.study_invest.session_factory.kw["bind"]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, cast
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,15 @@ class Settings:
     scheduler_interval_seconds: float = 30.0
     auto_create_schema: bool = False
     """켜면 시작 시 create_all로 스키마를 만든다(테스트·로컬 SQLite용). 운영은 Alembic을 쓴다."""
+    threadpool_size: int = 40
+    """동기 라우트·의존성을 실행하는 스레드풀 크기(anyio 기본 40)."""
+    db_pool_size: int = 10
+    db_max_overflow: int = 30
+    """DB 연결 = pool_size + max_overflow. 스레드풀 크기 이상으로 둔다."""
+    loop_guard: Literal["off", "warn", "raise"] = "warn"
+    """이벤트 루프 스레드에서 SQL이 실행되면 경고(warn)하거나 실패(raise)한다."""
+    cpu_workers: int = 1
+    """시뮬레이터 등 CPU 작업용 프로세스 수. 0이면 스레드로 실행한다."""
     frontend_dist: Path | None = None
     """빌드된 프론트엔드(dist) 경로. 지정하면 같은 서버에서 정적 파일로 제공한다."""
 
@@ -35,5 +45,12 @@ class Settings:
             scheduler_interval_seconds=float(env.get("STUDY_INVEST_SCHEDULER_INTERVAL", "30")),
             auto_create_schema=env.get("STUDY_INVEST_AUTO_CREATE_SCHEMA", "0").lower()
             in {"1", "true", "on"},
+            threadpool_size=int(env.get("STUDY_INVEST_THREADPOOL_SIZE", cls.threadpool_size)),
+            db_pool_size=int(env.get("STUDY_INVEST_DB_POOL_SIZE", cls.db_pool_size)),
+            db_max_overflow=int(env.get("STUDY_INVEST_DB_MAX_OVERFLOW", cls.db_max_overflow)),
+            loop_guard=cast(
+                Literal["off", "warn", "raise"], env.get("STUDY_INVEST_LOOP_GUARD", cls.loop_guard)
+            ),
+            cpu_workers=int(env.get("STUDY_INVEST_CPU_WORKERS", cls.cpu_workers)),
             frontend_dist=Path(dist) if dist else None,
         )

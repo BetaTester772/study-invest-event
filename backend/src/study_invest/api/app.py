@@ -5,17 +5,20 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import multiprocessing
 import random
 from collections.abc import AsyncIterator, Callable
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
+import anyio.to_thread
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ..config import Settings
-from ..db import create_schema, make_engine, make_session_factory
+from ..db import create_schema, install_event_loop_guard, make_engine, make_session_factory
 from ..event_calendar import EventCalendar
 from ..params import KST
 from ..services.common import DomainError
@@ -31,7 +34,10 @@ def _now() -> datetime:
 
 
 async def _scheduler(state: AppState) -> None:
-    """09:00 공시·18:00 정산을 주기적으로 확인해 실행한다(여러 번 실행해도 안전)."""
+    """09:00 공시·18:00 정산을 주기적으로 확인해 실행한다(여러 번 실행해도 안전).
+
+    배치는 동기 DB 작업이므로 asyncio.to_thread로 넘기고, 이벤트 루프는 대기만 한다.
+    """
     while True:
         try:
             results = await asyncio.to_thread(
@@ -52,7 +58,8 @@ def create_app(
     calendar: EventCalendar | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
-    engine = make_engine(settings.database_url)
+    engine = make_engine(settings.database_url, settings.db_pool_size, settings.db_max_overflow)
+    install_event_loop_guard(engine, settings.loop_guard)
     if settings.auto_create_schema:
         create_schema(engine)
     state = AppState(
@@ -65,6 +72,13 @@ def create_app(
 
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # 동기 라우트·의존성이 쓰는 스레드풀 크기(DB 풀 크기와 맞춘다).
+        anyio.to_thread.current_default_thread_limiter().total_tokens = settings.threadpool_size
+        if settings.cpu_workers > 0:
+            # fork는 스레드가 있는 프로세스에서 교착 위험이 있어 spawn을 쓴다.
+            state.cpu_executor = ProcessPoolExecutor(
+                max_workers=settings.cpu_workers, mp_context=multiprocessing.get_context("spawn")
+            )
         task = asyncio.create_task(_scheduler(state)) if settings.scheduler_enabled else None
         try:
             yield
@@ -73,11 +87,15 @@ def create_app(
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+            if state.cpu_executor is not None:
+                state.cpu_executor.shutdown(wait=False, cancel_futures=True)
+                state.cpu_executor = None
+            engine.dispose()
 
     app = FastAPI(title="공부장려 모의투자 이벤트", version="0.1.0", lifespan=lifespan)
     app.state.study_invest = state
 
-    @app.exception_handler(DomainError)
+    @app.exception_handler(DomainError)  # I/O 없음 → async
     async def _domain_error(_: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status, content={"detail": {"code": exc.code, "message": exc.message}}
@@ -98,7 +116,7 @@ def _mount_frontend(app: FastAPI, dist: Path) -> None:
     index = root / "index.html"
 
     @app.get("/{path:path}", include_in_schema=False)
-    def spa(path: str) -> FileResponse:
+    def spa(path: str) -> FileResponse:  # 파일 존재 확인(디스크 I/O) → 동기 def
         if path.startswith("api/"):
             raise StarletteHTTPException(status_code=404)
         candidate = (root / path).resolve()

@@ -1,10 +1,10 @@
 """운영 CLI: 배치(cron)·시뮬레이터·개인정보 삭제.
 
-    study-invest run-due                  # 현재 시각에 밀린 09:00/18:00 배치 실행(cron 1분 간격 권장)
-    study-invest open --day 2026-10-06
-    study-invest settle --day 2026-10-06
-    study-invest simulate --paths 100000 --seed 42 [--use-price-cap]
-    study-invest purge-images [--force]
+study-invest run-due                  # 현재 시각에 밀린 09:00/18:00 배치 실행(cron 1분 간격 권장)
+study-invest open --day 2026-10-06
+study-invest settle --day 2026-10-06
+study-invest simulate --paths 100000 --seed 42 [--use-price-cap]
+study-invest purge-images [--force]
 """
 
 from __future__ import annotations
@@ -53,8 +53,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     rng = random.SystemRandom()
 
     if args.command == "simulate" and args.defaults:
-        print(format_report(run_simulation(args.paths, args.rounds, args.seed,
-                                           args.use_price_cap, None)))
+        print(
+            format_report(
+                run_simulation(args.paths, args.rounds, args.seed, args.use_price_cap, None)
+            )
+        )
         return 0
 
     factory = make_session_factory(make_engine(settings.database_url))
@@ -66,13 +69,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     with factory() as s:
         try:
             if args.command == "simulate":
-                report = run_simulation(args.paths, args.rounds, args.seed, args.use_price_cap,
-                                        get_params(s))
+                report = run_simulation(
+                    args.paths, args.rounds, args.seed, args.use_price_cap, get_params(s)
+                )
                 print(format_report(report))
                 return 0
             if args.command == "purge-images":
-                count = certification.purge_images(s, settings.upload_dir, now, calendar,
-                                                   force=args.force)
+                count = certification.purge_images(
+                    s, settings.upload_dir, now, calendar, force=args.force
+                )
                 s.commit()
                 print(f"삭제한 인증 사진: {count}건")
                 return 0

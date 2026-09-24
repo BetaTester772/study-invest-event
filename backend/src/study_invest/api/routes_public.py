@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api")
 
 
 @router.get("/health")
-def health() -> dict[str, str]:
+async def health() -> dict[str, str]:  # I/O 없음 → async(스레드풀이 가득 차도 응답)
     return {"status": "ok"}
 
 

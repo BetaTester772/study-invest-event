@@ -62,15 +62,16 @@ def certifications(participant: MeDep, s: SessionDep) -> list[schemas.Certificat
 
 
 @router.post("/certifications", response_model=schemas.Certification, status_code=201)
-async def submit_certification(
+def submit_certification(
     participant: MeDep,
     state: StateDep,
     s: SessionDep,
     now: NowDep,
     file: Annotated[UploadFile, File()],
 ) -> schemas.Certification:
+    # 동기 def: DB 조회·해시·파일 저장이 모두 블로킹이므로 스레드풀에서 실행한다.
     limit = state.settings.max_upload_bytes
-    data = await file.read(limit + 1)
+    data = file.file.read(limit + 1)
     cert = certification.submit(
         s, participant, data, now, state.calendar, get_params(s), state.settings.upload_dir, limit
     )

@@ -13,6 +13,21 @@
 | 마이그레이션 | `backend/migrations` | Alembic. 컨테이너 시작 시 `alembic upgrade head` |
 | 프론트엔드 | `frontend/` | React + Vite. 공용 컴포넌트(`src/components/ui`) 먼저, 페이지는 조합 |
 
+## 비동기 원칙 (서비스 전체가 멈추지 않게)
+
+`async def` 라우트·의존성은 이벤트 루프 스레드에서 직접 실행된다. 그 안에서 동기 I/O(DB·파일)를 하면 끝날 때까지 **모든 요청이 멈춘다.** 동기 `def`는 FastAPI가 스레드풀에서 실행하므로 여러 요청이 동시에 처리된다.
+
+| 구분 | 방식 | 해당 |
+|---|---|---|
+| DB·파일을 쓰는 라우트·의존성 | 동기 `def` → 스레드풀 | 거의 모든 라우트, `get_session`, `optional_participant`, `current_params`, 인증 업로드, 이미지 응답 |
+| I/O 없는 의존성·라우트 | `async def` → 이벤트 루프에서 즉시 | `get_state`, `get_now`, `bearer_token`, `current_participant`, `require_admin`, `/api/health`, 예외 핸들러 |
+| CPU 바운드(수 초) | `async def` + 프로세스 풀 `await` | `/api/admin/simulate` (스레드에서 돌리면 GIL 때문에 다른 요청도 느려짐) |
+| 배치 스케줄러 | asyncio 태스크 + `asyncio.to_thread` | `_scheduler` → `run_due` |
+
+- **회귀 방지**: `install_event_loop_guard`가 이벤트 루프 스레드에서 실행되는 SQL을 감지한다. 테스트는 `raise`(해당 테스트 실패), 운영 기본값은 `warn`(로그). `tests/test_async_policy.py`는 async 라우트·의존성 허용 목록을 고정하고, 업로드가 스레드풀에서 돌며 시뮬레이션 중에도 `/api/health`가 응답하는지 확인한다.
+- **풀 크기**: 스레드풀 40(`STUDY_INVEST_THREADPOOL_SIZE`) ↔ DB 연결 10 + overflow 30. 스레드 수보다 연결이 적으면 요청이 연결을 기다린다.
+- **워커 수**: 앱 내 스케줄러는 프로세스마다 돈다. `uvicorn --workers N`이나 레플리카를 늘리면 스케줄러는 한 곳에서만 켜고(`STUDY_INVEST_SCHEDULER=1`), 나머지는 끈다. 여러 개가 동시에 돌아도 DB 제약으로 중복 공시·정산·지급은 막히지만 오류 로그가 남는다.
+
 ## 해석·가정
 
 ### 장 운영·체결
