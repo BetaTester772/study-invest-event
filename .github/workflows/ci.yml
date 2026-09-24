@@ -1,0 +1,297 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 같은 PR·브랜치에 새로 푸시하면 이전 실행을 취소한다(main 푸시는 끝까지 돌린다).
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "22"
+  # 테스트용 DB 자격 증명(CI 전용 서비스 컨테이너)
+  PG_USER: study
+  PG_PASSWORD: study
+  PG_DB: study_invest_test
+
+jobs:
+  # 바뀐 영역만 검사한다. 건너뛴 작업은 성공으로 취급되므로 브랜치 보호의 필수 검사는
+  # 맨 아래 `ci-ok` 하나만 지정하면 된다.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      stack: ${{ steps.filter.outputs.stack }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'infra/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            stack:
+              - 'backend/**'
+              - 'frontend/**'
+              - 'infra/**'
+              - 'docker-compose.yml'
+              - '.env.example'
+              - '.github/workflows/ci.yml'
+
+  backend-lint:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: pip install -e ".[dev]"
+      - name: ruff
+        run: |
+          ruff check src tests
+          ruff format --check src tests
+      - name: mypy (strict)
+        run: mypy
+
+  # 같은 테스트를 세 가지 DB 구성으로 돌린다.
+  # - sqlite: 빠른 기본 테스트(동시성·풀 테스트는 건너뜀)
+  # - postgres: 행 잠금·advisory lock·동시성 테스트
+  # - pgbouncer: 운영과 같은 transaction 풀 경유 + pgAdmin 전용 풀 상한 테스트
+  backend-test:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, postgres, pgbouncer]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: study
+          POSTGRES_PASSWORD: study
+          POSTGRES_DB: study_invest_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U study -d study_invest_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: pip install -e ".[dev]"
+
+      - name: Create pgAdmin role (same script as docker compose)
+        if: matrix.db == 'pgbouncer'
+        working-directory: .
+        env:
+          PGHOST: localhost
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+          PGADMIN_DB_USER: pgadmin
+          PGADMIN_DB_PASSWORD: pgadmin
+        run: sh infra/postgres/initdb/10-pgadmin-role.sh
+
+      - name: Start PgBouncer (same entrypoint as docker compose)
+        if: matrix.db == 'pgbouncer'
+        working-directory: .
+        env:
+          DB_HOST: 127.0.0.1
+          DB_NAME: ${{ env.PG_DB }}
+          DB_USER: ${{ env.PG_USER }}
+          DB_PASSWORD: ${{ env.PG_PASSWORD }}
+          PGADMIN_DB_PASSWORD: pgadmin
+          CONFIG_DIR: ${{ runner.temp }}/pgbouncer
+          PG_MAX_CONNECTIONS: "100"
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends pgbouncer
+          sudo systemctl stop pgbouncer || true
+          nohup sh infra/pgbouncer/entrypoint.sh > "$RUNNER_TEMP/pgbouncer.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 6432 -q; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/pgbouncer.log"
+          exit 1
+
+      - name: pytest (${{ matrix.db }})
+        run: |
+          case "${{ matrix.db }}" in
+            sqlite) ;;
+            postgres)
+              export STUDY_INVEST_TEST_DATABASE_URL="postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@localhost:5432/${PG_DB}" ;;
+            pgbouncer)
+              export STUDY_INVEST_TEST_DATABASE_URL="postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@127.0.0.1:6432/study_invest_api"
+              export STUDY_INVEST_TEST_PGADMIN_URL="postgresql://pgadmin:pgadmin@127.0.0.1:6432/${PG_DB}" ;;
+          esac
+          pytest -q -p no:cacheprovider -rs
+
+      - name: PgBouncer log
+        if: failure() && matrix.db == 'pgbouncer'
+        run: cat "$RUNNER_TEMP/pgbouncer.log"
+
+  # 모델을 바꾸고 마이그레이션을 빠뜨리면 실패한다.
+  migrations:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: study
+          POSTGRES_PASSWORD: study
+          POSTGRES_DB: study_invest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U study -d study_invest"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      STUDY_INVEST_DATABASE_URL: postgresql+psycopg://study:study@localhost:5432/study_invest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: pip install -e ".[dev]"
+      - name: Upgrade to head
+        run: alembic upgrade head
+      - name: Models match migrations
+        run: alembic check
+      - name: Downgrade and upgrade again
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+
+  # 실제 Dockerfile로 이미지를 빌드하고 compose 스택을 띄워 끝까지 확인한다.
+  compose:
+    needs: changes
+    if: needs.changes.outputs.stack == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare .env (.env.example 값만 CI용으로 교체)
+        run: |
+          sed \
+            -e 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-db-password/' \
+            -e 's/^PGADMIN_DB_PASSWORD=.*/PGADMIN_DB_PASSWORD=ci-pgadmin-password/' \
+            -e 's/^PGADMIN_PASSWORD=.*/PGADMIN_PASSWORD=ci-pgadmin-web/' \
+            -e 's/^STUDY_INVEST_ADMIN_KEY=.*/STUDY_INVEST_ADMIN_KEY=ci-admin-key/' \
+            .env.example > .env
+          grep -q '^STUDY_INVEST_ADMIN_KEY=ci-admin-key$' .env
+      - name: Validate compose file
+        run: docker compose config --quiet
+      - name: Build images
+        run: docker compose build pgbouncer backend frontend
+      - name: Start stack (pgAdmin 제외)
+        run: docker compose up -d --wait --wait-timeout 180 db pgbouncer backend frontend
+      - name: Smoke test
+        run: |
+          set -eu
+          curl -fsS http://localhost:8080/ -o /dev/null
+          curl -fsS http://localhost:8080/api/health
+          curl -fsS http://localhost:8080/api/instruments > /dev/null
+          token=$(curl -fsS -X POST http://localhost:8080/api/auth/register \
+            -H 'content-type: application/json' \
+            -d '{"identity":"ci@example.com","nickname":"ci-bot","password":"password123"}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+          curl -fsS http://localhost:8080/api/me/portfolio -H "Authorization: Bearer ${token}" > /dev/null
+          pools=$(curl -fsS http://localhost:8080/api/admin/db-pools -H 'X-Admin-Key: ci-admin-key')
+          echo "$pools"
+          # 본문 한도 초과는 본문을 받기 전에 413
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/api/me/certifications \
+            -H 'content-length: 50000000' --data-binary @/dev/null)
+          test "$code" = "413"
+      - name: PgBouncer connection budget
+        run: docker compose logs pgbouncer | grep "connection budget"
+      - name: Logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop
+        if: always()
+        run: docker compose down -v
+
+  # 브랜치 보호에서 필수 검사로 이것 하나만 지정한다.
+  ci-ok:
+    if: always()
+    needs: [changes, backend-lint, backend-test, migrations, frontend, compose]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed or were skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "a job ended with: $r"; exit 1 ;;
+            esac
+          done
