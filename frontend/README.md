@@ -52,3 +52,24 @@ src/
 
 `vite.config.ts`의 `server.proxy`가 `/api` → `http://localhost:8000`으로 넘긴다. 백엔드를 먼저 띄운 뒤 `npm run dev`를 실행한다.
 Docker 배포에서는 `Caddyfile`(Caddy)이 같은 역할을 한다.
+
+## 링크 공유 미리보기
+
+`public/images/study-invest-preview.jpg`는 공부 책상·청잉크·형광펜 콘셉트의 1200×630 JPEG다.
+Open Graph와 Twitter 메타태그는 React 실행 전의 HTML에 포함되므로 공유 크롤러가 읽을 수 있다.
+제작 방향과 프롬프트는 [`docs/preview-image.md`](docs/preview-image.md)에 기록했다.
+
+공개 배포 시 `VITE_SITE_URL`에 실제 웹 주소를 지정한다(경로·쿼리·해시 제외).
+이미지 주소와 `og:url`은 이 값을 기준으로 빌드 시 생성된다.
+
+```bash
+VITE_SITE_URL=https://study.example.com npm run build
+```
+
+Docker Compose는 저장소 루트 `.env`의 `VITE_SITE_URL`을 빌드 인자로 전달한다.
+주소를 바꾸면 `docker compose build frontend` 후 프론트엔드 컨테이너를 다시 생성한다.
+로컬 개발·CI에서 비워 두면 이미지는 루트 상대 경로를 사용하고 `og:url`은 생략한다.
+공유 서비스 호환성을 위해 공개 배포에서는 반드시 실제 주소를 설정한다.
+
+배포 후 `/images/study-invest-preview.jpg`가 로그인 없이 `image/jpeg`로 반환되는지 확인한다.
+기존에 공유한 링크는 공유 서비스 캐시가 남을 수 있어 해당 서비스의 미리보기 재수집이 필요할 수 있다.
