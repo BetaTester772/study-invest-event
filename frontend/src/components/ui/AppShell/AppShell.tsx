@@ -10,6 +10,8 @@ export interface NavItem {
   label: string;
   /** Match only the exact path (for "/"). */
   end?: boolean;
+  /** Extra path prefixes that should also mark this item active. */
+  alsoActiveOn?: string[];
 }
 
 export interface AppShellProps {
@@ -26,6 +28,7 @@ export function AppShell({ brand, nav, actions, footer, children }: AppShellProp
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
   const location = useLocation();
+  const extraActive = (item: NavItem) => item.alsoActiveOn?.some((p) => location.pathname.startsWith(p)) ?? false;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -57,7 +60,7 @@ export function AppShell({ brand, nav, actions, footer, children }: AppShellProp
                   <NavLink
                     to={item.to}
                     end={item.end}
-                    className={({ isActive }) => cx(styles.navLink, isActive && styles.active)}
+                    className={({ isActive }) => cx(styles.navLink, (isActive || extraActive(item)) && styles.active)}
                   >
                     <span className={styles.navLabel}>{item.label}</span>
                   </NavLink>
@@ -85,7 +88,9 @@ export function AppShell({ brand, nav, actions, footer, children }: AppShellProp
                   <NavLink
                     to={item.to}
                     end={item.end}
-                    className={({ isActive }) => cx(styles.mobileLink, isActive && styles.active)}
+                    className={({ isActive }) =>
+                      cx(styles.mobileLink, (isActive || extraActive(item)) && styles.active)
+                    }
                   >
                     <span className={styles.navLabel}>{item.label}</span>
                   </NavLink>

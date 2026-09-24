@@ -166,7 +166,13 @@ export function LineChart({
         <g className={styles.axis}>
           {geo.ticks.map((t) => (
             <g key={t}>
-              <line className={styles.majorGrid} x1={PAD.left} x2={PAD.left + geo.plotW} y1={geo.yAt(t)} y2={geo.yAt(t)} />
+              <line
+                className={styles.majorGrid}
+                x1={PAD.left}
+                x2={PAD.left + geo.plotW}
+                y1={geo.yAt(t)}
+                y2={geo.yAt(t)}
+              />
               <text x={PAD.left - 8} y={geo.yAt(t)} dy="0.32em" textAnchor="end">
                 {compactWon(t)}
               </text>
@@ -177,7 +183,9 @@ export function LineChart({
               key={i}
               x={geo.xAt(i)}
               y={height - 8}
-              textAnchor={points.length <= 1 ? 'middle' : i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}
+              textAnchor={
+                points.length <= 1 ? 'middle' : i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'
+              }
             >
               {formatX(points[i].x)}
             </text>

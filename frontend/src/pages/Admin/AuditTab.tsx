@@ -10,7 +10,7 @@ export function AuditTab() {
   const [open, setOpen] = useState<AuditEntry | null>(null);
 
   const columns: Column<AuditEntry>[] = [
-    { key: 'at', header: '시각', render: (a) => formatDateTime(a.at) },
+    { key: 'at', header: '시각', nowrap: true, render: (a) => formatDateTime(a.at) },
     { key: 'actor', header: '주체', render: (a) => a.actor },
     { key: 'action', header: '동작', render: (a) => a.action },
     {
@@ -70,7 +70,12 @@ export function AuditTab() {
           />
         )}
       </Card>
-      <Modal open={open != null} onClose={() => setOpen(null)} title={open ? `${open.action}` : ''} description={open ? `${formatDateTime(open.at)}, ${open.actor}` : undefined}>
+      <Modal
+        open={open != null}
+        onClose={() => setOpen(null)}
+        title={open ? `${open.action}` : ''}
+        description={open ? `${formatDateTime(open.at)}, ${open.actor}` : undefined}
+      >
         {open && <CodeBlock value={open.detail} maxHeight="60vh" />}
       </Modal>
     </Stack>

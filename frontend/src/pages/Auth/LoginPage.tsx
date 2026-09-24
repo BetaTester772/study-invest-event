@@ -68,7 +68,10 @@ export function LoginPage() {
               로그인하기
             </Button>
             <Text size="sm" tone="muted">
-              아직 참가하지 않았나요? <Link to="/register" state={location.state}>참가 신청하기</Link>
+              아직 참가하지 않았나요?{' '}
+              <Link to="/register" state={location.state}>
+                참가 신청하기
+              </Link>
             </Text>
           </Stack>
         </form>

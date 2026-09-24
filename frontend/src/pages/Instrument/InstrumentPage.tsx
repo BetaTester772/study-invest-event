@@ -31,7 +31,7 @@ const SOURCE_LABEL: Record<PricePoint['source'], string> = {
 };
 
 const HISTORY_COLUMNS: Column<PricePoint>[] = [
-  { key: 'day', header: '운영일', render: (p) => formatDay(p.day) },
+  { key: 'day', header: '운영일', nowrap: true, render: (p) => formatDay(p.day) },
   { key: 'price', header: '시작가', numeric: true, render: (p) => <Money value={p.price} /> },
   { key: 'change', header: '전일 대비', numeric: true, render: (p) => <PriceChange rate={p.change_rate} /> },
   {
@@ -85,23 +85,19 @@ export function InstrumentPage() {
         title={instrument ? instrument.name : <Skeleton width="10rem" height="2.25rem" />}
         description={
           instrument && (
-            <Stack direction="row" gap={2} align="center" wrap>
-              <Text as="span" tone="muted">
-                {instrument.alias}
-              </Text>
-              <KindBadge kind={instrument.kind} />
-            </Stack>
-          )
-        }
-        actions={
-          instrument && (
-            <Stack gap={1} align="end">
-              <Money value={instrument.price} display="xl" />
-              <Stack direction="row" gap={2} align="center">
+            <Stack gap={3}>
+              <Stack direction="row" gap={2} align="center" wrap>
+                <Text as="span" tone="muted">
+                  {instrument.alias}
+                </Text>
+                <KindBadge kind={instrument.kind} />
+              </Stack>
+              <Stack direction="row" gap={3} align="center" wrap>
+                <Money value={instrument.price} display="xl" />
+                <PriceChange rate={instrument.change_rate} pill />
                 <Text as="span" size="sm" tone="muted">
                   {instrument.day ? `${formatDay(instrument.day)} 시작가` : '1일차 시작가'}
                 </Text>
-                <PriceChange rate={instrument.change_rate} pill />
               </Stack>
             </Stack>
           )

@@ -11,10 +11,12 @@
   color-scheme: light dark;
 
   /* ---- Typography ---- */
-  --font-display: 'Do Hyeon', 'IBM Plex Sans KR', 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo',
-    'Malgun Gothic', sans-serif;
-  --font-sans: 'IBM Plex Sans KR', 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
-    'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕', 'Noto Sans KR', system-ui, sans-serif;
+  --font-display:
+    'Do Hyeon', 'IBM Plex Sans KR', 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic',
+    sans-serif;
+  --font-sans:
+    'IBM Plex Sans KR', 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+    'Malgun Gothic', '맑은 고딕', 'Noto Sans KR', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --text-xs: 0.75rem; /* 12 */
@@ -99,6 +101,7 @@
   --color-highlight: #ffe14d;
   --color-highlight-swipe: #ffe14d;
   --color-highlight-text: #1b2238;
+  --color-stamp-on-ink: #ffe14d; /* stamp drawn on an inked (past) day */
 
   --color-up: #d92b35;
   --color-up-hover: #c01f29;
@@ -141,7 +144,7 @@
     --color-text-muted: #a5aec6;
     --color-text-subtle: #8690ab;
     --color-text-inverse: #10172b;
-  --color-on-strong: #10172b;
+    --color-on-strong: #10172b;
 
     --color-ink: #c7d0ff;
     --color-primary: #c7d0ff;
@@ -152,6 +155,7 @@
     --color-highlight: #ffe14d;
     --color-highlight-swipe: rgba(255, 225, 77, 0.34);
     --color-highlight-text: #10172b;
+    --color-stamp-on-ink: #1e2a5a;
 
     --color-up: #ff5c66;
     --color-up-hover: #ff7880;
@@ -204,6 +208,7 @@
   --color-highlight: #ffe14d;
   --color-highlight-swipe: rgba(255, 225, 77, 0.34);
   --color-highlight-text: #10172b;
+  --color-stamp-on-ink: #1e2a5a;
 
   --color-up: #ff5c66;
   --color-up-hover: #ff7880;

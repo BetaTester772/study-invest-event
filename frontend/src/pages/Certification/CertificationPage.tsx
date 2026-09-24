@@ -42,14 +42,19 @@ function CertImageModal({ cert, onClose }: { cert: Certification | null; onClose
       }
     >
       {image.loading && <Spinner label="사진을 불러오는 중" />}
-      {image.error && <Alert tone="danger" title="사진을 불러오지 못했어요">{image.error.message}</Alert>}
+      {image.error && (
+        <Alert tone="danger" title="사진을 불러오지 못했어요">
+          {image.error.message}
+        </Alert>
+      )}
       {image.url && <img src={image.url} alt={`${cert ? formatDay(cert.target_date) : ''} 공부 인증 사진`} />}
     </Modal>
   );
 }
 
 function rewardText(c: Certification, rewardQty: number | undefined): string {
-  if (c.rewarded_at) return `병더리움 ${c.reward_quantity ?? rewardQty ?? ''}개 받음 (${formatDateTime(c.rewarded_at)})`;
+  if (c.rewarded_at)
+    return `병더리움 ${c.reward_quantity ?? rewardQty ?? ''}개 받음 (${formatDateTime(c.rewarded_at)})`;
   if (c.status === 'approved') return '다음 운영일 09:00 지급 예정';
   if (c.status === 'pending') return '승인되면 지급';
   return '—';
@@ -91,9 +96,15 @@ export function CertificationPage() {
   };
 
   const columns: Column<Certification>[] = [
-    { key: 'target', header: '인증 날짜', render: (c) => formatDay(c.target_date) },
-    { key: 'submitted', header: '올린 시각', hideOnMobile: true, render: (c) => formatDateTime(c.submitted_at) },
-    { key: 'status', header: '상태', render: (c) => <CertStatusBadge status={c.status} /> },
+    { key: 'target', header: '인증 날짜', nowrap: true, render: (c) => formatDay(c.target_date) },
+    {
+      key: 'submitted',
+      header: '올린 시각',
+      nowrap: true,
+      hideOnMobile: true,
+      render: (c) => formatDateTime(c.submitted_at),
+    },
+    { key: 'status', header: '상태', nowrap: true, render: (c) => <CertStatusBadge status={c.status} /> },
     {
       key: 'reason',
       header: '반려 사유',
@@ -135,13 +146,17 @@ export function CertificationPage() {
               </Alert>
             ) : existing ? (
               <Stack gap={4}>
-                <Alert tone={existing.status === 'approved' ? 'success' : 'info'} title={`${formatDay(existing.target_date)} 인증은 이미 올렸어요`}>
+                <Alert
+                  tone={existing.status === 'approved' ? 'success' : 'info'}
+                  title={`${formatDay(existing.target_date)} 인증은 이미 올렸어요`}
+                >
                   {existing.status === 'approved'
                     ? `승인됐어요. ${rewardText(existing, rewardQty)}.`
                     : '검수를 기다리는 중이에요. 결과는 아래 목록에서 볼 수 있어요.'}
                 </Alert>
                 <Text size="sm" tone="muted">
-                  인증은 하루 한 번만 올릴 수 있어요. 오늘 {e.certification.cutoff}이 지나면 다음 날짜 인증을 올릴 수 있어요.
+                  인증은 하루 한 번만 올릴 수 있어요. 오늘 {e.certification.cutoff}이 지나면 다음 날짜 인증을 올릴 수
+                  있어요.
                 </Text>
               </Stack>
             ) : (
@@ -170,29 +185,29 @@ export function CertificationPage() {
           </Card>
           <Card title="보상과 마감" tone="sunken">
             <Stack gap={4}>
-            {e ? (
-              <KeyValueList
-                items={[
-                  { label: '인증 날짜', value: formatDay(e.certification.target_date) },
-                  { label: '접수 마감', value: `매일 ${e.certification.cutoff}` },
-                  {
-                    label: '보상',
-                    value: `병더리움 ${e.certification.reward_coin_quantity}개`,
-                    strong: true,
-                  },
-                ]}
-              />
-            ) : (
-              <Skeleton lines={3} />
-            )}
-            <Stack gap={2}>
-              <Text size="sm" tone="muted">
-                승인 시 다음 운영일 09:00 병더리움 {rewardQty ?? 'N'}개 지급. 코인 가격과 관계없이 개수로 받아요.
-              </Text>
-              <Text size="sm" tone="muted">
-                마감 시각이 지나서 올린 사진은 다음 날짜 인증으로 집계돼요. 같은 사진을 다시 쓰면 반려될 수 있어요.
-              </Text>
-            </Stack>
+              {e ? (
+                <KeyValueList
+                  items={[
+                    { label: '인증 날짜', value: formatDay(e.certification.target_date) },
+                    { label: '접수 마감', value: `매일 ${e.certification.cutoff}` },
+                    {
+                      label: '보상',
+                      value: `병더리움 ${e.certification.reward_coin_quantity}개`,
+                      strong: true,
+                    },
+                  ]}
+                />
+              ) : (
+                <Skeleton lines={3} />
+              )}
+              <Stack gap={2}>
+                <Text size="sm" tone="muted">
+                  승인 시 다음 운영일 09:00 병더리움 {rewardQty ?? 'N'}개 지급. 코인 가격과 관계없이 개수로 받아요.
+                </Text>
+                <Text size="sm" tone="muted">
+                  마감 시각이 지나서 올린 사진은 다음 날짜 인증으로 집계돼요. 같은 사진을 다시 쓰면 반려될 수 있어요.
+                </Text>
+              </Stack>
             </Stack>
           </Card>
         </Grid>

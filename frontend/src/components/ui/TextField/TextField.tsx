@@ -3,8 +3,7 @@ import { cx } from '../../../lib/cx';
 import { Field, fieldStyles, type FieldBaseProps } from './Field';
 
 export interface TextFieldProps
-  extends FieldBaseProps,
-    Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'required'> {
+  extends FieldBaseProps, Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'required'> {
   inputClassName?: string;
 }
 
@@ -21,7 +20,15 @@ export function TextField({
   ...rest
 }: TextFieldProps) {
   return (
-    <Field label={label} hideLabel={hideLabel} hint={hint} error={error} required={required} className={className} id={id}>
+    <Field
+      label={label}
+      hideLabel={hideLabel}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      id={id}
+    >
       {(ids) => (
         <input
           id={ids.id}
@@ -38,12 +45,19 @@ export function TextField({
 }
 
 export interface TextAreaProps
-  extends FieldBaseProps,
-    Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'className' | 'required'> {}
+  extends FieldBaseProps, Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'className' | 'required'> {}
 
 export function TextArea({ label, hideLabel, hint, error, required, className, id, ...rest }: TextAreaProps) {
   return (
-    <Field label={label} hideLabel={hideLabel} hint={hint} error={error} required={required} className={className} id={id}>
+    <Field
+      label={label}
+      hideLabel={hideLabel}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      id={id}
+    >
       {(ids) => (
         <textarea
           id={ids.id}

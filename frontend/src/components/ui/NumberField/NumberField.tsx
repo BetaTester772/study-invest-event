@@ -83,10 +83,25 @@ export function NumberField({
   const atMax = value >= max;
 
   return (
-    <Field label={label} hideLabel={hideLabel} hint={hint} error={error} required={required} className={className} id={id}>
+    <Field
+      label={label}
+      hideLabel={hideLabel}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      id={id}
+    >
       {(ids) => (
         <div className={styles.row}>
-          <div className={cx(fieldStyles.control, styles.shell, ids.invalid && fieldStyles.invalid, disabled && styles.disabled)}>
+          <div
+            className={cx(
+              fieldStyles.control,
+              styles.shell,
+              ids.invalid && fieldStyles.invalid,
+              disabled && styles.disabled,
+            )}
+          >
             <button
               type="button"
               className={styles.step}

@@ -29,7 +29,13 @@ const HOLDING_COLUMNS: Column<HoldingView>[] = [
     render: (h) => <Link to={`/instruments/${h.code}`}>{h.name}</Link>,
   },
   { key: 'quantity', header: '수량', numeric: true, render: (h) => formatQuantity(h.quantity, h.kind) },
-  { key: 'avg', header: '평균단가', numeric: true, hideOnMobile: true, render: (h) => <Money value={h.avg_price} /> },
+  {
+    key: 'avg',
+    header: '평균단가',
+    numeric: true,
+    hideOnMobile: true,
+    render: (h) => (h.cost === 0 ? '—' : <Money value={h.avg_price} />),
+  },
   { key: 'price', header: '현재가', numeric: true, hideOnMobile: true, render: (h) => <Money value={h.price} /> },
   { key: 'value', header: '평가금액', numeric: true, render: (h) => <Money value={h.value} /> },
   { key: 'profit', header: '평가손익', numeric: true, render: (h) => <Money value={h.profit} sign colorize /> },
@@ -38,7 +44,11 @@ const HOLDING_COLUMNS: Column<HoldingView>[] = [
     header: '수익률',
     numeric: true,
     render: (h) =>
-      h.profit_rate == null ? <Badge tone="info">보상으로 받음</Badge> : <Percent value={h.profit_rate} sign colorize />,
+      h.profit_rate == null ? (
+        <Badge tone="info">보상으로 받음</Badge>
+      ) : (
+        <Percent value={h.profit_rate} sign colorize />
+      ),
   },
 ];
 
@@ -49,13 +59,13 @@ export function PortfolioPage() {
   const names = new Map((instruments.data ?? []).map((i) => [i.code, i]));
 
   const orderColumns: Column<Order>[] = [
-    { key: 'at', header: '주문 시각', render: (o) => formatDateTime(o.created_at) },
+    { key: 'at', header: '주문 시각', nowrap: true, render: (o) => formatDateTime(o.created_at) },
     {
       key: 'code',
       header: '종목',
       render: (o) => <Link to={`/instruments/${o.code}`}>{names.get(o.code)?.name ?? o.code}</Link>,
     },
-    { key: 'side', header: '구분', render: (o) => <SideBadge side={o.side} /> },
+    { key: 'side', header: '구분', nowrap: true, render: (o) => <SideBadge side={o.side} /> },
     {
       key: 'qty',
       header: '수량',
@@ -78,8 +88,9 @@ export function PortfolioPage() {
     {
       key: 'status',
       header: '결과',
+      nowrap: true,
       render: (o) => (
-        <Stack gap={1}>
+        <Stack gap={1} align="start">
           <OrderStatusBadge status={o.status} />
           {o.reject_message && (
             <Text as="span" size="xs" tone="muted">
@@ -129,7 +140,11 @@ export function PortfolioPage() {
                 </>
               }
             />
-            <Stat label="수익률" value={<Percent value={p.return_rate} sign colorize />} sub="총자산 기준, 랭킹 순서와 같아요" />
+            <Stat
+              label="수익률"
+              value={<Percent value={p.return_rate} sign colorize />}
+              sub="총자산 기준, 랭킹 순서와 같아요"
+            />
           </StatGroup>
         )}
 

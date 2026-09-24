@@ -17,7 +17,12 @@ import {
 } from '../../components/ui';
 import { formatNumber, formatPercent } from '../../lib/format';
 
-const q = (v: number) => (v === 0.5 ? '중앙값' : v < 0.5 ? `하위 ${formatPercent(v, { digits: 0 })}` : `상위 ${formatPercent(1 - v, { digits: 0 })}`);
+const q = (v: number) =>
+  v === 0.5
+    ? '중앙값'
+    : v < 0.5
+      ? `하위 ${formatPercent(v, { digits: 0 })}`
+      : `상위 ${formatPercent(1 - v, { digits: 0 })}`;
 
 function Report({ r }: { r: SimulationReport }) {
   return (
@@ -31,7 +36,11 @@ function Report({ r }: { r: SimulationReport }) {
         <Stat label="상승일 평균" value={<Percent value={r.daily.mean_up} sign colorize />} sub="목표 약 +75%" />
         <Stat label="하락일 평균" value={<Percent value={r.daily.mean_down} sign colorize />} sub="목표 약 -16.7%" />
         <Stat label="일일 평균" value={<Percent value={r.daily.mean} sign colorize />} />
-        <Stat label="로그 기대값" value={formatNumber(r.daily.mean_log, 4)} sub="0에 가까울수록 누적 중앙값이 원금 수준" />
+        <Stat
+          label="로그 기대값"
+          value={formatNumber(r.daily.mean_log, 4)}
+          sub="0에 가까울수록 누적 중앙값이 원금 수준"
+        />
         <Stat label="가격 상한 도달" value={<Percent value={r.cumulative.cap_hit_ratio} />} sub="경로 비율" />
       </StatGroup>
       <Grid min="16rem" gap={4}>
@@ -111,16 +120,38 @@ export function SimulatorTab() {
 
   return (
     <Stack gap={6}>
-      <Card title="코인 가격 경로 시뮬레이션" description="지금 저장된 파라미터로 병더리움 가격 경로를 여러 번 만들어 분포를 확인해요.">
+      <Card
+        title="코인 가격 경로 시뮬레이션"
+        description="지금 저장된 파라미터로 병더리움 가격 경로를 여러 번 만들어 분포를 확인해요."
+      >
         <form onSubmit={submit} noValidate>
           <Stack gap={4}>
             {error && <Alert tone="danger">{error}</Alert>}
             <Grid min="12rem" gap={4}>
-              <NumberField label="경로 수" value={paths} onChange={setPaths} min={100} max={1_000_000} step={1000} suffix="개" />
+              <NumberField
+                label="경로 수"
+                value={paths}
+                onChange={setPaths}
+                min={100}
+                max={1_000_000}
+                step={1000}
+                suffix="개"
+              />
               <NumberField label="회차" value={rounds} onChange={setRounds} min={1} max={30} suffix="회" />
-              <TextField label="시드" hint="비우면 무작위" inputMode="numeric" value={seed} onChange={(e) => setSeed(e.target.value)} />
+              <TextField
+                label="시드"
+                hint="비우면 무작위"
+                inputMode="numeric"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+              />
             </Grid>
-            <Checkbox label="코인 가격 상한 적용" hint="파라미터의 코인 가격 상한으로 경로를 자릅니다." checked={useCap} onChange={setUseCap} />
+            <Checkbox
+              label="코인 가격 상한 적용"
+              hint="파라미터의 코인 가격 상한으로 경로를 자릅니다."
+              checked={useCap}
+              onChange={setUseCap}
+            />
             <Stack direction="row" justify="end">
               <Button type="submit" loading={running}>
                 시뮬레이션 돌리기

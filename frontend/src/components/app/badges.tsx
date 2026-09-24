@@ -1,7 +1,11 @@
 import type { CertStatus, OrderStatus, ParticipantStatus, Side } from '../../api';
 import { Badge } from '../ui';
 
-export const CERT_STATUS_LABEL: Record<CertStatus, string> = { pending: '검수 대기', approved: '승인', rejected: '반려' };
+export const CERT_STATUS_LABEL: Record<CertStatus, string> = {
+  pending: '검수 대기',
+  approved: '승인',
+  rejected: '반려',
+};
 
 export function CertStatusBadge({ status }: { status: CertStatus }) {
   const tone = status === 'approved' ? 'success' : status === 'rejected' ? 'danger' : 'warning';

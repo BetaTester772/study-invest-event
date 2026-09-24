@@ -4,7 +4,9 @@ import { describeMarket } from '../market';
 
 const days = Array.from({ length: 11 }, (_, i) => `2026-10-${String(6 + i).padStart(2, '0')}`);
 
-function event(overrides: Partial<Omit<EventInfo, 'market'>> & { market?: Partial<EventInfo['market']> } = {}): EventInfo {
+function event(
+  overrides: Partial<Omit<EventInfo, 'market'>> & { market?: Partial<EventInfo['market']> } = {},
+): EventInfo {
   const { market, ...rest } = overrides;
   return {
     start: '2026-10-06',

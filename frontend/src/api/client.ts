@@ -96,7 +96,10 @@ export function authHeaders(auth: AuthMode): Record<string, string> {
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, form, query, auth = 'none', signal, responseType = 'json' } = options;
-  const headers: Record<string, string> = { Accept: responseType === 'json' ? 'application/json' : '*/*', ...authHeaders(auth) };
+  const headers: Record<string, string> = {
+    Accept: responseType === 'json' ? 'application/json' : '*/*',
+    ...authHeaders(auth),
+  };
   let payload: BodyInit | undefined;
   if (form) {
     payload = form;

@@ -18,12 +18,12 @@ import {
 import { formatDay } from '../../lib/format';
 
 const COLUMNS: Column<RankingEntry>[] = [
-  { key: 'rank', header: '순위', numeric: true, width: '4.5rem', render: (r) => `${r.rank}위` },
+  { key: 'rank', header: '순위', nowrap: true, numeric: true, width: '4.5rem', render: (r) => `${r.rank}위` },
   {
     key: 'nickname',
     header: '닉네임',
     render: (r) => (
-      <Stack direction="row" gap={2} align="center">
+      <Stack direction="row" gap={2} align="center" wrap>
         <span>{r.nickname}</span>
         {r.is_me && (
           <Badge tone="highlight" size="sm">
@@ -59,7 +59,11 @@ export function RankingPage() {
         {me && (
           <StatGroup>
             <Stat emphasis label="내 순위" value={`${me.rank}위`} sub={`${count}명 중`} />
-            <Stat label="총자산" value={<Money value={me.total_assets} />} sub={<Percent value={me.return_rate} sign colorize />} />
+            <Stat
+              label="총자산"
+              value={<Money value={me.total_assets} />}
+              sub={<Percent value={me.return_rate} sign colorize />}
+            />
             <Stat label="인증일수" value={`${me.certified_days}일`} sub="승인된 인증 기준" />
             <Stat
               label="연속 인증"

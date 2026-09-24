@@ -10,7 +10,8 @@ export interface SelectOption<V extends string = string> {
 }
 
 export interface SelectProps<V extends string = string>
-  extends FieldBaseProps,
+  extends
+    FieldBaseProps,
     Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className' | 'required' | 'onChange' | 'value'> {
   options: SelectOption<V>[];
   value: V;
@@ -33,7 +34,15 @@ export function Select<V extends string = string>({
   ...rest
 }: SelectProps<V>) {
   return (
-    <Field label={label} hideLabel={hideLabel} hint={hint} error={error} required={required} className={className} id={id}>
+    <Field
+      label={label}
+      hideLabel={hideLabel}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      id={id}
+    >
       {(ids) => (
         <div className={styles.wrap}>
           <select

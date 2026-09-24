@@ -44,7 +44,8 @@ export function Modal({
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
     const dialog = dialogRef.current;
-    const first = dialog?.querySelector<HTMLElement>('[data-autofocus]') ?? dialog?.querySelector<HTMLElement>(FOCUSABLE);
+    const first =
+      dialog?.querySelector<HTMLElement>('[data-autofocus]') ?? dialog?.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? dialog)?.focus();
 
     const prevOverflow = document.body.style.overflow;

@@ -106,12 +106,14 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
   hour12: false,
 });
 
-/** ISO 8601 → `10. 6. 09:00` in KST. */
+/** ISO 8601 → `10/6 09:00` in KST. */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return dateTimeFormatter.format(d);
+  const parts = Object.fromEntries(dateTimeFormatter.formatToParts(d).map((p) => [p.type, p.value]));
+  const hour = parts.hour === '24' ? '00' : parts.hour;
+  return `${parts.month}/${parts.day} ${hour}:${parts.minute}`;
 }
 
 /** Bytes → `1.2MB` */

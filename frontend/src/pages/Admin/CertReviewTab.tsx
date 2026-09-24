@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { adminApi, ApiError, fetchImage, useApi, useObjectUrl, type AdminCertification, type CertStatus } from '../../api';
+import {
+  adminApi,
+  ApiError,
+  fetchImage,
+  useApi,
+  useObjectUrl,
+  type AdminCertification,
+  type CertStatus,
+} from '../../api';
 import { CertStatusBadge } from '../../components/app/badges';
 import { LoadError } from '../../components/app/LoadError';
 import {
@@ -51,7 +59,10 @@ function ReviewModal({
     setBusy(approve ? 'approve' : 'reject');
     try {
       await adminApi.review(cert.id, approve ? { approve } : { approve, reason: reason.trim() });
-      toast.success(approve ? '인증을 승인했어요' : '인증을 반려했어요', `${cert.nickname}, ${formatDay(cert.target_date)}`);
+      toast.success(
+        approve ? '인증을 승인했어요' : '인증을 반려했어요',
+        `${cert.nickname}, ${formatDay(cert.target_date)}`,
+      );
       onDone();
       close();
     } catch (err) {
@@ -99,7 +110,11 @@ function ReviewModal({
             </Alert>
           )}
           {image.loading && <Spinner label="사진을 불러오는 중" />}
-          {image.error && <Alert tone="danger" title="사진을 불러오지 못했어요">{image.error.message}</Alert>}
+          {image.error && (
+            <Alert tone="danger" title="사진을 불러오지 못했어요">
+              {image.error.message}
+            </Alert>
+          )}
           {!cert.image_url && <Alert title="사진이 삭제됐어요" />}
           {image.url && <img src={image.url} alt={`${cert.nickname}의 공부 인증 사진`} />}
           <KeyValueList
@@ -137,9 +152,15 @@ export function CertReviewTab() {
   const columns: Column<AdminCertification>[] = [
     { key: 'id', header: 'ID', numeric: true, width: '4rem', render: (c) => `#${c.id}` },
     { key: 'nickname', header: '닉네임', render: (c) => c.nickname },
-    { key: 'target', header: '인증 날짜', render: (c) => formatDay(c.target_date) },
-    { key: 'submitted', header: '올린 시각', hideOnMobile: true, render: (c) => formatDateTime(c.submitted_at) },
-    { key: 'status', header: '상태', render: (c) => <CertStatusBadge status={c.status} /> },
+    { key: 'target', header: '인증 날짜', nowrap: true, render: (c) => formatDay(c.target_date) },
+    {
+      key: 'submitted',
+      header: '올린 시각',
+      nowrap: true,
+      hideOnMobile: true,
+      render: (c) => formatDateTime(c.submitted_at),
+    },
+    { key: 'status', header: '상태', nowrap: true, render: (c) => <CertStatusBadge status={c.status} /> },
     {
       key: 'dup',
       header: '중복 검사',
@@ -192,7 +213,11 @@ export function CertReviewTab() {
             rows={certs.data ?? []}
             rowKey={(c) => c.id}
             loading={certs.loading}
-            empty={filter === 'pending' ? '검수할 인증이 없어요. 새 인증이 올라오면 여기에 보여요.' : '해당하는 인증이 없어요.'}
+            empty={
+              filter === 'pending'
+                ? '검수할 인증이 없어요. 새 인증이 올라오면 여기에 보여요.'
+                : '해당하는 인증이 없어요.'
+            }
           />
         )}
       </Card>

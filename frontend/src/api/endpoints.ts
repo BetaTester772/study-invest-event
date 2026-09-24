@@ -76,7 +76,8 @@ export const adminApi = {
   batchRunDue: () => request<BatchResult[]>('/admin/batch/run-due', { method: 'POST', auth: 'admin' }),
   settlements: () => request<SettlementLog[]>('/admin/settlements', { auth: 'admin' }),
   audit: (limit = 200) => request<AuditEntry[]>('/admin/audit', { auth: 'admin', query: { limit } }),
-  simulate: (body: SimulationRequest) => request<SimulationReport>('/admin/simulate', { method: 'POST', auth: 'admin', body }),
+  simulate: (body: SimulationRequest) =>
+    request<SimulationReport>('/admin/simulate', { method: 'POST', auth: 'admin', body }),
 };
 
 /** Fetch an auth-protected image (<img> can't send headers) as a Blob. */

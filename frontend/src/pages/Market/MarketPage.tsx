@@ -50,7 +50,8 @@ export function MarketPage() {
             <InstrumentBoard instruments={instruments.data} loading={instruments.loading} />
           )}
           <Text size="sm" tone="muted">
-            주식은 그날 참가자들이 많이 산 종목일수록 다음 날 값이 내리고, 덜 산 종목은 올라요(하루 최대 ±30%). 종목을 눌러 가격 이력을 보고 주문하세요.
+            주식은 그날 참가자들이 많이 산 종목일수록 다음 날 값이 내리고, 덜 산 종목은 올라요(하루 최대 ±30%). 종목을
+            눌러 가격 이력을 보고 주문하세요.
           </Text>
         </Stack>
       </Stack>

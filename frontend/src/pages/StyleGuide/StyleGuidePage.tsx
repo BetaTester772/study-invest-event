@@ -75,7 +75,7 @@ const RANK_ROWS: RankRow[] = [
   { rank: 4, nickname: '수학귀신', total: 903500, rate: -0.0965 },
 ];
 const RANK_COLUMNS: Column<RankRow>[] = [
-  { key: 'rank', header: '순위', numeric: true, width: '4rem' },
+  { key: 'rank', header: '순위', nowrap: true, numeric: true, width: '4rem' },
   { key: 'nickname', header: '닉네임' },
   { key: 'total', header: '총자산', numeric: true, render: (r) => <Money value={r.total} /> },
   { key: 'rate', header: '수익률', numeric: true, render: (r) => <PriceChange rate={r.rate} /> },
@@ -129,7 +129,10 @@ export function StyleGuidePage() {
         }
       />
       <Stack gap={6}>
-        <Section title="색" description="형광펜은 '지금·오늘·선택됨'에만, 빨강·파랑은 가격 방향과 매수·매도에만 씁니다.">
+        <Section
+          title="색"
+          description="형광펜은 '지금·오늘·선택됨'에만, 빨강·파랑은 가격 방향과 매수·매도에만 씁니다."
+        >
           <div className={styles.swatches}>
             {SWATCHES.map(([name, token]) => (
               <div key={token} className={styles.swatch}>
@@ -234,7 +237,12 @@ export function StyleGuidePage() {
               ]}
             />
             <TextArea label="반려 사유" placeholder="참가자에게 보여줄 사유를 적어 주세요." />
-            <Checkbox label="가격 상한 적용" hint="코인 표시 상한(5,000,000원)을 씁니다." checked={agree} onChange={setAgree} />
+            <Checkbox
+              label="가격 상한 적용"
+              hint="코인 표시 상한(5,000,000원)을 씁니다."
+              checked={agree}
+              onChange={setAgree}
+            />
           </Grid>
         </Section>
 
@@ -296,7 +304,12 @@ export function StyleGuidePage() {
 
         <Section title="요약 수치">
           <StatGroup>
-            <Stat emphasis label="총자산" value={<Money value={1120000} />} sub={<Percent value={0.12} sign colorize />} />
+            <Stat
+              emphasis
+              label="총자산"
+              value={<Money value={1120000} />}
+              sub={<Percent value={0.12} sign colorize />}
+            />
             <Stat label="현금" value={<Money value={312000} />} />
             <Stat label="평가손익" value={<Money value={120000} sign colorize />} />
             <Stat label="수익률" value={<Percent value={0.12} sign colorize />} />
@@ -326,7 +339,13 @@ export function StyleGuidePage() {
               />
             </Card>
             <Card padding="none">
-              <Table caption="빈 표" columns={RANK_COLUMNS} rows={[]} rowKey={(r) => r.nickname} empty="아직 순위가 없어요." />
+              <Table
+                caption="빈 표"
+                columns={RANK_COLUMNS}
+                rows={[]}
+                rowKey={(r) => r.nickname}
+                empty="아직 순위가 없어요."
+              />
             </Card>
             <Card padding="none">
               <Table caption="불러오는 표" columns={RANK_COLUMNS} rows={[]} rowKey={(r) => r.nickname} loading />
@@ -351,14 +370,28 @@ export function StyleGuidePage() {
             <Alert tone="warning" title="같은 사진으로 보여요">
               인증 #12와 이미지가 같아요.
             </Alert>
-            <Alert tone="danger" title="주문하지 못했어요" action={<Button size="sm" variant="secondary">다시 시도</Button>}>
+            <Alert
+              tone="danger"
+              title="주문하지 못했어요"
+              action={
+                <Button size="sm" variant="secondary">
+                  다시 시도
+                </Button>
+              }
+            >
               현금이 부족해요. 수량을 줄여 주세요.
             </Alert>
             <Stack direction="row" gap={2} wrap>
-              <Button variant="secondary" onClick={() => toast.success('체결됐어요', '삼수전자 3주를 225,000원에 샀어요.')}>
+              <Button
+                variant="secondary"
+                onClick={() => toast.success('체결됐어요', '삼수전자 3주를 225,000원에 샀어요.')}
+              >
                 성공 토스트
               </Button>
-              <Button variant="secondary" onClick={() => toast.error('주문하지 못했어요', '오늘 이 종목 매수 한도를 넘었어요.')}>
+              <Button
+                variant="secondary"
+                onClick={() => toast.error('주문하지 못했어요', '오늘 이 종목 매수 한도를 넘었어요.')}
+              >
                 오류 토스트
               </Button>
               <Button variant="secondary" onClick={() => toast.show({ title: '매도 체결', tone: 'down' })}>

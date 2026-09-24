@@ -29,7 +29,11 @@ function toApiError(err: unknown): ApiError {
  * Minimal query hook: runs `fetcher` on mount and whenever `deps` change,
  * ignores stale responses, and exposes loading/error/refetch.
  */
-export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList, options: UseApiOptions = {}): UseApiResult<T> {
+export function useApi<T>(
+  fetcher: () => Promise<T>,
+  deps: DependencyList,
+  options: UseApiOptions = {},
+): UseApiResult<T> {
   const { enabled = true, refreshInterval } = options;
   const [data, setDataState] = useState<T | undefined>(undefined);
   const [error, setError] = useState<ApiError | undefined>(undefined);

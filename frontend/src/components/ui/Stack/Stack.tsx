@@ -56,9 +56,15 @@ export function Grid({ min = '16rem', gap = 4, sidebar, sideFirstOnMobile, class
     '--grid-side': sidebar,
     ...style,
   } as CSSProperties;
-  return <div
-      className={cx(sidebar ? styles.sidebar : styles.grid, sidebar && sideFirstOnMobile && styles.sideFirst, className)}
+  return (
+    <div
+      className={cx(
+        sidebar ? styles.sidebar : styles.grid,
+        sidebar && sideFirstOnMobile && styles.sideFirst,
+        className,
+      )}
       style={s}
       {...rest}
-    />;
+    />
+  );
 }

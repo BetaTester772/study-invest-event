@@ -55,12 +55,26 @@ export function PriceTab() {
 
   return (
     <Grid sidebar="minmax(16rem, 22rem)" gap={6}>
-      <Card title="시작가 직접 정하기" description="아직 공시되지 않은 운영일의 시작가만 바꿀 수 있어요. 사유는 감사 로그에 남아요.">
+      <Card
+        title="시작가 직접 정하기"
+        description="아직 공시되지 않은 운영일의 시작가만 바꿀 수 있어요. 사유는 감사 로그에 남아요."
+      >
         <form onSubmit={submit} noValidate>
           <Stack gap={4}>
-            {formError && <Alert tone="danger" title="가격을 바꾸지 못했어요">{formError}</Alert>}
+            {formError && (
+              <Alert tone="danger" title="가격을 바꾸지 못했어요">
+                {formError}
+              </Alert>
+            )}
             <Grid min="12rem" gap={4}>
-              <TextField label="운영일" type="date" value={day} onChange={(e) => setDay(e.target.value)} error={errors.day} required />
+              <TextField
+                label="운영일"
+                type="date"
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+                error={errors.day}
+                required
+              />
               <Select
                 label="종목"
                 value={code}
@@ -82,7 +96,11 @@ export function PriceTab() {
               min={0}
               step={10}
               suffix="원"
-              hint={selected ? `현재 공시가 ${selected.price.toLocaleString('ko-KR')}원. 10원 단위로 반올림돼요.` : '10원 단위로 반올림돼요.'}
+              hint={
+                selected
+                  ? `현재 공시가 ${selected.price.toLocaleString('ko-KR')}원. 10원 단위로 반올림돼요.`
+                  : '10원 단위로 반올림돼요.'
+              }
               error={errors.price}
               required
             />

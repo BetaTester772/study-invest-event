@@ -48,7 +48,13 @@ const ACTION_COPY: Record<Action, { title: string; button: string; description: 
 const STOCK_COLUMNS: Column<SettlementStock>[] = [
   { key: 'code', header: '종목', render: (s) => s.code },
   { key: 'buy', header: '매수금액 B', numeric: true, render: (s) => <Money value={s.buy_amount} /> },
-  { key: 'adj', header: "유동성 반영 B'", numeric: true, hideOnMobile: true, render: (s) => <Money value={s.adjusted_amount} /> },
+  {
+    key: 'adj',
+    header: "유동성 반영 B'",
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => <Money value={s.adjusted_amount} />,
+  },
   {
     key: 'r',
     header: '쏠림 r',
@@ -68,12 +74,21 @@ function SettlementCard({ log }: { log: SettlementLog }) {
     >
       <Stack gap={4}>
         <Card padding="none" tone="sunken">
-          <Table caption={`${log.round}회차 주식 정산`} columns={STOCK_COLUMNS} rows={log.stocks} rowKey={(s) => s.code} dense />
+          <Table
+            caption={`${log.round}회차 주식 정산`}
+            columns={STOCK_COLUMNS}
+            rows={log.stocks}
+            rowKey={(s) => s.code}
+            dense
+          />
         </Card>
         <Grid min="14rem" gap={4}>
           <KeyValueList
             items={[
-              { label: '병더리움 방향', value: <Badge tone={log.coin.direction}>{log.coin.direction === 'up' ? '상승일' : '하락일'}</Badge> },
+              {
+                label: '병더리움 방향',
+                value: <Badge tone={log.coin.direction}>{log.coin.direction === 'up' ? '상승일' : '하락일'}</Badge>,
+              },
               { label: '확률 추첨 p', value: formatNumber(log.coin.p, 4) },
               { label: '크기 추첨 X', value: formatNumber(log.coin.x, 4) },
             ]}
@@ -172,7 +187,11 @@ export function BatchTab() {
         ) : settlements.loading ? (
           <Skeleton lines={4} height="2rem" />
         ) : logs.length === 0 ? (
-          <EmptyState compact title="아직 정산 기록이 없어요" description="첫 운영일 18:00 정산이 끝나면 여기에 쌓여요." />
+          <EmptyState
+            compact
+            title="아직 정산 기록이 없어요"
+            description="첫 운영일 18:00 정산이 끝나면 여기에 쌓여요."
+          />
         ) : (
           logs.map((log) => <SettlementCard key={log.id} log={log} />)
         )}

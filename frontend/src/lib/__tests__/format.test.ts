@@ -3,6 +3,7 @@ import {
   direction,
   formatBytes,
   formatChange,
+  formatDateTime,
   formatDay,
   formatDayShort,
   formatNumber,
@@ -76,6 +77,9 @@ describe('misc formatters', () => {
     expect(formatDay(null)).toBe('—');
     expect(formatDayShort('2026-10-06')).toBe('10.06');
     expect(formatBytes(10 * 1024 * 1024)).toBe('10.0MB');
+    expect(formatDateTime('2026-10-06T09:05:00+09:00')).toBe('10/6 09:05');
+    expect(formatDateTime('2026-10-06T00:30:00Z')).toBe('10/6 09:30');
+    expect(formatDateTime(null)).toBe('—');
   });
 });
 

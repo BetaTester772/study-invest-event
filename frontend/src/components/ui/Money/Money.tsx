@@ -70,7 +70,13 @@ export function PriceChange({ rate, digits = 2, pill, display, className, ...res
   const aria = rate == null ? '변동 없음' : `${DIR_LABEL[dir]} ${text.replace(/[▲▼]\s?/, '')}`;
   return (
     <span
-      className={cx(styles.number, styles[dir], pill && styles.pill, display && styles[`display-${display}`], className)}
+      className={cx(
+        styles.number,
+        styles[dir],
+        pill && styles.pill,
+        display && styles[`display-${display}`],
+        className,
+      )}
       data-direction={dir}
       aria-label={aria}
       {...rest}

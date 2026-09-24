@@ -53,7 +53,9 @@ export function RegisterPage() {
       } else if (err instanceof ApiError && err.code === 'NICKNAME_TAKEN') {
         setErrors({ nickname: '다른 참가자가 쓰는 닉네임이에요. 다른 닉네임을 골라 주세요.' });
       } else {
-        setErrors({ form: err instanceof ApiError ? err.message : '참가 신청을 하지 못했어요. 잠시 뒤 다시 시도해 주세요.' });
+        setErrors({
+          form: err instanceof ApiError ? err.message : '참가 신청을 하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+        });
       }
       setSubmitting(false);
     }
@@ -110,7 +112,10 @@ export function RegisterPage() {
               참가 신청하기
             </Button>
             <Text size="sm" tone="muted">
-              이미 참가했나요? <Link to="/login" state={location.state}>로그인하기</Link>
+              이미 참가했나요?{' '}
+              <Link to="/login" state={location.state}>
+                로그인하기
+              </Link>
             </Text>
           </Stack>
         </form>

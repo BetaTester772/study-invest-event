@@ -176,7 +176,11 @@ export function OrderPanel({
           max={Math.max(maxQty, 1)}
           suffix={unit}
           disabled={Boolean(blocker)}
-          hint={blocker ? undefined : `최대 ${formatQuantity(maxQty, instrument.kind)}까지 ${side === 'buy' ? '살' : '팔'} 수 있어요.`}
+          hint={
+            blocker
+              ? undefined
+              : `최대 ${formatQuantity(maxQty, instrument.kind)}까지 ${side === 'buy' ? '살' : '팔'} 수 있어요.`
+          }
           error={blocker ?? undefined}
           trailing={
             <Button variant="secondary" onClick={() => setQty(Math.max(maxQty, 1))} disabled={Boolean(blocker)}>
@@ -192,9 +196,7 @@ export function OrderPanel({
           </Text>
         )}
         {disqualified && <Alert tone="danger" title="실격 처리되어 주문할 수 없어요" />}
-        {market && !market.canTrade && !disqualified && (
-          <Alert title="지금은 주문할 수 없어요">{market.detail}</Alert>
-        )}
+        {market && !market.canTrade && !disqualified && <Alert title="지금은 주문할 수 없어요">{market.detail}</Alert>}
         <Button
           variant={side === 'buy' ? 'buy' : 'sell'}
           size="lg"

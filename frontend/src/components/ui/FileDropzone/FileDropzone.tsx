@@ -154,7 +154,12 @@ export function FileDropzone({
       ) : (
         <label
           htmlFor={id}
-          className={cx(styles.zone, dragging && styles.dragging, disabled && styles.disabled, Boolean(shownError) && styles.invalid)}
+          className={cx(
+            styles.zone,
+            dragging && styles.dragging,
+            disabled && styles.disabled,
+            Boolean(shownError) && styles.invalid,
+          )}
           onDragEnter={(e) => {
             e.preventDefault();
             if (!disabled) setDragging(true);

@@ -23,7 +23,7 @@ import { RankingPage } from './pages/Ranking/RankingPage';
 import { StyleGuidePage } from './pages/StyleGuide/StyleGuidePage';
 
 const NAV: NavItem[] = [
-  { to: '/', label: '시장', end: true },
+  { to: '/', label: '시장', end: true, alsoActiveOn: ['/instruments/'] },
   { to: '/portfolio', label: '내 자산' },
   { to: '/certification', label: '공부 인증' },
   { to: '/ranking', label: '랭킹' },

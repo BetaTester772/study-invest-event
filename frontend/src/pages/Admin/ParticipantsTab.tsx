@@ -34,7 +34,7 @@ export function ParticipantsTab() {
     { key: 'id', header: 'ID', numeric: true, width: '4rem' },
     { key: 'nickname', header: '닉네임', render: (p) => p.nickname },
     { key: 'identity', header: '아이디', hideOnMobile: true, render: (p) => p.identity },
-    { key: 'status', header: '상태', render: (p) => <ParticipantStatusBadge status={p.status} /> },
+    { key: 'status', header: '상태', nowrap: true, render: (p) => <ParticipantStatusBadge status={p.status} /> },
     { key: 'cash', header: '현금', numeric: true, hideOnMobile: true, render: (p) => <Money value={p.cash} /> },
     { key: 'total', header: '총자산', numeric: true, render: (p) => <Money value={p.total_assets} /> },
     {
@@ -43,7 +43,7 @@ export function ParticipantsTab() {
       numeric: true,
       render: (p) => `${p.approved_certifications} / ${p.rejected_certifications}`,
     },
-    { key: 'joined', header: '가입', hideOnMobile: true, render: (p) => formatDateTime(p.joined_at) },
+    { key: 'joined', header: '가입', nowrap: true, hideOnMobile: true, render: (p) => formatDateTime(p.joined_at) },
     {
       key: 'change',
       header: '상태 바꾸기',

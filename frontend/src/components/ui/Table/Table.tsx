@@ -14,6 +14,8 @@ export interface Column<T> {
   width?: string;
   /** Hide this column below 640px. */
   hideOnMobile?: boolean;
+  /** Keep the cell on one line (dates, times, short labels). */
+  nowrap?: boolean;
 }
 
 export interface TableProps<T> {
@@ -47,10 +49,20 @@ export function Table<T>({
 }: TableProps<T>) {
   const alignOf = (c: Column<T>) => c.align ?? (c.numeric ? 'right' : 'left');
   const colClass = (c: Column<T>) =>
-    cx(styles[`align-${alignOf(c)}`], c.numeric && styles.numeric, c.hideOnMobile && styles.hideOnMobile);
+    cx(
+      styles[`align-${alignOf(c)}`],
+      c.numeric && styles.numeric,
+      c.nowrap && styles.nowrap,
+      c.hideOnMobile && styles.hideOnMobile,
+    );
 
   return (
-    <div className={cx(styles.scroller, className)} tabIndex={0} role="region" aria-label={typeof caption === 'string' ? caption : undefined}>
+    <div
+      className={cx(styles.scroller, className)}
+      tabIndex={0}
+      role="region"
+      aria-label={typeof caption === 'string' ? caption : undefined}
+    >
       <table className={cx(styles.table, dense && styles.dense)} aria-busy={loading || undefined}>
         {caption && <caption className={hideCaption ? 'sr-only' : styles.caption}>{caption}</caption>}
         <thead>
@@ -83,7 +95,11 @@ export function Table<T>({
             rows.map((row, i) => {
               const highlighted = isRowHighlighted?.(row) ?? false;
               return (
-                <tr key={rowKey(row, i)} className={highlighted ? styles.highlighted : undefined} aria-current={highlighted || undefined}>
+                <tr
+                  key={rowKey(row, i)}
+                  className={highlighted ? styles.highlighted : undefined}
+                  aria-current={highlighted || undefined}
+                >
                   {columns.map((c) => (
                     <td key={c.key} className={colClass(c)}>
                       {c.render ? c.render(row, i) : String((row as Record<string, unknown>)[c.key] ?? '')}

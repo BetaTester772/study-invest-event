@@ -29,6 +29,9 @@
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
+  /* Never split a Korean word or a number mid-way; scroll the box instead. */
+  overflow-wrap: normal;
+  word-break: keep-all;
 }
 
 .table th {
@@ -68,6 +71,10 @@
 
 .numeric {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.nowrap {
   white-space: nowrap;
 }
 
