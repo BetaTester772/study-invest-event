@@ -85,7 +85,7 @@ def create_app(
         pools=pools,
         session_factory=make_session_factory(pools.api),
         batch_session_factory=make_session_factory(pools.batch),
-        calendar=calendar or EventCalendar(),
+        calendar=calendar or settings.calendar,
         clock=clock or _now,
         rng=rng or random.SystemRandom(),
     )

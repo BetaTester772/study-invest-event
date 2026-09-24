@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Literal, cast
+
+from .event_calendar import EventCalendar
+from .params import EVENT_END, EVENT_START
 
 
 @dataclass(frozen=True)
@@ -24,6 +29,12 @@ class PoolSpec:
     """풀에서 연결을 기다리는 최대 초. 넘으면 요청은 503으로 끝난다."""
     recycle: int = 1800
     """이 초보다 오래된 연결은 다시 연다(PgBouncer·방화벽 유휴 끊김 대비)."""
+
+
+def _env_date(env: Mapping[str, str], name: str, default: date) -> date:
+    """YYYY-MM-DD 환경 변수. 비어 있거나 없으면 기본값."""
+    value = env.get(name, "").strip()
+    return date.fromisoformat(value) if value else default
 
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://study:study@localhost:5432/study_invest"
@@ -59,6 +70,9 @@ class Settings:
     """시뮬레이터 등 CPU 작업용 프로세스 수. 0이면 스레드로 실행한다."""
     frontend_dist: Path | None = None
     """빌드된 프론트엔드(dist) 경로. 지정하면 같은 서버에서 정적 파일로 제공한다."""
+    event_start: date = EVENT_START
+    event_end: date = EVENT_END
+    """이벤트 기간(양 끝 포함). 기본값은 규격서 기간이며, 테스트·QA 서버에서만 바꾼다."""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -85,7 +99,13 @@ class Settings:
             ),
             cpu_workers=int(env.get("STUDY_INVEST_CPU_WORKERS", cls.cpu_workers)),
             frontend_dist=Path(dist) if dist else None,
+            event_start=_env_date(env, "STUDY_INVEST_EVENT_START", cls.event_start),
+            event_end=_env_date(env, "STUDY_INVEST_EVENT_END", cls.event_end),
         )
+
+    @property
+    def calendar(self) -> EventCalendar:
+        return EventCalendar(self.event_start, self.event_end)
 
     @property
     def api_pool(self) -> PoolSpec:

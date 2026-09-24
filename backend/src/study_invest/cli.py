@@ -18,7 +18,7 @@ from datetime import date, datetime
 
 from .config import Settings
 from .db import make_engine, make_session_factory
-from .event_calendar import EventCalendar, to_kst
+from .event_calendar import to_kst
 from .params import KST
 from .services import certification, market
 from .services.common import DomainError, get_params
@@ -49,7 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     settings = Settings.from_env()
     now = datetime.now(KST)
-    calendar = EventCalendar()
+    calendar = settings.calendar
     rng = random.SystemRandom()
 
     if args.command == "simulate" and args.defaults:
