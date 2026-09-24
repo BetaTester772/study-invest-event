@@ -1,0 +1,54 @@
+# 프론트엔드 정적 파일 서빙 + /api 리버스 프록시(docker compose의 frontend 서비스).
+# 개발 서버에서는 vite.config.ts의 proxy가 같은 역할을 한다.
+{
+	# 설정은 이미지에 고정한다. 실행 중 설정을 바꾸는 관리 API는 열지 않는다.
+	admin off
+	# 컨테이너 안에서는 평문 HTTP(:80)만 제공한다. TLS는 앞단에서 종료한다.
+	auto_https off
+}
+
+:80 {
+	encode zstd gzip
+
+	# API는 경로를 그대로 백엔드로 넘긴다. X-Forwarded-For·Proto·Host는 Caddy가 붙이고,
+	# 클라이언트가 보낸 X-Forwarded-* 값은 신뢰하지 않고 덮어쓴다.
+	handle /api/* {
+		# 본문 한도 12MiB(인증 사진 최대 10MB + 여유).
+		# 선언된 Content-Length가 넘으면 본문을 받기 전에 바로 413으로 끊는다.
+		# (request_body만으로는 본문을 읽다가 끊으므로, 큰 요청이 백엔드까지 흘러간다.)
+		@too_large expression `{http.request.header.Content-Length}.matches("^[0-9]+$") && int({http.request.header.Content-Length}) > 12582912`
+		respond @too_large 413 {
+			close
+		}
+		# Content-Length 없이(chunked) 오는 본문도 같은 한도에서 끊는다.
+		request_body {
+			max_size 12MiB
+		}
+		# 경로별 한도(JSON 1MiB, 사진 업로드 등)는 백엔드가 정한다. 백엔드는 한도를 넘는
+		# Content-Length를 보면 본문을 읽지 않고 413을 보낸 뒤 연결을 닫는다. 본문을 먼저 흘려
+		# 보내면 그 연결이 끊겨 502가 되므로, 100-continue로 백엔드가 받겠다고 할 때만 본문을 보낸다.
+		reverse_proxy backend:8000 {
+			header_up Expect 100-continue
+			transport http {
+				expect_continue_timeout 5s
+			}
+		}
+	}
+
+	# 빌드 산출물(파일명에 해시 포함)은 1년 캐시. 없는 파일은 index.html로 넘기지 않고 404.
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable" {
+			match status 2xx
+		}
+		file_server
+	}
+
+	# SPA 라우팅: 없는 경로는 index.html. 배포 직후 새 버전을 받도록 매번 재검증.
+	handle {
+		root * /srv
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

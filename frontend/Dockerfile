@@ -6,7 +6,9 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+FROM caddy:2.11-alpine
+COPY Caddyfile /etc/caddy/Caddyfile
+# 설정 오류는 컨테이너가 뜬 뒤가 아니라 빌드 때 드러나게 한다.
+RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+COPY --from=build /app/dist /srv
 EXPOSE 80
