@@ -79,9 +79,9 @@ def client(tmp_path: Path, clock: Clock, rng: StubRandom) -> Iterator[TestClient
         Base.metadata.create_all(engine)
     with TestClient(app) as c:
         yield c
-    if TEST_DB_URL != "sqlite://":
-        Base.metadata.drop_all(engine)
-    engine.dispose()
+        # 앱 종료(lifespan)가 풀을 닫기 전에 정리한다. 닫힌 뒤에 쓰면 새 연결이 열린 채 남는다.
+        if TEST_DB_URL != "sqlite://":
+            Base.metadata.drop_all(engine)
 
 
 @pytest.fixture

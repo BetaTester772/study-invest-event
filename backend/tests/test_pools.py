@@ -52,7 +52,8 @@ def tiny_pool_client(tmp_path: Path) -> Iterator[TestClient]:
     Base.metadata.create_all(pools.api)
     with TestClient(app) as client:
         yield client
-    Base.metadata.drop_all(pools.api)
+        # 앱 종료(lifespan)가 풀을 닫기 전에 정리한다. 닫힌 뒤에 쓰면 새 연결이 열린 채 남는다.
+        Base.metadata.drop_all(pools.api)
 
 
 def test_api_pool_exhaustion_returns_503_and_batch_still_runs(

@@ -35,6 +35,11 @@ packages = ["src/study_invest"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# 닫지 않은 DB 연결·파일 같은 자원 누수는 경고로 흘려보내지 않고 테스트 실패로 드러낸다.
+filterwarnings = [
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 100
