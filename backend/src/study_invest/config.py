@@ -15,6 +15,8 @@ class Settings:
     """관리자 API 키. 비어 있으면 관리자 API가 모두 거부된다."""
     upload_dir: Path = Path("./uploads")
     max_upload_bytes: int = 10 * 1024 * 1024
+    max_json_bytes: int = 1024 * 1024
+    """업로드 외 요청 본문 한도."""
     scheduler_enabled: bool = False
     """켜면 앱 프로세스 안에서 09:00·18:00 배치를 자동 실행한다."""
     scheduler_interval_seconds: float = 30.0
@@ -41,6 +43,7 @@ class Settings:
             admin_key=env.get("STUDY_INVEST_ADMIN_KEY", ""),
             upload_dir=Path(env.get("STUDY_INVEST_UPLOAD_DIR", str(cls.upload_dir))),
             max_upload_bytes=int(env.get("STUDY_INVEST_MAX_UPLOAD_BYTES", cls.max_upload_bytes)),
+            max_json_bytes=int(env.get("STUDY_INVEST_MAX_JSON_BYTES", cls.max_json_bytes)),
             scheduler_enabled=env.get("STUDY_INVEST_SCHEDULER", "0").lower() in {"1", "true", "on"},
             scheduler_interval_seconds=float(env.get("STUDY_INVEST_SCHEDULER_INTERVAL", "30")),
             auto_create_schema=env.get("STUDY_INVEST_AUTO_CREATE_SCHEMA", "0").lower()

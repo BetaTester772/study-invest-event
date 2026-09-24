@@ -15,18 +15,26 @@ from pathlib import Path
 import anyio.to_thread
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ..config import Settings
 from ..db import create_schema, install_event_loop_guard, make_engine, make_session_factory
-from ..event_calendar import EventCalendar
+from ..event_calendar import EventCalendar, seconds_until_next_batch
 from ..params import KST
 from ..services.common import DomainError
 from ..services.market import run_due
 from . import routes_admin, routes_me, routes_public
 from .deps import AppState
+from .limits import BodySizeLimitMiddleware
 
 log = logging.getLogger("study_invest")
+
+BATCH_WAKE_DELAY = 0.05
+"""배치 정각 직후 깨어나기 위한 여유(초)."""
+
+MULTIPART_OVERHEAD = 64 * 1024
+"""multipart 경계·헤더용 여유(바이트)."""
 
 
 def _now() -> datetime:
@@ -47,7 +55,9 @@ async def _scheduler(state: AppState) -> None:
                 log.info("batch: %s", r)
         except Exception:
             log.exception("scheduler tick failed")
-        await asyncio.sleep(state.settings.scheduler_interval_seconds)
+        # 주기적으로 확인하되, 09:00·18:00 정각에는 바로 깨어나 공시·정산 지연을 없앤다.
+        until_batch = seconds_until_next_batch(state.clock()) + BATCH_WAKE_DELAY
+        await asyncio.sleep(min(state.settings.scheduler_interval_seconds, until_batch))
 
 
 def create_app(
@@ -95,12 +105,32 @@ def create_app(
     app = FastAPI(title="공부장려 모의투자 이벤트", version="0.1.0", lifespan=lifespan)
     app.state.study_invest = state
 
+    @app.exception_handler(IntegrityError)  # I/O 없음 → async
+    async def _integrity_error(_: Request, exc: IntegrityError) -> JSONResponse:
+        # 동시 요청이 같은 유니크 키를 만들려다 충돌한 경우. 세션은 의존성에서 롤백된다.
+        log.info("integrity conflict: %s", exc.orig)
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": {
+                    "code": "CONFLICT",
+                    "message": "같은 요청이 동시에 처리되어 충돌했습니다. 다시 시도하세요.",
+                }
+            },
+        )
+
     @app.exception_handler(DomainError)  # I/O 없음 → async
     async def _domain_error(_: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status, content={"detail": {"code": exc.code, "message": exc.message}}
         )
 
+    # 본문 크기 제한: 업로드 경로만 사진 한도 + multipart 여유, 나머지(JSON)는 1MiB.
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        default_limit=settings.max_json_bytes,
+        path_limits={"/api/me/certifications": settings.max_upload_bytes + MULTIPART_OVERHEAD},
+    )
     app.include_router(routes_public.router)
     app.include_router(routes_me.router)
     app.include_router(routes_admin.router)

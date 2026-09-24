@@ -31,7 +31,16 @@ from ..money import PRICE_UNIT
 from ..params import MARKET_CLOSE, MARKET_OPEN
 from ..pricing import draw_coin, settle_stocks
 from . import certification
-from .common import DomainError, audit, get_params, latest_opened_day, market_day, prices_on
+from .common import (
+    DomainError,
+    audit,
+    batch_lock,
+    get_params,
+    latest_opened_day,
+    lock_market_day,
+    market_day,
+    prices_on,
+)
 
 
 @dataclass
@@ -59,6 +68,7 @@ def _ratio(new: int, old: int | None) -> float | None:
 
 def open_day(s: Session, day: date, now: datetime, calendar: EventCalendar) -> BatchResult:
     """day의 시작가를 확정·공시하고 밀린 인증 보상을 지급한다."""
+    batch_lock(s)  # 다른 배치와 직렬화(재진입 가능)
     if not calendar.is_operating_day(day):
         raise DomainError("NOT_OPERATING_DAY", f"{day}는 운영일이 아닙니다.", 422)
     if to_kst(now).date() < day:
@@ -120,10 +130,12 @@ def buy_amounts(s: Session, day: date) -> dict[str, int]:
 def settle_day(
     s: Session, day: date, now: datetime, calendar: EventCalendar, rng: random.Random
 ) -> BatchResult:
+    batch_lock(s)  # 다른 배치와 직렬화(재진입 가능)
     round_no = calendar.round_of(day)
     if round_no is None:
         raise DomainError("NO_ROUND", f"{day} 정산은 반영일이 없어 실행하지 않습니다.")
-    md = market_day(s, day)
+    # 배타 잠금: 진행 중인 주문(공유 잠금)이 끝난 뒤 집계하고, 이후 주문은 거부된다.
+    md = lock_market_day(s, day, shared=False)
     if md is None:
         raise DomainError("NOT_OPENED", f"{day}는 공시되지 않았습니다.")
     if md.settled_at is not None:
@@ -235,55 +247,61 @@ def run_due(
 ) -> list[BatchResult | dict[str, Any]]:
     """전일 미정산 → 오늘 공시 → 오늘 정산 순으로, 시각이 된 배치를 각각 별도 트랜잭션으로 실행한다.
 
-    여러 번 호출해도 안전하다(이미 처리된 단계는 건너뛴다). 실패한 단계는 롤백하고 멈춘다.
+    - 여러 번 호출해도 안전하다. 각 단계는 배치 잠금을 잡은 뒤 필요 여부를 다시 확인한다.
+    - 다른 프로세스(워커·레플리카)가 배치 잠금을 잡고 있으면 조용히 멈춘다(그쪽이 처리 중).
+    - 전일 정산이 실패해도 오늘 공시는 진행해 전일 가격을 이월한다(04-trading §3.5).
+      그 밖의 단계가 실패하면 롤백하고 멈춘다.
     """
     local = to_kst(now)
     today = local.date()
+    prev = calendar.previous_operating_day(today)
     results: list[BatchResult | dict[str, Any]] = []
 
-    def step(action: str, day: date, fn: Callable[[Session], BatchResult]) -> bool:
+    def prev_settle_due(s: Session) -> bool:
+        if prev is None or calendar.round_of(prev) is None:
+            return False
+        md = market_day(s, prev)
+        return md is not None and md.settled_at is None and market_day(s, today) is None
+
+    def open_due(s: Session) -> bool:
+        if not calendar.is_operating_day(today) or local.time() < MARKET_OPEN:
+            return False
+        latest = latest_opened_day(s)
+        return market_day(s, today) is None and (latest is None or latest < today)
+
+    def today_settle_due(s: Session) -> bool:
+        if local.time() < MARKET_CLOSE or calendar.round_of(today) is None:
+            return False
+        md = market_day(s, today)
+        return md is not None and md.settled_at is None
+
+    def settle_prev(s: Session) -> BatchResult:
+        assert prev is not None  # prev_settle_due가 보장
+        return settle_day(s, prev, now, calendar, rng)
+
+    plan: list[tuple[str, date | None, Callable[[Session], bool], Callable[[Session], BatchResult]]]
+    plan = [
+        ("settle", prev, prev_settle_due, settle_prev),
+        ("open", today, open_due, lambda s: open_day(s, today, now, calendar)),
+        ("settle", today, today_settle_due, lambda s: settle_day(s, today, now, calendar, rng)),
+    ]
+    for index, (action, day, due, run) in enumerate(plan):
         with session_factory() as s:
             try:
-                results.append(fn(s))
+                if not batch_lock(s, wait=False):
+                    return results  # 다른 스케줄러가 배치 실행 중
+                if not due(s):
+                    s.rollback()
+                    continue
+                results.append(run(s))
                 s.commit()
-                return True
-            except Exception as exc:  # 배치 실패: 롤백 후 재실행 대기
+            except Exception as exc:  # 배치 실패: 롤백 후 다음 호출에서 재실행
                 s.rollback()
                 code = exc.code if isinstance(exc, DomainError) else type(exc).__name__
                 results.append({"action": action, "day": day, "error": code, "message": str(exc)})
-                return False
-
-    with session_factory() as s:
-        prev = calendar.previous_operating_day(today)
-        prev_md = market_day(s, prev) if prev else None
-        today_md = market_day(s, today)
-        prev_due = (
-            prev is not None
-            and prev_md is not None
-            and prev_md.settled_at is None
-            and calendar.round_of(prev) is not None
-            and today_md is None
-        )
-    if (
-        prev_due
-        and prev is not None
-        and not step("settle", prev, lambda s: settle_day(s, prev, now, calendar, rng))
-    ):
-        return results
-
-    if calendar.is_operating_day(today) and local.time() >= MARKET_OPEN:
-        with session_factory() as s:
-            latest = latest_opened_day(s)
-            need_open = market_day(s, today) is None and (latest is None or latest < today)
-        if need_open and not step("open", today, lambda s: open_day(s, today, now, calendar)):
-            return results
-
-    if local.time() >= MARKET_CLOSE and calendar.round_of(today) is not None:
-        with session_factory() as s:
-            md = market_day(s, today)
-            need_settle = md is not None and md.settled_at is None
-        if need_settle:
-            step("settle", today, lambda s: settle_day(s, today, now, calendar, rng))
+                if index == 0:
+                    continue  # 전일 정산 실패 → 공시가 전일 가격을 이월한다
+                return results
     return results
 
 
@@ -300,6 +318,7 @@ def set_manual_price(
     calendar: EventCalendar,
 ) -> PriceHistory:
     """아직 공시되지 않은 운영일의 시작가를 지정한다. 장중 가격은 바꿀 수 없다."""
+    batch_lock(s)  # 공시와 겹치지 않게
     if code not in BY_CODE:
         raise DomainError("UNKNOWN_INSTRUMENT", "존재하지 않는 종목입니다.", 404)
     if not calendar.is_operating_day(day):

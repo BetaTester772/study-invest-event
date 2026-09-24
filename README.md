@@ -45,7 +45,7 @@ uvicorn --factory study_invest.api.app:create_app --reload
 ```bash
 ruff check src tests && ruff format --check src tests
 mypy                                        # strict, src + tests
-pytest                                      # 기본은 SQLite 메모리 DB
+pytest                                      # 기본은 SQLite 메모리 DB(동시성 테스트는 건너뜀)
 STUDY_INVEST_TEST_DATABASE_URL=postgresql+psycopg://study:study@localhost/study_invest_test pytest
 ```
 
@@ -67,6 +67,7 @@ study-invest purge-images                    # 이벤트 종료 후 인증 사�
 | `STUDY_INVEST_ADMIN_KEY` | (없음) | 관리자 API 키. 비어 있으면 관리자 API 차단 |
 | `STUDY_INVEST_UPLOAD_DIR` | `./uploads` | 인증 사진 저장 경로 |
 | `STUDY_INVEST_MAX_UPLOAD_BYTES` | `10485760` | 인증 사진 최대 크기 |
+| `STUDY_INVEST_MAX_JSON_BYTES` | `1048576` | 업로드 외 요청 본문 최대 크기 |
 | `STUDY_INVEST_SCHEDULER` | `0` | `1`이면 앱 안에서 배치 자동 실행 |
 | `STUDY_INVEST_SCHEDULER_INTERVAL` | `30` | 스케줄러 확인 주기(초) |
 | `STUDY_INVEST_AUTO_CREATE_SCHEMA` | `0` | `1`이면 시작 시 `create_all`(마이그레이션 대신, 테스트용) |

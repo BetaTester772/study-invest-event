@@ -7,12 +7,26 @@ from datetime import date, datetime, time, timedelta
 
 from .params import EVENT_END, EVENT_START, KST, MARKET_CLOSE, MARKET_OPEN
 
+BATCH_TIMES: tuple[time, ...] = (MARKET_OPEN, MARKET_CLOSE)
+"""배치 시각: 09:00 공시, 18:00 정산."""
+
 
 def to_kst(at: datetime) -> datetime:
     """시간대가 있는 datetime을 KST로 바꾼다. naive datetime은 받지 않는다."""
     if at.tzinfo is None or at.utcoffset() is None:
         raise ValueError("timezone-aware datetime required")
     return at.astimezone(KST)
+
+
+def seconds_until_next_batch(at: datetime) -> float:
+    """다음 배치 시각(09:00 또는 18:00 KST)까지 남은 초. 정각이면 다음 배치까지."""
+    local = to_kst(at)
+    upcoming = (
+        datetime.combine(local.date() + timedelta(days=offset), t, KST)
+        for offset in (0, 1)
+        for t in BATCH_TIMES
+    )
+    return min((b - local).total_seconds() for b in upcoming if b > local)
 
 
 @dataclass(frozen=True)

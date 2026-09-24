@@ -8,6 +8,7 @@ import secrets
 from datetime import datetime
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..event_calendar import EventCalendar, to_kst
@@ -85,8 +86,16 @@ def register(
         cash=INITIAL_CASH,
         joined_at=now,
     )
-    s.add(participant)
-    s.flush()
+    try:
+        # 동시 등록은 앞선 중복 검사를 둘 다 통과할 수 있다 → 유니크 제약으로 판정
+        with s.begin_nested():
+            s.add(participant)
+    except IntegrityError as exc:
+        if s.scalar(select(Participant.id).where(Participant.identity == norm)):
+            raise DomainError(
+                "IDENTITY_TAKEN", "이미 등록된 식별자입니다. 1인 1계정만 허용됩니다."
+            ) from exc
+        raise DomainError("NICKNAME_TAKEN", "이미 사용 중인 닉네임입니다.") from exc
     audit(s, now, f"participant:{participant.id}", "participant.register", nickname=nickname)
     return participant, issue_token(s, participant, now)
 

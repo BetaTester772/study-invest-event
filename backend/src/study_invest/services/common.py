@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..instruments import INSTRUMENTS
@@ -42,6 +42,40 @@ def set_params(s: Session, params: EventParams, now: datetime, actor: str = "adm
     changed = {k: [before[k], v] for k, v in after.items() if before.get(k) != v}
     audit(s, now, actor, "params.update", changed=changed)
     return params
+
+
+# --- 동시성: 잠금 ------------------------------------------------------------------
+
+BATCH_LOCK_KEY = 7_720_261_006
+"""배치(공시·정산·수동 가격) 직렬화용 PostgreSQL advisory lock 키."""
+
+
+def batch_lock(s: Session, *, wait: bool = True) -> bool:
+    """트랜잭션 범위 advisory lock. 여러 워커·레플리카의 배치가 겹치지 않게 한다.
+
+    wait=False면 다른 프로세스가 잡고 있을 때 바로 False를 돌려준다(스케줄러용).
+    같은 세션 안에서는 재진입 가능하다. PostgreSQL 외(테스트용 SQLite)에서는 항상 True.
+    """
+    if s.get_bind().dialect.name != "postgresql":
+        return True
+    if wait:
+        s.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": BATCH_LOCK_KEY})
+        return True
+    return bool(s.scalar(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": BATCH_LOCK_KEY}))
+
+
+def lock_market_day(s: Session, day: date, *, shared: bool) -> MarketDay | None:
+    """운영일 행을 잠그고 최신 값으로 읽는다.
+
+    주문은 공유 잠금(FOR SHARE), 정산은 배타 잠금(FOR UPDATE)을 잡는다. 그래서 정산은 진행 중인
+    주문이 끝날 때까지 기다린 뒤 집계하고, 정산 이후 주문은 settled_at을 보고 거부된다.
+    """
+    return s.scalars(
+        select(MarketDay)
+        .where(MarketDay.day == day)
+        .with_for_update(read=shared)
+        .execution_options(populate_existing=True)
+    ).first()
 
 
 # --- 장 상태·가격 -----------------------------------------------------------------

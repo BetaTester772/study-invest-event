@@ -8,6 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..event_calendar import EventCalendar, to_kst
@@ -93,8 +94,14 @@ def submit(
         status=CertStatus.PENDING,
         submitted_at=now,
     )
-    s.add(cert)
-    s.flush()  # 유니크 제약 위반을 파일 저장 전에 확인
+    try:
+        # 유니크 제약 위반을 파일 저장 전에 확인. 동시 제출은 앞선 검사를 둘 다 통과할 수 있다.
+        with s.begin_nested():
+            s.add(cert)
+    except IntegrityError as exc:
+        raise DomainError(
+            "ALREADY_CERTIFIED", f"{target} 인증은 이미 제출했습니다(1일 1회)."
+        ) from exc
     upload_dir.mkdir(parents=True, exist_ok=True)
     (upload_dir / filename).write_bytes(data)
     audit(

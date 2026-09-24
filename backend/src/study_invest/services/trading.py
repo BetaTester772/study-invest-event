@@ -22,7 +22,7 @@ from ..models import (
 )
 from ..money import exact, round_half_up
 from ..params import INITIAL_CASH, EventParams
-from .common import current_prices, market_day, prices_on, total_assets
+from .common import current_prices, lock_market_day, prices_on, total_assets
 
 MAX_QUANTITY = 1_000_000_000
 
@@ -66,8 +66,10 @@ def place_order(
     params: EventParams,
 ) -> Order:
     """주문을 검증하고 즉시 체결한다. 거부된 주문도 사유와 함께 기록한다(F-09)."""
-    # 동시 주문 대비 참가자 행 잠금(PostgreSQL 등). SQLite는 무시된다.
-    s.execute(select(Participant.id).where(Participant.id == participant.id).with_for_update())
+    # 동시 주문: 참가자 행을 잠근 뒤 최신 값으로 다시 읽는다. 인증 의존성이 요청 초반에 읽은
+    # 현금·보유는 그사이 다른 주문이 바꿨을 수 있다(lost update 방지). SQLite는 잠금 없음.
+    s.refresh(participant, with_for_update=True)
+    s.expire(participant, ["holdings"])
     trade_day = to_kst(now).date()
     reason: RejectReason | None = None
     price: int | None = None
@@ -85,7 +87,7 @@ def place_order(
     elif not calendar.is_market_open(now):
         reason = RejectReason.MARKET_CLOSED
     else:
-        md = market_day(s, trade_day)
+        md = lock_market_day(s, trade_day, shared=True)  # 정산과 직렬화
         if md is None:
             reason = RejectReason.MARKET_NOT_OPENED
         elif md.settled_at is not None:
