@@ -57,8 +57,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
+          cache-dependency-path: backend/uv.lock
+      - name: Install locked dependencies (backend/uv.lock)
+        working-directory: .
+        run: sh .github/scripts/install-backend.sh
       - name: ruff
         run: |
           ruff check src tests
@@ -101,8 +103,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
+          cache-dependency-path: backend/uv.lock
+      - name: Install locked dependencies (backend/uv.lock)
+        working-directory: .
+        run: sh .github/scripts/install-backend.sh
 
       - name: Create pgAdmin role (same script as docker compose)
         if: matrix.db == 'pgbouncer'
@@ -185,8 +189,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
+          cache-dependency-path: backend/uv.lock
+      - name: Install locked dependencies (backend/uv.lock)
+        working-directory: .
+        run: sh .github/scripts/install-backend.sh
       - name: Upgrade to head
         run: alembic upgrade head
       - name: Models match migrations
@@ -239,8 +245,8 @@ jobs:
         run: docker compose config --quiet
       - name: Build images
         run: docker compose build pgbouncer backend frontend
-      - name: Start stack (pgAdmin 제외)
-        run: docker compose up -d --wait --wait-timeout 180 db pgbouncer backend frontend
+      - name: Start stack
+        run: docker compose up -d --wait --wait-timeout 240
       - name: Smoke test
         run: |
           set -eu
@@ -258,6 +264,42 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/api/me/certifications \
             -H 'content-length: 50000000' --data-binary @/dev/null)
           test "$code" = "413"
+      - name: Web server (Caddy) routing and caching
+        run: |
+          set -eu
+          header() { curl -fsS -o /dev/null -D - "$1" | tr -d '\r' | grep -i "^$2:" ; }
+          # SPA 경로는 index.html, 매번 재검증
+          curl -fsS http://localhost:8080/portfolio | grep -q '<div id="root">'
+          header http://localhost:8080/portfolio cache-control | grep -q 'no-cache'
+          # 빌드 산출물은 1년 캐시
+          asset=$(curl -fsS http://localhost:8080/ | grep -o '/assets/[^"]*\.js' | head -n 1)
+          header "http://localhost:8080${asset}" cache-control | grep -q 'immutable'
+          # 없는 산출물은 index.html이 아니라 404이고, 404에는 장기 캐시를 붙이지 않는다
+          missing=$(curl -s -o /dev/null -D - http://localhost:8080/assets/missing.js | tr -d '\r')
+          echo "$missing" | head -n 1 | grep -q ' 404'
+          if echo "$missing" | grep -qi 'immutable'; then echo "404 cached as immutable"; exit 1; fi
+          # /api 아래 없는 경로는 백엔드의 404(JSON)이지 SPA가 아니다
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/does-not-exist)" = "404"
+          # 프록시 한도 안이지만 백엔드 한도(JSON 1MiB)를 넘는 본문: 502가 아니라 백엔드의 413
+          code=$(head -c 2097152 /dev/zero | tr '\0' a | curl -s -o /dev/null -w '%{http_code}' \
+            -X POST http://localhost:8080/api/auth/login -H 'Expect:' -H 'content-type: application/json' \
+            --data-binary @-)
+          test "$code" = "413"
+      - name: pgAdmin (웹, 서버 등록, pgAdmin 전용 풀 접속)
+        run: |
+          set -eu
+          curl -fsS http://127.0.0.1:5050/misc/ping
+          echo
+          # servers.json으로 PgBouncer pgAdmin 풀이 등록됐는지
+          docker compose exec -T pgadmin /venv/bin/python3 /pgadmin4/setup.py \
+            dump-servers /tmp/servers.out.json --user admin@example.com
+          docker compose exec -T pgadmin cat /tmp/servers.out.json \
+            | python3 -c 'import json,sys; s=list(json.load(sys.stdin)["Servers"].values()); assert [(x["Host"],x["Port"],x["Username"]) for x in s]==[("pgbouncer",6432,"pgadmin")], s; print(s)'
+          # pgAdmin 컨테이너에서 같은 경로(pgbouncer:6432, pgadmin 역할)로 실제 접속
+          docker compose exec -T -e PGPASSWORD=ci-pgadmin-password pgadmin sh -c \
+            'psql=$(ls /usr/local/pgsql-*/psql | sort | tail -n 1);
+             "$psql" -h pgbouncer -p 6432 -U pgadmin -d study_invest -tAc "select current_user"' \
+            | grep -qx pgadmin
       - name: PgBouncer connection budget
         run: docker compose logs pgbouncer | grep "connection budget"
       - name: Logs

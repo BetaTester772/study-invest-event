@@ -15,7 +15,7 @@
 | `backend/` | FastAPI + SQLAlchemy + PostgreSQL. 가격 산정·정산 배치·인증 검수·시뮬레이터(F-13) |
 | `frontend/` | React + TypeScript + Vite. 공용 컴포넌트 라이브러리(`src/components/ui`) 위에 페이지 구성 |
 | `infra/` | PgBouncer(연결 풀) 이미지, pgAdmin·PostgreSQL 초기화 스크립트 |
-| `docker-compose.yml` | PostgreSQL · PgBouncer · 백엔드 · 프론트엔드(nginx) · pgAdmin |
+| `docker-compose.yml` | PostgreSQL · PgBouncer · 백엔드 · 프론트엔드(Caddy) · pgAdmin |
 
 ## Docker Compose로 실행
 
@@ -36,16 +36,18 @@ docker compose up --build
 
 | 작업 | 내용 |
 |---|---|
-| `backend-lint` | ruff, mypy(strict) |
+| `backend-lint` | ruff, mypy(strict). 모든 백엔드 작업은 `backend/uv.lock` 버전 그대로 설치(lock이 낡으면 실패) |
 | `backend-test` | pytest를 SQLite · PostgreSQL · PgBouncer 경유(운영과 같은 transaction 풀, pgAdmin 풀 상한 포함) 세 구성으로 |
 | `migrations` | `alembic upgrade head` → `alembic check`(모델과 마이그레이션 일치) → downgrade/upgrade 왕복 |
 | `frontend` | `npm ci`, 타입 검사, vitest, 빌드 |
-| `compose` | 실제 Dockerfile로 이미지 빌드 후 스택(db·pgbouncer·backend·frontend) 기동, 스모크 테스트 |
+| `compose` | 실제 Dockerfile로 이미지 빌드 후 전체 스택(db·pgbouncer·backend·frontend·pgAdmin) 기동. API 스모크, Caddy 라우팅·캐시·본문 한도(413), pgAdmin 서버 등록·전용 풀 접속 확인 |
 | `ci-ok` | 위 작업이 모두 성공(또는 해당 없음으로 건너뜀)이면 성공 |
 
 브랜치 보호의 필수 검사는 **`ci-ok` 하나만** 지정한다. 바뀌지 않은 영역의 작업은 건너뛰므로, 개별 작업을 필수로 지정하면 건너뛴 PR이 머지되지 않는다.
 
-[`.github/dependabot.yml`](.github/dependabot.yml): pip·npm·Docker 이미지·compose 이미지·GitHub Actions를 매주 월요일 09:00(KST) 확인해 업데이트 PR을 만든다. minor·patch는 생태계별로 묶는다. PostgreSQL major와 Python·Node 런타임 버전은 자동으로 올리지 않는다(데이터 이전·CI 버전과 함께 의도적으로 올릴 것).
+[`.github/dependabot.yml`](.github/dependabot.yml): Python(uv.lock)·npm·Docker 이미지·compose 이미지·GitHub Actions를 매주 월요일 09:00(KST) 확인해 업데이트 PR을 만든다. minor·patch는 생태계별로 묶는다. PostgreSQL major와 Python·Node 런타임 버전은 자동으로 올리지 않는다(데이터 이전·CI 버전과 함께 의도적으로 올릴 것).
+
+백엔드 의존성은 `backend/uv.lock`에 고정되고, CI와 Docker 이미지 모두 이 버전 그대로(해시 검증) 설치한다. `pyproject.toml`의 의존성을 바꾸면 `cd backend && uv lock`으로 lock도 함께 커밋한다. 빠뜨리면 CI와 이미지 빌드가 실패한다.
 
 ## 로컬 개발
 
@@ -53,7 +55,7 @@ docker compose up --build
 
 ```bash
 cd backend
-uv venv && uv pip install -e ".[dev]"      # 또는 python -m venv .venv && pip install -e ".[dev]"
+uv sync --locked --extra dev               # uv.lock 버전 그대로 .venv에 설치 (source .venv/bin/activate)
 docker compose up -d db                     # 저장소 루트에서. 또는 로컬 PostgreSQL
 export STUDY_INVEST_DATABASE_URL=postgresql+psycopg://study:change-me@localhost:5432/study_invest
 export STUDY_INVEST_ADMIN_KEY=dev-key

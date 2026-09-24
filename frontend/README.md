@@ -51,4 +51,4 @@ src/
 ## 개발 프록시
 
 `vite.config.ts`의 `server.proxy`가 `/api` → `http://localhost:8000`으로 넘긴다. 백엔드를 먼저 띄운 뒤 `npm run dev`를 실행한다.
-Docker 배포에서는 `nginx.conf`가 같은 역할을 한다.
+Docker 배포에서는 `Caddyfile`(Caddy)이 같은 역할을 한다.

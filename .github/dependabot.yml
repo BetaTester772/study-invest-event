@@ -3,8 +3,9 @@
 version: 2
 
 updates:
-  # 백엔드 Python 패키지 (backend/pyproject.toml)
-  - package-ecosystem: pip
+  # 백엔드 Python 패키지 (backend/pyproject.toml + backend/uv.lock).
+  # 설치는 CI·이미지 모두 uv.lock 그대로 하므로, 업데이트는 lock을 고치는 PR로만 들어온다.
+  - package-ecosystem: uv
     directory: /backend
     schedule:
       interval: weekly
@@ -53,7 +54,7 @@ updates:
       - dependency-name: node
         update-types: [version-update:semver-major]
 
-  # docker-compose.yml 이미지(postgres, pgadmin)
+  # docker-compose.yml 이미지(postgres, pgadmin). pgAdmin은 CI compose 작업에서 실제로 띄워 확인한다.
   - package-ecosystem: docker-compose
     directory: /
     schedule:
@@ -67,6 +68,10 @@ updates:
       # PostgreSQL major 업그레이드는 데이터 디렉터리 이전(pg_upgrade/덤프)이 필요하다.
       - dependency-name: postgres
         update-types: [version-update:semver-major]
+      # pgAdmin은 정식 릴리스(9.x) 외에 날짜 태그(2026-09-15-1 등) 개발 빌드도 올린다.
+      # 날짜를 버전으로 읽으면 가장 큰 값이 되므로 제외한다.
+      - dependency-name: dpage/pgadmin4
+        versions: [">= 1000"]
 
   # GitHub Actions
   - package-ecosystem: github-actions

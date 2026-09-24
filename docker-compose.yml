@@ -91,10 +91,16 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   pgadmin:
-    image: dpage/pgadmin4:8
+    # 정식 릴리스(9.x)로 고정한다. 날짜 태그(예: 2026-09-15-1)는 개발 빌드라 쓰지 않는다.
+    image: dpage/pgadmin4:9.18
     entrypoint: ["/bin/sh", "/study-invest/entrypoint.sh"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-study_invest}
@@ -113,6 +119,12 @@ services:
     depends_on:
       pgbouncer:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/misc/ping"]
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 10
     restart: unless-stopped
 
 volumes:
