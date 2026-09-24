@@ -1,0 +1,19 @@
+.wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.select {
+  appearance: none;
+  padding-right: var(--space-8);
+  cursor: pointer;
+}
+
+.chevron {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--color-text-muted);
+}

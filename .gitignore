@@ -18,3 +18,14 @@ build/
 
 # Office temp
 ~$*
+
+# Env
+.env
+
+# Local data
+backend/uploads/
+*.db
+
+# Node
+node_modules/
+frontend/dist/

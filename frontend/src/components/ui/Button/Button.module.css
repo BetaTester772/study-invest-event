@@ -1,0 +1,120 @@
+.button {
+  --btn-bg: var(--color-primary);
+  --btn-bg-hover: var(--color-primary-hover);
+  --btn-fg: var(--color-primary-text);
+  --btn-border: transparent;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-md);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--btn-border);
+  border-radius: var(--radius-control);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--btn-bg-hover);
+  text-decoration: none;
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.button[data-loading] {
+  opacity: 0.8;
+  cursor: progress;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spinner {
+  color: currentColor;
+}
+
+/* ---- Variants ---- */
+.primary {
+  /* defaults */
+}
+
+.secondary {
+  --btn-bg: var(--color-surface);
+  --btn-bg-hover: var(--color-surface-2);
+  --btn-fg: var(--color-text);
+  --btn-border: var(--color-border-strong);
+}
+
+.ghost {
+  --btn-bg: transparent;
+  --btn-bg-hover: var(--color-surface-2);
+  --btn-fg: var(--color-text);
+}
+
+.danger {
+  --btn-bg: var(--color-danger);
+  --btn-bg-hover: var(--color-danger-hover);
+  --btn-fg: var(--color-on-strong);
+}
+
+.buy {
+  --btn-bg: var(--color-up);
+  --btn-bg-hover: var(--color-up-hover);
+  --btn-fg: var(--color-on-strong);
+}
+
+.sell {
+  --btn-bg: var(--color-down);
+  --btn-bg-hover: var(--color-down-hover);
+  --btn-fg: var(--color-on-strong);
+}
+
+/* ---- Sizes ---- */
+.sm {
+  min-height: var(--control-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+  gap: var(--space-1);
+}
+
+.md {
+  /* defaults */
+}
+
+.lg {
+  min-height: var(--control-lg);
+  padding: 0 var(--space-6);
+  font-size: var(--text-md);
+}
+
+.fullWidth {
+  display: flex;
+  width: 100%;
+}

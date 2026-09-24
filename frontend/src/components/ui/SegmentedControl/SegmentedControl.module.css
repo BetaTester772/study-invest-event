@@ -1,0 +1,85 @@
+.group {
+  --seg-pad: 3px;
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: var(--seg-pad);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  isolation: isolate;
+}
+
+.fullWidth {
+  display: grid;
+  width: 100%;
+}
+
+/* The sliding fill — the one motion that answers the user's choice. */
+.thumb {
+  position: absolute;
+  z-index: 0;
+  top: var(--seg-pad);
+  bottom: var(--seg-pad);
+  left: var(--seg-pad);
+  width: calc((100% - 2 * var(--seg-pad)) / var(--seg-count));
+  transform: translateX(calc(100% * var(--seg-index)));
+  border-radius: var(--radius-pill);
+  background: var(--color-highlight);
+  transition:
+    transform var(--duration-normal) var(--ease-standard),
+    background-color var(--duration-normal) var(--ease-standard);
+}
+
+.group[data-tone='up'] .thumb {
+  background: var(--color-up);
+}
+
+.group[data-tone='down'] .thumb {
+  background: var(--color-down);
+}
+
+.option {
+  position: relative;
+  z-index: 1;
+  min-height: calc(var(--control-md) - 8px);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.option:hover:not(:disabled):not(.selected) {
+  color: var(--color-text);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.selected {
+  color: var(--color-highlight-text);
+}
+
+.group[data-tone='up'] .selected,
+.group[data-tone='down'] .selected {
+  color: var(--color-on-strong);
+}
+
+.lg .option {
+  min-height: calc(var(--control-lg) - 8px);
+  font-size: var(--text-md);
+}

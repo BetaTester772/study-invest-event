@@ -1,0 +1,40 @@
+.list {
+  display: grid;
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+
+.row + .row {
+  border-top: 1px dashed var(--color-border);
+}
+
+.label {
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+
+.value {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.strong .label {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.strong .value {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}

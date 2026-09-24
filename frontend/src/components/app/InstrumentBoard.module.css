@@ -1,0 +1,134 @@
+.board {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sheet);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.head,
+.row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1.4fr) minmax(0, 1.6fr) minmax(8rem, 1fr) 7.5rem;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.head {
+  padding-block: var(--space-2);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.headRight {
+  text-align: right;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list > li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+/* The reward coin sits apart from the stocks. */
+.coins {
+  border-top: 2px solid var(--color-ink);
+  background: color-mix(in srgb, var(--color-surface-2) 60%, var(--color-surface));
+}
+
+.row {
+  color: var(--color-text);
+  text-decoration: none;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.row:hover {
+  text-decoration: none;
+  background: var(--color-surface-2);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.name {
+  display: grid;
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+  color: var(--color-ink);
+}
+
+.alias {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.kind {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.note {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.price,
+.change {
+  text-align: right;
+}
+
+.skeletonRow {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-5);
+}
+
+@media (max-width: 760px) {
+  .head {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name price'
+      'kind change';
+    row-gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .name {
+    grid-area: name;
+  }
+
+  .kind {
+    grid-area: kind;
+  }
+
+  .price {
+    grid-area: price;
+  }
+
+  .change {
+    grid-area: change;
+  }
+
+  .note {
+    display: none;
+  }
+}
