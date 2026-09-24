@@ -1,0 +1,83 @@
+# 의존성 업데이트 PR. 모든 PR은 CI(.github/workflows/ci.yml)를 통과해야 머지할 수 있다.
+# 사소한 업데이트(minor·patch)는 생태계마다 한 PR로 묶고, major는 따로 연다.
+version: 2
+
+updates:
+  # 백엔드 Python 패키지 (backend/pyproject.toml)
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(backend)"
+    groups:
+      backend-minor-patch:
+        update-types: [minor, patch]
+
+  # 프론트엔드 npm 패키지 (frontend/package-lock.json)
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(frontend)"
+    groups:
+      frontend-minor-patch:
+        update-types: [minor, patch]
+
+  # Dockerfile 베이스 이미지
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+      - /infra/pgbouncer
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    commit-message:
+      prefix: "deps(docker)"
+    ignore:
+      # 런타임 버전은 CI(PYTHON_VERSION·NODE_VERSION)와 함께 의도적으로 올린다.
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  # docker-compose.yml 이미지(postgres, pgadmin)
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    commit-message:
+      prefix: "deps(compose)"
+    ignore:
+      # PostgreSQL major 업그레이드는 데이터 디렉터리 이전(pg_upgrade/덤프)이 필요하다.
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    commit-message:
+      prefix: "deps(ci)"
+    groups:
+      actions:
+        patterns: ["*"]

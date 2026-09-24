@@ -30,6 +30,23 @@ docker compose up --build
 - API: http://localhost:8080/api (백엔드 직접 접근은 http://localhost:8000, 문서는 `/docs`)
 - 백엔드 컨테이너는 시작할 때 `alembic upgrade head`를 실행하고, `STUDY_INVEST_SCHEDULER=1`이면 09:00 공시·18:00 정산을 자동으로 돌린다.
 
+## CI · 의존성 업데이트
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)이 PR과 `main` 푸시마다 바뀐 영역만 검사한다.
+
+| 작업 | 내용 |
+|---|---|
+| `backend-lint` | ruff, mypy(strict) |
+| `backend-test` | pytest를 SQLite · PostgreSQL · PgBouncer 경유(운영과 같은 transaction 풀, pgAdmin 풀 상한 포함) 세 구성으로 |
+| `migrations` | `alembic upgrade head` → `alembic check`(모델과 마이그레이션 일치) → downgrade/upgrade 왕복 |
+| `frontend` | `npm ci`, 타입 검사, vitest, 빌드 |
+| `compose` | 실제 Dockerfile로 이미지 빌드 후 스택(db·pgbouncer·backend·frontend) 기동, 스모크 테스트 |
+| `ci-ok` | 위 작업이 모두 성공(또는 해당 없음으로 건너뜀)이면 성공 |
+
+브랜치 보호의 필수 검사는 **`ci-ok` 하나만** 지정한다. 바뀌지 않은 영역의 작업은 건너뛰므로, 개별 작업을 필수로 지정하면 건너뛴 PR이 머지되지 않는다.
+
+[`.github/dependabot.yml`](.github/dependabot.yml): pip·npm·Docker 이미지·compose 이미지·GitHub Actions를 매주 월요일 09:00(KST) 확인해 업데이트 PR을 만든다. minor·patch는 생태계별로 묶는다. PostgreSQL major와 Python·Node 런타임 버전은 자동으로 올리지 않는다(데이터 이전·CI 버전과 함께 의도적으로 올릴 것).
+
 ## 로컬 개발
 
 ### 백엔드
