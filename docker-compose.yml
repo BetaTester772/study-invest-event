@@ -94,7 +94,7 @@ services:
     restart: unless-stopped
 
   pgadmin:
-    image: dpage/pgadmin4:8
+    image: dpage/pgadmin4:2026-09-15-1
     entrypoint: ["/bin/sh", "/study-invest/entrypoint.sh"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-study_invest}
