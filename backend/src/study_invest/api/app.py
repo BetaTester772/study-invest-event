@@ -22,7 +22,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from ..config import Settings
 from ..db import DatabasePools, create_schema, make_session_factory
 from ..event_calendar import EventCalendar, seconds_until_next_batch
-from ..params import KST
 from ..services.common import DomainError
 from ..services.market import run_due
 from . import routes_admin, routes_me, routes_public
@@ -46,10 +45,6 @@ def _unavailable(code: str, message: str) -> JSONResponse:
     )
 
 
-def _now() -> datetime:
-    return datetime.now(KST)
-
-
 async def _scheduler(state: AppState) -> None:
     """09:00 공시·18:00 정산을 주기적으로 확인해 실행한다(여러 번 실행해도 안전).
 
@@ -65,7 +60,8 @@ async def _scheduler(state: AppState) -> None:
         except Exception:
             log.exception("scheduler tick failed")
         # 주기적으로 확인하되, 09:00·18:00 정각에는 바로 깨어나 공시·정산 지연을 없앤다.
-        until_batch = seconds_until_next_batch(state.clock()) + BATCH_WAKE_DELAY
+        # 남은 시간은 앱 시계 기준이므로 배속으로 나눠 실제 대기 시간으로 바꾼다.
+        until_batch = seconds_until_next_batch(state.clock()) / state.time_scale + BATCH_WAKE_DELAY
         await asyncio.sleep(min(state.settings.scheduler_interval_seconds, until_batch))
 
 
@@ -86,8 +82,9 @@ def create_app(
         session_factory=make_session_factory(pools.api),
         batch_session_factory=make_session_factory(pools.batch),
         calendar=calendar or settings.calendar,
-        clock=clock or _now,
+        clock=clock or settings.make_clock(),
         rng=rng or random.SystemRandom(),
+        time_scale=settings.time_scale,
     )
 
     @contextlib.asynccontextmanager

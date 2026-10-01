@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import math
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Literal, cast
 
+from .clock import ScaledClock, system_now
 from .event_calendar import EventCalendar
-from .params import EVENT_END, EVENT_START
+from .params import EVENT_END, EVENT_START, KST
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,21 @@ def _env_date(env: Mapping[str, str], name: str, default: date) -> date:
     """YYYY-MM-DD 환경 변수. 비어 있거나 없으면 기본값."""
     value = env.get(name, "").strip()
     return date.fromisoformat(value) if value else default
+
+
+def _env_datetime(env: Mapping[str, str], name: str) -> datetime | None:
+    """ISO 8601 일시 환경 변수. 시간대가 없으면 KST로 본다. 비어 있거나 없으면 None."""
+    value = env.get(name, "").strip()
+    if not value:
+        return None
+    at = datetime.fromisoformat(value)
+    return at.replace(tzinfo=KST) if at.tzinfo is None else at
+
+
+def _env_float(env: Mapping[str, str], name: str, default: float) -> float:
+    """실수 환경 변수. 비어 있거나 없으면 기본값."""
+    value = env.get(name, "").strip()
+    return float(value) if value else default
 
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://study:study@localhost:5432/study_invest"
@@ -73,6 +90,10 @@ class Settings:
     event_start: date = EVENT_START
     event_end: date = EVENT_END
     """이벤트 기간(양 끝 포함). 기본값은 규격서 기간이며, 테스트·QA 서버에서만 바꾼다."""
+    time_scale: float = 1.0
+    """앱 시계 배속. 24면 실제 1시간이 이벤트 하루다. 테스트·QA 서버에서만 바꾼다."""
+    time_origin: datetime | None = None
+    """앱 시계가 이벤트 첫날 00:00(KST)을 가리키는 실제 시각. time_scale이 1이 아니면 필수."""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -101,11 +122,29 @@ class Settings:
             frontend_dist=Path(dist) if dist else None,
             event_start=_env_date(env, "STUDY_INVEST_EVENT_START", cls.event_start),
             event_end=_env_date(env, "STUDY_INVEST_EVENT_END", cls.event_end),
+            time_scale=_env_float(env, "STUDY_INVEST_TIME_SCALE", cls.time_scale),
+            time_origin=_env_datetime(env, "STUDY_INVEST_TIME_ORIGIN"),
         )
 
     @property
     def calendar(self) -> EventCalendar:
         return EventCalendar(self.event_start, self.event_end)
+
+    def make_clock(self) -> Callable[[], datetime]:
+        """앱 시계. time_origin이 없으면 실제 KST 시각, 있으면 그때부터 time_scale배로 흐른다."""
+        if not (math.isfinite(self.time_scale) and self.time_scale > 0):
+            raise ValueError("STUDY_INVEST_TIME_SCALE은 0보다 큰 수여야 합니다.")
+        if self.time_origin is None:
+            if self.time_scale != 1:
+                raise ValueError(
+                    "STUDY_INVEST_TIME_SCALE을 바꾸려면 STUDY_INVEST_TIME_ORIGIN도 지정하세요."
+                )
+            return system_now
+        return ScaledClock(
+            origin=self.time_origin,
+            virtual_origin=datetime.combine(self.event_start, time(0), KST),
+            scale=self.time_scale,
+        )
 
     @property
     def api_pool(self) -> PoolSpec:

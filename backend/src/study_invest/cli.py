@@ -14,12 +14,11 @@ import json
 import random
 import sys
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date
 
 from .config import Settings
 from .db import make_engine, make_session_factory
 from .event_calendar import to_kst
-from .params import KST
 from .services import certification, market
 from .services.common import DomainError, get_params
 from .simulator import format_report
@@ -48,7 +47,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = Settings.from_env()
-    now = datetime.now(KST)
+    now = settings.make_clock()()
     calendar = settings.calendar
     rng = random.SystemRandom()
 
