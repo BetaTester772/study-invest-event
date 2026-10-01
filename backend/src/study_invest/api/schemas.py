@@ -78,10 +78,10 @@ class ClockInfo(Schema):
     scale: float
     """배속. 24면 실제 1시간이 이벤트 하루."""
     real_now: datetime
-    next_open_at: datetime
-    """다음 09:00(공시·주문 시작)이 되는 실제 시각."""
-    next_close_at: datetime
-    """다음 18:00(주문 마감·정산)이 되는 실제 시각."""
+    next_open_at: datetime | None
+    """다음 운영일 09:00(공시·주문 시작)이 되는 실제 시각. 남은 운영일이 없으면 null."""
+    next_close_at: datetime | None
+    """다음 운영일 18:00(장 마감·정산)이 되는 실제 시각. 남은 운영일이 없으면 null."""
 
 
 class EventInfo(Schema):

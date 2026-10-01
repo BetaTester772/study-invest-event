@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 
 from fastapi import APIRouter, Response
 from sqlalchemy import select
 
 from ..clock import ScaledClock
-from ..event_calendar import to_kst
+from ..event_calendar import EventCalendar, to_kst
 from ..instruments import BY_CODE, INSTRUMENTS
 from ..models import MarketDay, PriceHistory
-from ..params import INITIAL_CASH, KST, MARKET_CLOSE, MARKET_OPEN
+from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
 from ..services import auth, market, ranking
 from ..services.common import DomainError, current_prices, get_params
 from . import schemas
@@ -26,15 +26,19 @@ async def health() -> dict[str, str]:  # I/O 없음 → async(스레드풀이 �
     return {"status": "ok"}
 
 
-def _clock_info(clock: Callable[[], datetime], now: datetime) -> schemas.ClockInfo | None:
-    """테스트 시계면 화면 안내용 실제 시각을 만든다. 실제 시계면 None."""
+def _clock_info(
+    clock: Callable[[], datetime], now: datetime, calendar: EventCalendar
+) -> schemas.ClockInfo | None:
+    """테스트 시계면 화면 안내용 실제 시각을 만든다. 실제 시계면 None.
+
+    다음 공시·마감은 운영일 기준이다(이벤트 전날 18:00처럼 아무 일도 없는 시각은 건너뛴다).
+    """
     if not isinstance(clock, ScaledClock):
         return None
-    local = to_kst(now)
 
-    def next_real(t: time) -> datetime:
-        at = datetime.combine(local.date(), t, KST)
-        return clock.to_real(at if at > local else at + timedelta(days=1))
+    def next_real(t: time) -> datetime | None:
+        at = calendar.next_operating_time(now, t)
+        return None if at is None else clock.to_real(at)
 
     return schemas.ClockInfo(
         scale=clock.scale,
@@ -85,7 +89,7 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
         ),
         initial_cash=INITIAL_CASH,
         daily_buy_limit_ratio=params.daily_buy_limit_ratio,
-        clock=_clock_info(state.clock, now),
+        clock=_clock_info(state.clock, now, cal),
     )
 
 
