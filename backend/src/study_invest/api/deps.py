@@ -38,6 +38,8 @@ class AppState:
     calendar: EventCalendar
     clock: Callable[[], datetime]
     rng: random.Random
+    time_scale: float = 1.0
+    """clock의 배속. 스케줄러는 다음 배치까지 남은 시계 초를 이 값으로 나눠 실제로 기다린다."""
     cpu_executor: Executor | None = field(default=None)
     """CPU 작업(시뮬레이터)용 프로세스 풀. None이면 스레드로 실행한다."""
 

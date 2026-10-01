@@ -19,6 +19,7 @@ function event(
     certification: { cutoff: '23:59', target_date: '2026-10-08', reward_coin_quantity: 1 },
     initial_cash: 1000000,
     daily_buy_limit_ratio: 0.4,
+    clock: null,
     ...rest,
     market: {
       is_open: true,

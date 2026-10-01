@@ -3,8 +3,10 @@ import {
   direction,
   formatBytes,
   formatChange,
+  formatClockTime,
   formatDateTime,
   formatDay,
+  formatDayLength,
   formatDayShort,
   formatNumber,
   formatPercent,
@@ -80,6 +82,21 @@ describe('misc formatters', () => {
     expect(formatDateTime('2026-10-06T09:05:00+09:00')).toBe('10/6 09:05');
     expect(formatDateTime('2026-10-06T00:30:00Z')).toBe('10/6 09:30');
     expect(formatDateTime(null)).toBe('—');
+  });
+});
+
+describe('test clock', () => {
+  it('formats real times in KST with seconds', () => {
+    expect(formatClockTime('2026-10-01T13:22:30+09:00')).toBe('13:22:30');
+    expect(formatClockTime('2026-10-01T15:00:05Z')).toBe('00:00:05');
+  });
+
+  it('describes how long one event day takes', () => {
+    expect(formatDayLength(24)).toBe('1시간');
+    expect(formatDayLength(12)).toBe('2시간');
+    expect(formatDayLength(48)).toBe('30분');
+    expect(formatDayLength(100)).toBe('14.4분');
+    expect(formatDayLength(1)).toBe('24시간');
   });
 });
 

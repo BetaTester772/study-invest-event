@@ -70,6 +70,9 @@ services:
       # 비우면 규격서 기간(2026-10-06 ~ 10-16). 테스트·QA 서버에서만 지정한다.
       STUDY_INVEST_EVENT_START: ${STUDY_INVEST_EVENT_START:-}
       STUDY_INVEST_EVENT_END: ${STUDY_INVEST_EVENT_END:-}
+      # 비우면 실제 시계. 테스트·QA 서버에서만 지정한다(24 = 실제 1시간이 이벤트 하루).
+      STUDY_INVEST_TIME_SCALE: ${STUDY_INVEST_TIME_SCALE:-}
+      STUDY_INVEST_TIME_ORIGIN: ${STUDY_INVEST_TIME_ORIGIN:-}
       STUDY_INVEST_UPLOAD_DIR: /data/uploads
       TZ: Asia/Seoul
     volumes:

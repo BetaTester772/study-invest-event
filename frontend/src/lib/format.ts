@@ -116,6 +116,31 @@ export function formatDateTime(iso: string | null | undefined): string {
   return `${parts.month}/${parts.day} ${hour}:${parts.minute}`;
 }
 
+const clockTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+});
+
+/** ISO 8601 → `13:22:30` in KST. */
+export function formatClockTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const parts = Object.fromEntries(clockTimeFormatter.formatToParts(d).map((p) => [p.type, p.value]));
+  const hour = parts.hour === '24' ? '00' : parts.hour;
+  return `${hour}:${parts.minute}:${parts.second}`;
+}
+
+/** Real length of one event day under a test clock: 24 → `1시간`, 48 → `30분`. */
+export function formatDayLength(scale: number): string {
+  const minutes = (24 * 60) / scale;
+  if (minutes >= 60 && Number.isInteger(minutes / 60)) return `${minutes / 60}시간`;
+  if (Number.isInteger(minutes)) return `${minutes}분`;
+  return `${minutes.toFixed(1)}분`;
+}
+
 /** Bytes → `1.2MB` */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;

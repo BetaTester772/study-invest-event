@@ -1,6 +1,7 @@
 import { Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { RequireAuth } from './auth/RequireAuth';
+import { TestClockBanner } from './components/app/TestClockBanner';
 import {
   AppShell,
   Button,
@@ -92,6 +93,7 @@ function Shell() {
         </Stack>
       }
     >
+      <TestClockBanner />
       <Routes>
         <Route path="/" element={<MarketPage />} />
         <Route path="/instruments/:code" element={<InstrumentPage />} />
