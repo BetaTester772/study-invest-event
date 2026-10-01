@@ -14,9 +14,11 @@ from fastapi.testclient import TestClient
 
 from study_invest.api import app as app_module
 from study_invest.api.app import create_app
+from study_invest.api.routes_public import _clock_info
 from study_invest.clock import ScaledClock, system_now
 from study_invest.config import Settings
 from study_invest.db import Base
+from study_invest.event_calendar import EventCalendar
 from study_invest.params import EVENT_END, EVENT_START, KST
 
 
@@ -222,3 +224,46 @@ def test_scheduler_waits_real_seconds_under_scaled_clock(monkeypatch: pytest.Mon
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(app_module._scheduler(state))  # type: ignore[arg-type]
     assert slept == [pytest.approx(60 / 24 + app_module.BATCH_WAKE_DELAY)]
+
+
+QA_END = date(2026, 10, 4)
+
+
+@pytest.mark.parametrize(
+    ("virtual", "t", "expected"),
+    [
+        # 전날 17:00 → 전날 18:00은 운영일이 아니므로 첫날 18:00
+        (kst(QA_START - timedelta(days=1), time(17, 0)), time(18, 0), kst(QA_START, time(18, 0))),
+        (kst(QA_START, time(8, 0)), time(9, 0), kst(QA_START, time(9, 0))),
+        (kst(QA_START, time(9, 0)), time(9, 0), kst(QA_START + timedelta(days=1), time(9, 0))),
+        (kst(QA_END, time(10, 0)), time(18, 0), kst(QA_END, time(18, 0))),  # 마지막 날 마감
+        (kst(QA_END, time(10, 0)), time(9, 0), None),  # 다음 공시 없음
+        (kst(QA_END, time(19, 0)), time(18, 0), None),
+    ],
+)
+def test_next_operating_time(virtual: datetime, t: time, expected: datetime | None) -> None:
+    assert EventCalendar(QA_START, QA_END).next_operating_time(virtual, t) == expected
+
+
+@pytest.mark.parametrize(
+    ("real_elapsed", "next_open", "next_close"),
+    [
+        # 시작 30분 전(전날 12:00): 전날 18:00은 건너뛰고 첫날 공시·마감
+        (-timedelta(minutes=30), timedelta(minutes=22, seconds=30), timedelta(minutes=45)),
+        # 첫날 10:00(장중): 오늘 마감이 먼저, 공시는 다음 날
+        (timedelta(minutes=25), timedelta(hours=1, minutes=22, seconds=30), timedelta(minutes=45)),
+        # 마지막 날(10/4) 10:00: 마감만 남음
+        (timedelta(hours=10, minutes=25), None, timedelta(hours=10, minutes=45)),
+        # 종료 후
+        (timedelta(hours=11, minutes=1), None, None),
+    ],
+)
+def test_clock_info_follows_operating_days(
+    real_elapsed: timedelta, next_open: timedelta | None, next_close: timedelta | None
+) -> None:
+    clock = ScaledClock(ORIGIN, kst(QA_START, time(0)), 24, source=FakeReal(ORIGIN + real_elapsed))
+    info = _clock_info(clock, clock(), EventCalendar(QA_START, QA_END))
+    assert info is not None
+    assert info.real_now == ORIGIN + real_elapsed
+    assert info.next_open_at == (None if next_open is None else ORIGIN + next_open)
+    assert info.next_close_at == (None if next_close is None else ORIGIN + next_close)

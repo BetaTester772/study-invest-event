@@ -150,8 +150,8 @@ interface EventInfo {
   clock: {                       // 테스트 시계(STUDY_INVEST_TIME_*)일 때만. 운영(실제 시계)은 null
     scale: number;               // 24면 실제 1시간이 이벤트 하루
     real_now: string;            // 실제 시각. 위 now는 테스트 시계 시각
-    next_open_at: string;        // 다음 09:00이 되는 실제 시각
-    next_close_at: string;       // 다음 18:00이 되는 실제 시각
+    next_open_at: string | null;   // 다음 운영일 09:00이 되는 실제 시각. 남은 운영일이 없으면 null
+    next_close_at: string | null;  // 다음 운영일 18:00이 되는 실제 시각. 남은 운영일이 없으면 null
   } | null;
 }
 

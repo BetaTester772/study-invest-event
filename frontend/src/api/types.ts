@@ -159,10 +159,10 @@ export interface ClockInfo {
   /** 24 → one real hour is one event day. */
   scale: number;
   real_now: string;
-  /** Real time of the next 09:00 (open). */
-  next_open_at: string;
-  /** Real time of the next 18:00 (close & settlement). */
-  next_close_at: string;
+  /** Real time of the next operating day's 09:00 (open). `null` when none is left. */
+  next_open_at: string | null;
+  /** Real time of the next operating day's 18:00 (close & settlement). `null` when none is left. */
+  next_close_at: string | null;
 }
 
 export interface RankingEntry {

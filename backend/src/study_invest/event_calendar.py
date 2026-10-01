@@ -70,6 +70,12 @@ class EventCalendar:
             return None
         return (day - self.start).days + 1
 
+    def next_operating_time(self, at: datetime, t: time) -> datetime | None:
+        """at 뒤에 처음 오는 운영일의 t 시각(KST). 이벤트 기간에 더 없으면 None."""
+        local = to_kst(at)
+        day = max(local.date() + timedelta(days=0 if local.time() < t else 1), self.start)
+        return datetime.combine(day, t, KST) if day <= self.end else None
+
     def is_market_open(self, at: datetime) -> bool:
         """주문 접수 가능 여부. 접수 시간은 [09:00, 18:00)이며 18:00 정각부터는 마감이다."""
         local = to_kst(at)
