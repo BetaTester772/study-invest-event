@@ -52,6 +52,7 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
     md = s.get(MarketDay, today)
     day_opened = md is not None
     day_settled = md is not None and md.settled_at is not None
+    calm_rounds = min(params.coin_calm_rounds, cal.total_rounds)
     return schemas.EventInfo(
         start=cal.start,
         end=cal.end,
@@ -71,7 +72,16 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
         certification=schemas.CertificationInfo(
             cutoff=params.certification_cutoff.strftime("%H:%M"),
             target_date=cal.certification_target_date(now, params.certification_cutoff),
-            reward_coin_quantity=params.reward_coin_quantity,
+            reward_cash=params.reward_cash,
+        ),
+        coin=schemas.CoinInfo(
+            cap=params.coin_cap,
+            floor=params.coin_floor,
+            calm_rounds=calm_rounds,
+            # n회차 정산은 n+1번째 운영일 시작가에 반영된다
+            calm_until=cal.operating_days[calm_rounds] if calm_rounds else None,
+            calm_cap=params.coin_calm_cap,
+            calm_floor=params.coin_calm_floor,
         ),
         initial_cash=INITIAL_CASH,
         daily_buy_limit_ratio=params.daily_buy_limit_ratio,
@@ -133,7 +143,10 @@ def get_ranking(s: SessionDep, now: NowDep, me: OptionalMeDep) -> schemas.Rankin
                 rank=e.rank,
                 nickname=e.nickname,
                 total_assets=e.total_assets,
+                principal=e.principal,
+                profit=e.profit,
                 return_rate=e.return_rate,
+                return_rank=e.return_rank,
                 certified_days=e.certified_days,
                 streak=e.streak,
                 is_me=me is not None and me.id == e.participant_id,

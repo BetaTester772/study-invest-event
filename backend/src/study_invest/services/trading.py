@@ -27,7 +27,9 @@ from .common import (
     lock_market_day,
     lock_participant,
     prices_on,
+    rewards_received,
     total_assets,
+    valuate,
 )
 
 MAX_QUANTITY = QUANTITY_MAX
@@ -155,7 +157,14 @@ class PortfolioView:
     holdings_value: int
     total_assets: int
     initial_cash: int
+    rewards_received: int
+    """지금까지 받은 인증 보상 현금 합계."""
+    principal: int
+    """투입 원금 = 시드 + 받은 인증 보상."""
+    profit: int
+    """투자 손익 = 총자산 − 투입 원금."""
     return_rate: float
+    """투자 손익 / 투입 원금."""
     day: date | None
     limit_ratio: float
     limit_amount: int
@@ -187,17 +196,21 @@ def portfolio(
                 profit_rate=float(Fraction(value - h.cost, h.cost)) if h.cost else None,
             )
         )
-    total = total_assets(participant, prices)
-    limit = buy_limit_amount(total, params)
+    rewards = rewards_received(s, participant.id).get(participant.id, 0)
+    valuation = valuate(participant, prices, rewards)
+    limit = buy_limit_amount(valuation.total_assets, params)
     today = to_kst(now).date()
     spent = bought_today(s, participant.id, today) if day == today else {}
     return PortfolioView(
         cash=participant.cash,
         holdings=views,
         holdings_value=sum(v.value for v in views),
-        total_assets=total,
+        total_assets=valuation.total_assets,
         initial_cash=INITIAL_CASH,
-        return_rate=float(Fraction(total - INITIAL_CASH, INITIAL_CASH)),
+        rewards_received=rewards,
+        principal=valuation.principal,
+        profit=valuation.profit,
+        return_rate=float(valuation.return_rate),
         day=day,
         limit_ratio=params.daily_buy_limit_ratio,
         limit_amount=limit,

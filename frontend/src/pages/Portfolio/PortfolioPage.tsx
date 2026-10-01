@@ -125,33 +125,44 @@ export function PortfolioPage() {
             <Skeleton lines={3} height="1.5rem" />
           </Card>
         ) : (
-          <StatGroup>
-            <Stat
-              emphasis
-              label="총자산"
-              value={<Money value={p.total_assets} />}
-              sub={
-                <>
-                  시작 금액 <Money value={p.initial_cash} /> 대비 <PriceChange rate={p.return_rate} />
-                </>
-              }
-            />
-            <Stat label="현금" value={<Money value={p.cash} />} sub="주문에 바로 쓸 수 있어요" />
-            <Stat
-              label="평가손익"
-              value={<Money value={totalProfit} sign colorize />}
-              sub={
-                <>
-                  보유 평가금액 <Money value={p.holdings_value} />
-                </>
-              }
-            />
-            <Stat
-              label="수익률"
-              value={<Percent value={p.return_rate} sign colorize />}
-              sub="총자산 기준, 랭킹 순서와 같아요"
-            />
-          </StatGroup>
+          <Stack gap={3}>
+            <StatGroup>
+              <Stat
+                emphasis
+                label="총자산"
+                value={<Money value={p.total_assets} />}
+                sub={
+                  <>
+                    투입 원금 <Money value={p.principal} /> 대비 <PriceChange rate={p.return_rate} />
+                  </>
+                }
+              />
+              <Stat label="현금" value={<Money value={p.cash} />} sub="주문에 바로 쓸 수 있어요" />
+              <Stat
+                label="평가손익"
+                value={<Money value={totalProfit} sign colorize />}
+                sub={
+                  <>
+                    보유 평가금액 <Money value={p.holdings_value} />
+                  </>
+                }
+              />
+              <Stat
+                label="수익률"
+                value={<Percent value={p.return_rate} sign colorize />}
+                sub={
+                  <>
+                    투자 손익 <Money value={p.profit} sign colorize />
+                  </>
+                }
+              />
+            </StatGroup>
+            <Text size="sm" tone="muted">
+              투입 원금 <Money value={p.principal} />은 시드 <Money value={p.initial_cash} />에 지금까지 받은 인증 보상{' '}
+              <Money value={p.rewards_received} />을 더한 금액이에요. 수익률은 이 원금 대비 손익이라 인증 보상은 손익에
+              들어가지 않아요.
+            </Text>
+          </Stack>
         )}
 
         <Card title="보유 종목" padding={p && p.holdings.length === 0 ? 'md' : 'none'}>
@@ -159,7 +170,7 @@ export function PortfolioPage() {
             <EmptyState
               compact
               title="아직 가진 종목이 없어요"
-              description="시세판에서 종목을 골라 첫 주문을 넣어 보세요. 공부를 인증하면 병더리움도 받아요."
+              description="시세판에서 종목을 골라 첫 주문을 넣어 보세요. 공부를 인증하면 투자금도 더 받아요."
               action={<LinkButton to="/">시세판에서 종목 고르기</LinkButton>}
             />
           ) : (

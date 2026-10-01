@@ -209,7 +209,8 @@ class StudyCertification(Base):
     submitted_at: Mapped[datetime] = mapped_column(AwareDateTime())
     reviewed_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
     rewarded_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
-    reward_quantity: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reward_cash: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    """지급한 보상 현금(원). 참가자의 투입 원금(수익률의 분모)에 더해진다."""
 
     participant: Mapped[Participant] = relationship()
 

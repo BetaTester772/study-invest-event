@@ -1,16 +1,26 @@
-"""서비스 공용: 도메인 오류, 파라미터 조회, 감사 로그, 가격 조회."""
+"""서비스 공용: 도메인 오류, 파라미터 조회, 감사 로그, 가격 조회, 자산 평가."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
+from fractions import Fraction
 from typing import Any
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..instruments import INSTRUMENTS
-from ..models import AuditLog, Holding, MarketDay, ParamsRecord, Participant, PriceHistory
-from ..params import EventParams
+from ..models import (
+    AuditLog,
+    Holding,
+    MarketDay,
+    ParamsRecord,
+    Participant,
+    PriceHistory,
+    StudyCertification,
+)
+from ..params import INITIAL_CASH, EventParams
 
 
 class DomainError(Exception):
@@ -142,3 +152,46 @@ def current_prices(s: Session) -> tuple[date | None, dict[str, int]]:
 
 def total_assets(participant: Participant, prices: dict[str, int]) -> int:
     return participant.cash + sum(h.quantity * prices[h.code] for h in participant.holdings)
+
+
+# --- 자산 평가: 투입 원금과 수익률 --------------------------------------------------
+
+
+def rewards_received(s: Session, participant_id: int | None = None) -> dict[int, int]:
+    """참가자별로 지금까지 받은 인증 보상 현금 합계(원). 받은 적 없는 참가자는 빠진다."""
+    query = (
+        select(StudyCertification.participant_id, func.sum(StudyCertification.reward_cash))
+        .where(StudyCertification.reward_cash.is_not(None))
+        .group_by(StudyCertification.participant_id)
+    )
+    if participant_id is not None:
+        query = query.where(StudyCertification.participant_id == participant_id)
+    return {pid: int(total or 0) for pid, total in s.execute(query)}
+
+
+@dataclass(frozen=True)
+class Valuation:
+    """참가자 평가. 수익률은 각자의 투입 원금(시드 + 받은 인증 보상) 대비 손익이다.
+
+    인증 보상은 투자로 번 돈이 아니므로 손익이 아니라 원금에 넣는다. 그래서 보상을 받았다고
+    수익률이 오르지 않고, 인증하지 않았다는 이유만으로 수익률이 낮아지지도 않는다. 단순
+    수익률이라 받은 보상을 투자하지 않고 두면 수익률이 0%에 가까워진다.
+    """
+
+    total_assets: int
+    principal: int
+
+    @property
+    def profit(self) -> int:
+        """투자 손익 = 총자산 − 투입 원금(실현·미실현 손익 합)."""
+        return self.total_assets - self.principal
+
+    @property
+    def return_rate(self) -> Fraction:
+        """수익률 = 투자 손익 / 투입 원금. 순위·동점 비교를 위해 정확한 유리수로 둔다."""
+        return Fraction(self.profit, self.principal)
+
+
+def valuate(participant: Participant, prices: dict[str, int], rewards: int) -> Valuation:
+    """rewards: 그 참가자가 받은 인증 보상 합계(rewards_received)."""
+    return Valuation(total_assets(participant, prices), INITIAL_CASH + rewards)

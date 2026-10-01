@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, time
 from typing import Any
 
+import pytest
 from conftest import PNG, Clock, StubRandom, open_day, order, register, settle_day
 from fastapi.testclient import TestClient
 
@@ -143,13 +144,13 @@ class TestSettlement:
         assert client.get("/api/instruments").json()[0]["day"] == D1.isoformat()
         order(client, h, "SAMSU", "buy", 5)  # 375,000원
         order(client, h, "SAMSU", "sell", 5)  # 매도는 집계하지 않는다
-        rng.queue = [0.1, 0.5]  # 코인 상승일, X=0.5 → +37.5%
+        rng.queue = [0.1, 1.0]  # 코인 상승일, X=1 → 1회차는 안정기라 +30%(평소면 +300%)
         result = settle_day(client, clock, D1)
         # B′ = 5,375,000 / 5,000,000 ×3, 총 20,375,000 → r_SAMSU ≈ 1.055
         assert result["detail"]["round"] == 1
         new = result["detail"]["new_prices"]
         assert new["SAMSU"] == 73_760  # 75,000 × (1 − 0.3·0.0552) → 73,760
-        assert new["LB"] > 14_000 and new["BYUNG"] == 343_750
+        assert new["LB"] > 14_000 and new["BYUNG"] == 325_000
         # 공시 전에는 D1 가격이 보인다
         assert prices(client)["SAMSU"] == 75_000
         open_day(client, clock, D2)
@@ -158,11 +159,41 @@ class TestSettlement:
         assert samsu["price"] == 73_760 and samsu["previous_price"] == 75_000
         assert samsu["change_rate"] < 0
         hist = client.get("/api/instruments/BYUNG/history").json()
-        assert [x["price"] for x in hist] == [250_000, 343_750]
+        assert [x["price"] for x in hist] == [250_000, 325_000]
         assert hist[1]["source"] == "settlement"
         logs = client.get("/api/admin/settlements", headers=admin).json()
         assert logs[0]["coin"]["p"] == 0.1 and logs[0]["coin"]["direction"] == "up"
+        assert logs[0]["coin"]["calm"] is True
         assert logs[0]["stocks"][0]["buy_amount"] == 375_000
+
+    def test_coin_is_calm_for_first_three_rounds(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        """초반 3회차(10/7~10/9 시작가)는 -10%~+30%, 4회차부터 평소 -50%~+300%."""
+        days = [D1, D2, D3, date(2026, 10, 9)]
+        for d in days:
+            open_day(client, clock, d)
+            rng.queue = [0.1, 1.0]  # 매번 최대 상승
+            settle_day(client, clock, d)
+        hist = client.get("/api/instruments/BYUNG/history").json()
+        assert [x["price"] for x in hist] == [250_000, 325_000, 422_500, 549_250]  # +30% × 3
+        logs = client.get("/api/admin/settlements", headers=admin).json()
+        assert [(x["round"], x["coin"]["calm"], x["coin"]["rate"]) for x in logs] == [
+            (1, True, 0.3),
+            (2, True, 0.3),
+            (3, True, 0.3),
+            (4, False, 3.0),
+        ]
+        assert logs[3]["coin"]["new_price"] == 549_250 * 4  # 10/10 시작가, +300%
+
+    def test_calm_rounds_follow_params(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        client.put("/api/admin/params", json=dict(params, coin_calm_rounds=0), headers=admin)
+        open_day(client, clock, D1)
+        rng.queue = [0.5, 1.0]  # 하락일, X=1
+        assert settle_day(client, clock, D1)["detail"]["new_prices"]["BYUNG"] == 125_000  # -50%
 
     def test_settle_guards(self, client: TestClient, clock: Clock, admin: dict[str, str]) -> None:
         open_day(client, clock, D1)
@@ -261,18 +292,53 @@ class TestCertification:
 
         settle_day(client, clock, D1)
         result = open_day(client, clock, D2)
-        assert result["detail"]["rewards_paid"][0]["quantity"] == 1
+        assert result["detail"]["rewards_paid"][0]["amount"] == 250_000
+        # 현금 25만원(시드의 1/4). 코인은 주지 않는다.
         pf = client.get("/api/me/portfolio", headers=h).json()
-        (coin,) = pf["holdings"]
-        assert (coin["code"], coin["quantity"], coin["cost"]) == ("BYUNG", 1, 0)
-        assert coin["profit_rate"] is None
+        assert (pf["cash"], pf["holdings"], pf["total_assets"]) == (1_250_000, [], 1_250_000)
+        # 보상은 손익이 아니라 원금: 수익률 0%
+        assert (pf["rewards_received"], pf["principal"], pf["profit"]) == (250_000, 1_250_000, 0)
+        assert pf["return_rate"] == 0 and pf["buy_limit"]["limit_amount"] == 500_000
         mine = client.get("/api/me/certifications", headers=h).json()
-        assert mine[0]["reward_quantity"] == 1 and mine[0]["rewarded_at"]
+        assert mine[0]["reward_cash"] == 250_000 and mine[0]["rewarded_at"]
         ranking = client.get("/api/ranking", headers=h).json()["entries"]
         assert ranking[0]["certified_days"] == 1 and ranking[0]["is_me"] is True
+        assert (ranking[0]["principal"], ranking[0]["return_rate"]) == (1_250_000, 0)
+        (person,) = client.get("/api/admin/participants", headers=admin).json()
+        assert (person["principal"], person["return_rate"]) == (1_250_000, 0)
+        # 받은 보상은 그날 바로 주문에 쓸 수 있다
+        assert order(client, h, "SAMSU", "buy", 6)["status"] == "filled"  # 450,000원
         # 두 번째 공시에서 중복 지급하지 않는다
         settle_day(client, clock, D2)
         assert open_day(client, clock, D3)["detail"]["rewards_paid"] == []
+        audit = client.get("/api/admin/audit", headers=admin).json()
+        (paid,) = [a for a in audit if a["action"] == "reward.pay"]
+        assert paid["detail"]["amount"] == 250_000
+
+    def test_reward_follows_params_and_skips_disqualified(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        a, b = register(client, "alice"), register(client, "bob")
+        clock.set(D1, time(12, 0))
+        for h, data in ((a, PNG), (b, PNG + b"x")):
+            cert = self.upload(client, h, data)
+            client.post(
+                f"/api/admin/certifications/{cert['id']}/review",
+                json={"approve": True},
+                headers=admin,
+            )
+        params = client.get("/api/admin/params", headers=admin).json()
+        client.put("/api/admin/params", json=dict(params, reward_cash=100_000), headers=admin)
+        bob = client.get("/api/me", headers=b).json()["id"]
+        client.patch(
+            f"/api/admin/participants/{bob}", json={"status": "disqualified"}, headers=admin
+        )
+        open_day(client, clock, D1)
+        settle_day(client, clock, D1)
+        paid = open_day(client, clock, D2)["detail"]["rewards_paid"]
+        assert [p["amount"] for p in paid] == [100_000]  # 지급 시점 파라미터, 실격자 제외
+        assert client.get("/api/me/portfolio", headers=a).json()["cash"] == 1_100_000
+        assert client.get("/api/me/portfolio", headers=b).json()["cash"] == 1_000_000
 
     def test_cutoff_moves_to_next_day(
         self, client: TestClient, clock: Clock, admin: dict[str, str]
@@ -347,10 +413,80 @@ class TestRankingAndAdmin:
         assert [e["nickname"] for e in entries] == ["bob", "carol", "alice"]
         assert entries[0]["total_assets"] > 1_000_000 > entries[2]["total_assets"]
         assert [e["rank"] for e in entries] == [1, 2, 3]
+        # 보상이 없으면 수익률 순서도 총자산 순서와 같다
+        assert [e["return_rank"] for e in entries] == [1, 2, 3]
+
+    def test_return_rate_is_on_own_principal(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        """수익률 = (총자산 − 시드 − 받은 보상) / (시드 + 받은 보상). 보상은 손익이 아니다."""
+        a, b = register(client, "alice"), register(client, "bob")
+        register(client, "carol")  # 거래 없음: 수익률 0%
+        clock.set(D1, time(8, 0))
+        cert = TestCertification().upload(client, a)
+        client.post(
+            f"/api/admin/certifications/{cert['id']}/review", json={"approve": True}, headers=admin
+        )
+        open_day(client, clock, D1)
+        order(client, a, "SKLOW", "buy", 2)  # 둘 다 340,000원어치 같은 종목 → 같은 손실
+        order(client, b, "SKLOW", "buy", 2)
+        rng.queue = [0.9, 0.0]  # 코인 0%
+        settle_day(client, clock, D1)
+        open_day(client, clock, D2)  # alice는 보상 250,000원을 받는다
+        sklow = prices(client)["SKLOW"]
+        loss = 2 * (170_000 - sklow)
+        assert loss > 0
+        entries = {e["nickname"]: e for e in client.get("/api/ranking").json()["entries"]}
+        alice, bob, carol = entries["alice"], entries["bob"], entries["carol"]
+        assert (alice["principal"], alice["profit"]) == (1_250_000, -loss)
+        assert (bob["principal"], bob["profit"]) == (1_000_000, -loss)
+        assert alice["return_rate"] == pytest.approx(-loss / 1_250_000)
+        assert bob["return_rate"] == pytest.approx(-loss / 1_000_000)
+        # 총자산은 보상을 받은 alice가 1위, 수익률은 같은 손실을 더 작은 원금으로 낸 bob이 가장 낮다
+        assert (alice["rank"], bob["rank"], carol["rank"]) == (1, 3, 2)
+        assert (carol["return_rank"], alice["return_rank"], bob["return_rank"]) == (1, 2, 3)
+        # 공개 랭킹은 닉네임과 아래 값만 보여 준다(05 §4, 닉네임만 공개)
+        assert set(alice) == {
+            "rank",
+            "nickname",
+            "total_assets",
+            "principal",
+            "profit",
+            "return_rate",
+            "return_rank",
+            "certified_days",
+            "streak",
+            "is_me",
+        }
+        # 내 자산 화면도 같은 수익률
+        assert client.get("/api/me/portfolio", headers=a).json()["return_rate"] == pytest.approx(
+            alice["return_rate"]
+        )
+
+    def test_return_rank_ties_are_shared(
+        self, client: TestClient, clock: Clock, rng: StubRandom
+    ) -> None:
+        a, b = register(client, "alice"), register(client, "bob")
+        register(client, "carol")
+        open_day(client, clock, D1)
+        order(client, a, "SKLOW", "buy", 2)
+        order(client, b, "SKLOW", "buy", 2)
+        rng.queue = [0.9, 0.0]
+        settle_day(client, clock, D1)
+        open_day(client, clock, D2)
+        entries = {e["nickname"]: e for e in client.get("/api/ranking").json()["entries"]}
+        # 같은 원금으로 같은 손실을 낸 alice·bob은 수익률 공동 2위
+        assert {n: e["return_rank"] for n, e in entries.items()} == {
+            "carol": 1,
+            "alice": 2,
+            "bob": 2,
+        }
 
     def test_tied_rank(self, client: TestClient) -> None:
         register(client, "alice"), register(client, "bob")
-        assert [e["rank"] for e in client.get("/api/ranking").json()["entries"]] == [1, 1]
+        entries = client.get("/api/ranking").json()["entries"]
+        assert [e["rank"] for e in entries] == [1, 1]
+        assert [e["return_rank"] for e in entries] == [1, 1]
 
     def test_admin_requires_key(self, client: TestClient) -> None:
         assert client.get("/api/admin/params").status_code == 401
@@ -358,17 +494,25 @@ class TestRankingAndAdmin:
 
     def test_params_validation_and_audit(self, client: TestClient, admin: dict[str, str]) -> None:
         params = client.get("/api/admin/params", headers=admin).json()
-        assert params["reward_coin_quantity"] == 1
+        assert params["reward_cash"] == 250_000
+        assert (params["coin_calm_rounds"], params["coin_calm_cap"], params["coin_calm_floor"]) == (
+            3,
+            0.3,
+            -0.1,
+        )
         bad = dict(params, coin_p_up=1.5)
         assert client.put("/api/admin/params", json=bad, headers=admin).status_code == 422
-        ok = dict(params, reward_coin_quantity=2)
-        assert (
-            client.put("/api/admin/params", json=ok, headers=admin).json()["reward_coin_quantity"]
-            == 2
-        )
+        bad = dict(params, coin_calm_floor=0.1)
+        assert client.put("/api/admin/params", json=bad, headers=admin).status_code == 422
+        ok = dict(params, reward_cash=300_000, coin_calm_rounds=4)
+        saved = client.put("/api/admin/params", json=ok, headers=admin).json()
+        assert (saved["reward_cash"], saved["coin_calm_rounds"]) == (300_000, 4)
         audit = client.get("/api/admin/audit", headers=admin).json()
         assert audit[0]["action"] == "params.update"
-        assert audit[0]["detail"]["changed"] == {"reward_coin_quantity": [1, 2]}
+        assert audit[0]["detail"]["changed"] == {
+            "coin_calm_rounds": [3, 4],
+            "reward_cash": [250_000, 300_000],
+        }
 
     def test_simulate_endpoint(self, client: TestClient, admin: dict[str, str]) -> None:
         r = client.post("/api/admin/simulate", json={"paths": 500, "seed": 3}, headers=admin)
@@ -382,4 +526,30 @@ class TestRankingAndAdmin:
         assert info["total_rounds"] == 10 and len(info["operating_days"]) == 11
         assert info["now"].endswith("+09:00")
         assert info["market"]["round"] == 1 and info["market"]["day_opened"] is False
-        assert info["certification"]["reward_coin_quantity"] == 1
+        assert info["certification"]["reward_cash"] == 250_000
+        assert info["coin"] == {
+            "cap": 3.0,
+            "floor": -0.5,
+            "calm_rounds": 3,
+            "calm_until": "2026-10-09",  # 3회차(10/8 정산)가 반영되는 날
+            "calm_cap": 0.3,
+            "calm_floor": -0.1,
+        }
+
+    @pytest.mark.parametrize(
+        ("calm_rounds", "shown", "until"), [(0, 0, None), (1, 1, "2026-10-07"), (50, 10, LAST)]
+    )
+    def test_event_coin_calm_info(
+        self,
+        client: TestClient,
+        admin: dict[str, str],
+        calm_rounds: int,
+        shown: int,
+        until: date | str | None,
+    ) -> None:
+        params = dict(client.get("/api/admin/params", headers=admin).json())
+        params["coin_calm_rounds"] = calm_rounds
+        assert client.put("/api/admin/params", json=params, headers=admin).status_code == 200
+        coin = client.get("/api/event").json()["coin"]
+        expected = until.isoformat() if isinstance(until, date) else until
+        assert (coin["calm_rounds"], coin["calm_until"]) == (shown, expected)

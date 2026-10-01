@@ -87,7 +87,12 @@ function SettlementCard({ log }: { log: SettlementLog }) {
             items={[
               {
                 label: '병더리움 방향',
-                value: <Badge tone={log.coin.direction}>{log.coin.direction === 'up' ? '상승일' : '하락일'}</Badge>,
+                value: (
+                  <Stack direction="row" gap={2} justify="end" wrap>
+                    <Badge tone={log.coin.direction}>{log.coin.direction === 'up' ? '상승일' : '하락일'}</Badge>
+                    {log.coin.calm && <Badge tone="info">초반 안정기</Badge>}
+                  </Stack>
+                ),
               },
               { label: '확률 추첨 p', value: formatNumber(log.coin.p, 4) },
               { label: '크기 추첨 X', value: formatNumber(log.coin.x, 4) },

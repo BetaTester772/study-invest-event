@@ -4,11 +4,11 @@ import { Money, PriceChange, Skeleton } from '../ui';
 import { KindBadge } from './badges';
 import styles from './InstrumentBoard.module.css';
 
-const NOTES: Record<string, string> = {
-  BYUNG: '공부 인증으로 받는 코인. 매일 확률로 크게 오르거나 내려요.',
+const DEFAULT_NOTES: Record<string, string> = {
+  BYUNG: '매일 확률로 크게 오르거나 내려요.',
 };
 
-function Row({ ins }: { ins: Instrument }) {
+function Row({ ins, note }: { ins: Instrument; note?: string }) {
   return (
     <li>
       <Link to={`/instruments/${ins.code}`} className={styles.row}>
@@ -18,7 +18,7 @@ function Row({ ins }: { ins: Instrument }) {
         </span>
         <span className={styles.kind}>
           <KindBadge kind={ins.kind} />
-          {NOTES[ins.code] && <span className={styles.note}>{NOTES[ins.code]}</span>}
+          {note && <span className={styles.note}>{note}</span>}
         </span>
         <span className={styles.price}>
           <Money value={ins.price} display="md" />
@@ -32,10 +32,18 @@ function Row({ ins }: { ins: Instrument }) {
 }
 
 /**
- * The quote board: stocks as one list, the reward coin set apart below.
- * Each whole row is a link to the instrument page.
+ * The quote board: stocks as one list, the coin set apart below.
+ * Each whole row is a link to the instrument page. `notes` maps code → short note.
  */
-export function InstrumentBoard({ instruments, loading }: { instruments?: Instrument[]; loading?: boolean }) {
+export function InstrumentBoard({
+  instruments,
+  loading,
+  notes = DEFAULT_NOTES,
+}: {
+  instruments?: Instrument[];
+  loading?: boolean;
+  notes?: Record<string, string>;
+}) {
   if (loading && !instruments) {
     return (
       <div className={styles.board} aria-busy="true">
@@ -63,13 +71,13 @@ export function InstrumentBoard({ instruments, loading }: { instruments?: Instru
       </div>
       <ul className={styles.list} aria-label="주식">
         {stocks.map((ins) => (
-          <Row key={ins.code} ins={ins} />
+          <Row key={ins.code} ins={ins} note={notes[ins.code]} />
         ))}
       </ul>
       {coins.length > 0 && (
         <ul className={`${styles.list} ${styles.coins}`} aria-label="코인">
           {coins.map((ins) => (
-            <Row key={ins.code} ins={ins} />
+            <Row key={ins.code} ins={ins} note={notes[ins.code]} />
           ))}
         </ul>
       )}

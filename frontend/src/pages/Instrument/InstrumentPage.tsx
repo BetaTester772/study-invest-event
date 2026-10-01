@@ -20,6 +20,7 @@ import {
   Text,
   type Column,
 } from '../../components/ui';
+import { describeCoinRange } from '../../lib/coin';
 import { formatDay, formatDayShort } from '../../lib/format';
 import { OrderPanel } from './OrderPanel';
 
@@ -111,7 +112,14 @@ export function InstrumentPage() {
       />
       <Grid sidebar="minmax(18rem, 24rem)" gap={6} sideFirstOnMobile>
         <Stack gap={6}>
-          <Card title="가격 이력" description="매일 18:00 정산으로 다음 운영일 시작가가 정해져요.">
+          <Card
+            title="가격 이력"
+            description={`매일 18:00 정산으로 다음 운영일 시작가가 정해져요.${
+              instrument?.kind === 'coin' && event.data
+                ? ` ${describeCoinRange(event.data.coin, event.data.today)}`
+                : ''
+            }`}
+          >
             {history.error ? (
               <LoadError error={history.error} onRetry={history.refetch} what="가격 이력" />
             ) : history.loading ? (

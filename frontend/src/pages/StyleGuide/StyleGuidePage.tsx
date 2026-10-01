@@ -150,7 +150,7 @@ export function StyleGuidePage() {
               도현체는 제목과 큰 가격에 씁니다
             </Text>
             <Text>
-              본문은 IBM Plex Sans KR입니다. 오늘 공부를 인증하면 <Highlight>다음 운영일 09:00</Highlight>에 병더리움을
+              본문은 IBM Plex Sans KR입니다. 오늘 공부를 인증하면 <Highlight>다음 운영일 09:00</Highlight>에 투자금을
               받아요.
             </Text>
             <Text tone="muted" size="sm">

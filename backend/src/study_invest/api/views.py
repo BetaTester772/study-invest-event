@@ -32,7 +32,7 @@ def certification(c: StudyCertification) -> schemas.Certification:
         submitted_at=c.submitted_at,
         reviewed_at=c.reviewed_at,
         rewarded_at=c.rewarded_at,
-        reward_quantity=c.reward_quantity,
+        reward_cash=c.reward_cash,
         image_url=f"/api/me/certifications/{c.id}/image" if c.image_path else None,
     )
 
@@ -56,6 +56,9 @@ def portfolio(p: PortfolioView) -> schemas.Portfolio:
         holdings_value=p.holdings_value,
         total_assets=p.total_assets,
         initial_cash=p.initial_cash,
+        rewards_received=p.rewards_received,
+        principal=p.principal,
+        profit=p.profit,
         return_rate=p.return_rate,
         day=p.day,
         buy_limit=schemas.BuyLimit(

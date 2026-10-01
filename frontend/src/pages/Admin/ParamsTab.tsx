@@ -31,6 +31,27 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
     group: 'coin',
   },
   {
+    key: 'coin_calm_rounds',
+    label: '초반 안정기 회차',
+    hint: '1회차부터 이 회차까지 좁은 변동폭. 0이면 끔. 기본 3',
+    kind: 'int',
+    group: 'coin',
+  },
+  {
+    key: 'coin_calm_cap',
+    label: '안정기 일일 상한',
+    hint: '소수. 0.3 = +30%',
+    kind: 'float',
+    group: 'coin',
+  },
+  {
+    key: 'coin_calm_floor',
+    label: '안정기 일일 하한',
+    hint: '소수. -0.1 = -10%',
+    kind: 'float',
+    group: 'coin',
+  },
+  {
     key: 'stock_sensitivity',
     label: '주식 감도 계수',
     hint: '소수. 0.3 = 쏠림 1배당 ±30%',
@@ -53,9 +74,9 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
     group: 'trade',
   },
   {
-    key: 'reward_coin_quantity',
-    label: '인증 보상(개)',
-    hint: '승인 1건당 지급하는 병더리움 개수',
+    key: 'reward_cash',
+    label: '인증 보상(원)',
+    hint: '승인 1건당 지급하는 현금. 기본 250000 (시드의 1/4)',
     kind: 'int',
     group: 'trade',
   },
@@ -63,7 +84,12 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
 ];
 
 const GROUPS: { id: string; title: string; description: string }[] = [
-  { id: 'coin', title: '병더리움 가격', description: '매일 18:00 정산에서 코인 변동률을 뽑는 분포예요.' },
+  {
+    id: 'coin',
+    title: '병더리움 가격',
+    description:
+      '매일 18:00 정산에서 코인 변동률을 뽑는 분포예요. 초반 안정기 회차는 평소보다 좁은 안정기 상·하한을 써요.',
+  },
   { id: 'stock', title: '주식 가격', description: '종목별 매수 쏠림을 변동률로 바꾸는 방식이에요.' },
   { id: 'trade', title: '거래와 인증', description: '주문 한도, 인증 보상과 마감이에요.' },
 ];

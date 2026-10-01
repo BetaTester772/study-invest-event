@@ -27,8 +27,9 @@ from ..services.common import (
     audit,
     current_prices,
     get_params,
+    rewards_received,
     set_params,
-    total_assets,
+    valuate,
 )
 from ..services.market import BatchResult
 from ..simulator import run as run_simulation
@@ -39,8 +40,12 @@ router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 
 
 def _admin_participant(
-    p: Participant, prices: dict[str, int], counts: dict[tuple[int, CertStatus], int]
+    p: Participant,
+    prices: dict[str, int],
+    counts: dict[tuple[int, CertStatus], int],
+    rewards: dict[int, int],
 ) -> schemas.AdminParticipant:
+    valuation = valuate(p, prices, rewards.get(p.id, 0))
     return schemas.AdminParticipant(
         id=p.id,
         nickname=p.nickname,
@@ -48,7 +53,9 @@ def _admin_participant(
         joined_at=p.joined_at,
         identity=p.identity,
         cash=p.cash,
-        total_assets=total_assets(p, prices),
+        total_assets=valuation.total_assets,
+        principal=valuation.principal,
+        return_rate=float(valuation.return_rate),
         rejected_certifications=counts.get((p.id, CertStatus.REJECTED), 0),
         approved_certifications=counts.get((p.id, CertStatus.APPROVED), 0),
     )
@@ -67,10 +74,11 @@ def _cert_counts(s: SessionDep) -> dict[tuple[int, CertStatus], int]:
 def participants(s: SessionDep) -> list[schemas.AdminParticipant]:
     _, prices = current_prices(s)
     counts = _cert_counts(s)
+    rewards = rewards_received(s)
     rows = s.scalars(
         select(Participant).options(selectinload(Participant.holdings)).order_by(Participant.id)
     )
-    return [_admin_participant(p, prices, counts) for p in rows]
+    return [_admin_participant(p, prices, counts, rewards) for p in rows]
 
 
 @router.patch("/participants/{participant_id}", response_model=schemas.AdminParticipant)
@@ -93,7 +101,7 @@ def patch_participant(
     )
     s.commit()
     _, prices = current_prices(s)
-    return _admin_participant(p, prices, _cert_counts(s))
+    return _admin_participant(p, prices, _cert_counts(s), rewards_received(s, p.id))
 
 
 @router.get("/certifications", response_model=list[schemas.AdminCertification])

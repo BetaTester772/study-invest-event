@@ -13,10 +13,11 @@ import pytest
 from study_invest.event_calendar import EventCalendar
 from study_invest.instruments import INSTRUMENTS, STOCKS
 from study_invest.money import exact, round_half_up
-from study_invest.params import KST, EventParams
+from study_invest.params import CALM_ROUNDS_MAX, INITIAL_CASH, KST, REWARD_CASH_MAX, EventParams
 from study_invest.pricing import (
     coin_rate,
     draw_coin,
+    is_calm_round,
     next_coin_price,
     next_stock_price,
     settle_stocks,
@@ -106,6 +107,40 @@ class TestCoin:
 
         move = draw_coin(250_000, P, Seq())
         assert (move.p, move.x, move.direction, move.new_price) == (0.1, 1.0, "up", 1_000_000)
+        assert move.calm is False
+
+
+class TestCoinCalmPeriod:
+    """SPEC-COIN-6: 초반 안정기(기본 1~3회차)는 같은 분포 모양에 좁은 상·하한을 쓴다."""
+
+    def test_calm_rounds_from_first_round(self) -> None:
+        assert [is_calm_round(n, P) for n in range(0, 6)] == [False, True, True, True, False, False]
+        assert not any(is_calm_round(n, replace(P, coin_calm_rounds=0)) for n in range(1, 11))
+        assert is_calm_round(4, replace(P, coin_calm_rounds=4))
+
+    def test_calm_bounds(self) -> None:
+        assert coin_rate(0.29, 1.0, P, calm=True) == ("up", 0.3)
+        assert coin_rate(0.30, 1.0, P, calm=True) == ("down", -0.1)
+        assert coin_rate(0.0, 0.5, P, calm=True) == ("up", 0.3 * 0.125)  # X³ 모양 유지
+        assert coin_rate(0.99, 0.5, P, calm=True) == ("down", -0.1 * 0.25)  # X² 모양 유지
+
+    def test_calm_range(self) -> None:
+        rng = random.Random(2)
+        for _ in range(10_000):
+            _, r = coin_rate(rng.random(), rng.random(), P, calm=True)
+            assert -0.1 <= r <= 0.3
+
+    def test_draw_calm(self) -> None:
+        class Seq(random.Random):
+            def __init__(self) -> None:
+                super().__init__()
+                self.values = [0.1, 1.0]
+
+            def random(self) -> float:
+                return self.values.pop(0)
+
+        move = draw_coin(250_000, P, Seq(), calm=True)
+        assert (move.direction, move.rate, move.new_price, move.calm) == ("up", 0.3, 325_000, True)
 
 
 class TestStock:
@@ -217,11 +252,20 @@ class TestParams:
             -0.5,
         )
         assert P.stock_sensitivity == 0.30 and P.daily_buy_limit_ratio == 0.40
-        assert P.reward_coin_quantity == 1
+        assert (P.coin_calm_rounds, P.coin_calm_cap, P.coin_calm_floor) == (3, 0.30, -0.10)
+
+    def test_reward_is_quarter_of_seed(self) -> None:
+        assert P.reward_cash == 250_000 == INITIAL_CASH // 4
 
     def test_roundtrip(self) -> None:
         assert EventParams.from_dict(P.to_dict()) == P
         assert P.to_dict()["certification_cutoff"] == "23:59"
+
+    def test_params_saved_before_v04_still_load(self) -> None:
+        """v0.3까지 저장된 파라미터(reward_coin_quantity 있음, 안정기 없음)도 그대로 읽힌다."""
+        old = {k: v for k, v in P.to_dict().items() if not k.startswith(("coin_calm", "reward"))}
+        loaded = EventParams.from_dict({**old, "reward_coin_quantity": 2})
+        assert loaded == P
 
     @pytest.mark.parametrize(
         "bad",
@@ -230,7 +274,15 @@ class TestParams:
             {"coin_floor": -1.0},
             {"daily_buy_limit_ratio": 0},
             {"stock_min_price": 0},
-            {"reward_coin_quantity": -1},
+            {"reward_cash": -1},
+            {"reward_cash": REWARD_CASH_MAX + 1},
+            {"coin_calm_rounds": -1},
+            {"coin_calm_rounds": CALM_ROUNDS_MAX + 1},
+            {"coin_calm_cap": 0},
+            {"coin_calm_cap": 10.5},
+            {"coin_calm_floor": 0},
+            {"coin_calm_floor": -1.0},
+            {"coin_calm_cap": float("nan")},
         ],
     )
     def test_validation(self, bad: dict[str, Any]) -> None:
