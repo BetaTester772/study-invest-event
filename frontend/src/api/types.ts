@@ -128,6 +128,19 @@ export interface EventInfo {
   certification: { cutoff: string; target_date: string; reward_coin_quantity: number };
   initial_cash: number;
   daily_buy_limit_ratio: number;
+  /** Test clock (QA servers only). `null` on the real clock. */
+  clock: ClockInfo | null;
+}
+
+/** Real-world times for a sped-up test clock. */
+export interface ClockInfo {
+  /** 24 → one real hour is one event day. */
+  scale: number;
+  real_now: string;
+  /** Real time of the next 09:00 (open). */
+  next_open_at: string;
+  /** Real time of the next 18:00 (close & settlement). */
+  next_close_at: string;
 }
 
 export interface RankingEntry {

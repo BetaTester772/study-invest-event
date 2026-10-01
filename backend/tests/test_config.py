@@ -77,6 +77,7 @@ def test_app_uses_configured_event_dates(qa_client: TestClient) -> None:
     assert body["end"] == "2026-10-04"
     assert body["total_rounds"] == 10
     assert body["is_operating_day"] is True
+    assert body["clock"] is None  # 실제 시계(테스트 시계 아님)면 안내 없음
 
 
 # --- 앱 시계 배속(STUDY_INVEST_TIME_SCALE/ORIGIN) ------------------------------------------
@@ -109,6 +110,7 @@ def test_scaled_clock_runs_one_day_per_hour(real_elapsed: timedelta, virtual: da
     real = FakeReal(ORIGIN + real_elapsed)
     clock = ScaledClock(ORIGIN, kst(QA_START, time(0)), 24, source=real)
     assert clock() == virtual
+    assert clock.to_real(virtual) == ORIGIN + real_elapsed
 
 
 def test_time_settings_default_to_real_clock(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -179,6 +181,17 @@ def test_app_follows_scaled_clock(tmp_path: Path) -> None:
             now = datetime.fromisoformat(body["now"])
             assert body["today"] == "2026-09-24"
             assert time(9, 50) <= now.astimezone(KST).time() <= time(10, 30)
+            # 화면 안내: 배속과 다음 18:00(마감)·다음 날 09:00(공시)의 실제 시각
+            clock = body["clock"]
+            real_now = datetime.fromisoformat(clock["real_now"])
+            assert clock["scale"] == 24
+            assert abs((real_now - system_now()).total_seconds()) < 60
+            day1 = settings.time_origin
+            assert day1 is not None
+            assert datetime.fromisoformat(clock["next_close_at"]) == day1 + timedelta(minutes=45)
+            assert datetime.fromisoformat(clock["next_open_at"]) == day1 + timedelta(
+                hours=1, minutes=22, seconds=30
+            )
             # 첫날 공시 → 장 열림
             r = c.post("/api/admin/batch/run-due", headers={"X-Admin-Key": ADMIN_KEY})
             assert r.status_code == 200, r.text

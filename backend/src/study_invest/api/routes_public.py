@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import datetime, time, timedelta
+
 from fastapi import APIRouter, Response
 from sqlalchemy import select
 
+from ..clock import ScaledClock
 from ..event_calendar import to_kst
 from ..instruments import BY_CODE, INSTRUMENTS
 from ..models import MarketDay, PriceHistory
-from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
+from ..params import INITIAL_CASH, KST, MARKET_CLOSE, MARKET_OPEN
 from ..services import auth, market, ranking
 from ..services.common import DomainError, current_prices, get_params
 from . import schemas
@@ -20,6 +24,24 @@ router = APIRouter(prefix="/api")
 @router.get("/health")
 async def health() -> dict[str, str]:  # I/O 없음 → async(스레드풀이 가득 차도 응답)
     return {"status": "ok"}
+
+
+def _clock_info(clock: Callable[[], datetime], now: datetime) -> schemas.ClockInfo | None:
+    """테스트 시계면 화면 안내용 실제 시각을 만든다. 실제 시계면 None."""
+    if not isinstance(clock, ScaledClock):
+        return None
+    local = to_kst(now)
+
+    def next_real(t: time) -> datetime:
+        at = datetime.combine(local.date(), t, KST)
+        return clock.to_real(at if at > local else at + timedelta(days=1))
+
+    return schemas.ClockInfo(
+        scale=clock.scale,
+        real_now=clock.to_real(now),
+        next_open_at=next_real(MARKET_OPEN),
+        next_close_at=next_real(MARKET_CLOSE),
+    )
 
 
 @router.get("/event", response_model=schemas.EventInfo)
@@ -53,6 +75,7 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
         ),
         initial_cash=INITIAL_CASH,
         daily_buy_limit_ratio=params.daily_buy_limit_ratio,
+        clock=_clock_info(state.clock, now),
     )
 
 

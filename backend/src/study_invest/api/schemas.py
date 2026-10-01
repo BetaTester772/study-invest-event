@@ -56,6 +56,18 @@ class CertificationInfo(Schema):
     reward_coin_quantity: int
 
 
+class ClockInfo(Schema):
+    """테스트 시계(STUDY_INVEST_TIME_*) 안내용 실제 시각."""
+
+    scale: float
+    """배속. 24면 실제 1시간이 이벤트 하루."""
+    real_now: datetime
+    next_open_at: datetime
+    """다음 09:00(공시·주문 시작)이 되는 실제 시각."""
+    next_close_at: datetime
+    """다음 18:00(주문 마감·정산)이 되는 실제 시각."""
+
+
 class EventInfo(Schema):
     start: date
     end: date
@@ -68,6 +80,8 @@ class EventInfo(Schema):
     certification: CertificationInfo
     initial_cash: int
     daily_buy_limit_ratio: float
+    clock: ClockInfo | None = None
+    """테스트 시계로 돌 때만 채운다. 실제 시계(운영)면 null."""
 
 
 class Instrument(Schema):

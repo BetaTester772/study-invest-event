@@ -36,3 +36,7 @@ class ScaledClock:
 
     def __call__(self) -> datetime:
         return self.virtual_origin + (self.source() - self.origin) * self.scale
+
+    def to_real(self, at: datetime) -> datetime:
+        """이 시계가 at을 가리키는 실제 시각(KST)."""
+        return (self.origin + (at - self.virtual_origin) / self.scale).astimezone(KST)

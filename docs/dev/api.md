@@ -123,7 +123,7 @@ interface EventInfo {
   start: string; end: string;
   operating_days: string[];
   total_rounds: number;          // 10
-  now: string;                   // 서버 시각(KST)
+  now: string;                   // 서버 시각(KST). 테스트 시계면 그 시계의 시각
   today: string;
   is_operating_day: boolean;
   market: {
@@ -136,6 +136,12 @@ interface EventInfo {
   certification: { cutoff: string; target_date: string; reward_coin_quantity: number };
   initial_cash: number;
   daily_buy_limit_ratio: number;
+  clock: {                       // 테스트 시계(STUDY_INVEST_TIME_*)일 때만. 운영(실제 시계)은 null
+    scale: number;               // 24면 실제 1시간이 이벤트 하루
+    real_now: string;            // 실제 시각. 위 now는 테스트 시계 시각
+    next_open_at: string;        // 다음 09:00이 되는 실제 시각
+    next_close_at: string;       // 다음 18:00이 되는 실제 시각
+  } | null;
 }
 
 interface RankingEntry {
