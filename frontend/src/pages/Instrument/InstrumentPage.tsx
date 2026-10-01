@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { meApi, publicApi, useApi, type PricePoint } from '../../api';
+import { meApi, publicApi, useApi, useRefetchOnOpen, type PricePoint } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { KindBadge } from '../../components/app/badges';
 import { LoadError } from '../../components/app/LoadError';
@@ -49,6 +49,12 @@ export function InstrumentPage() {
   const history = useApi(() => publicApi.history(code), [code]);
   const event = useApi(() => publicApi.event(), [], { refreshInterval: 60_000 });
   const portfolio = useApi(() => meApi.portfolio(), [status], { enabled: status === 'authenticated' });
+  // 페이지를 열어 둔 채 새 시작가가 공시되면 그래프·현재가·보유를 다시 받는다
+  useRefetchOnOpen(event.data, () => {
+    void instruments.refetch();
+    void history.refetch();
+    if (status === 'authenticated') void portfolio.refetch();
+  });
 
   const instrument = instruments.data?.find((i) => i.code === code);
   const back = <Link to="/">시세판으로 돌아가기</Link>;

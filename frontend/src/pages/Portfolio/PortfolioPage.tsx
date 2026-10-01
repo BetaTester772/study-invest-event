@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { meApi, publicApi, useApi, type HoldingView, type Order } from '../../api';
+import { meApi, publicApi, useApi, useRefetchOnOpen, type HoldingView, type Order } from '../../api';
 import { OrderStatusBadge, SideBadge } from '../../components/app/badges';
 import { LoadError } from '../../components/app/LoadError';
 import {
@@ -56,6 +56,12 @@ export function PortfolioPage() {
   const portfolio = useApi(() => meApi.portfolio(), []);
   const orders = useApi(() => meApi.orders(100), []);
   const instruments = useApi(() => publicApi.instruments(), []);
+  // 보유 평가액은 시작가 기준. 페이지를 열어 둔 채 새 시작가가 공시되면 다시 받는다
+  const event = useApi(() => publicApi.event(), [], { refreshInterval: 60_000 });
+  useRefetchOnOpen(event.data, () => {
+    void portfolio.refetch();
+    void instruments.refetch();
+  });
   const names = new Map((instruments.data ?? []).map((i) => [i.code, i]));
 
   const orderColumns: Column<Order>[] = [

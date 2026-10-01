@@ -44,6 +44,22 @@ describe('useApi', () => {
     expect(result.current.data).toBeUndefined();
   });
 
+  it('refetches at once when a polled tab becomes visible again', async () => {
+    const fetcher = vi.fn(async () => 'data');
+    renderHook(() => useApi(fetcher, [], { refreshInterval: 60_000 }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not refetch on visibility without polling', async () => {
+    const fetcher = vi.fn(async () => 'data');
+    renderHook(() => useApi(fetcher, []));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps data for the same key when a refetch fails', async () => {
     let fail = false;
     const { result } = renderHook(() =>
