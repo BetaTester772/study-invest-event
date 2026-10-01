@@ -16,7 +16,7 @@ export interface UseApiResult<T> {
 export interface UseApiOptions {
   /** Skip fetching while false. */
   enabled?: boolean;
-  /** Poll every N ms (paused while the tab is hidden). */
+  /** Poll every N ms (paused while the tab is hidden, and run at once when it is shown again). */
   refreshInterval?: number;
 }
 
@@ -98,7 +98,15 @@ export function useApi<T>(
     const timer = window.setInterval(() => {
       if (document.visibilityState !== 'hidden') void run();
     }, refreshInterval);
-    return () => window.clearInterval(timer);
+    // 휴대폰에서 앱을 다시 열었을 때 최대 한 주기 동안 낡은 화면이 보이지 않게
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void run();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [enabled, refreshInterval, run]);
 
   const setData = useCallback((updater: T | ((prev: T | undefined) => T)) => {
