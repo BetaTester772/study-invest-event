@@ -2,7 +2,19 @@ import { useState } from 'react';
 import { adminApi, ApiError, useApi, type AdminParticipant, type ParticipantStatus } from '../../api';
 import { PARTICIPANT_STATUS_LABEL, ParticipantStatusBadge } from '../../components/app/badges';
 import { LoadError } from '../../components/app/LoadError';
-import { Button, Card, Modal, Money, Select, Stack, Table, Text, useToast, type Column } from '../../components/ui';
+import {
+  Button,
+  Card,
+  Modal,
+  Money,
+  Percent,
+  Select,
+  Stack,
+  Table,
+  Text,
+  useToast,
+  type Column,
+} from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
 
 const STATUS_OPTIONS = (Object.keys(PARTICIPANT_STATUS_LABEL) as ParticipantStatus[]).map((s) => ({
@@ -38,6 +50,14 @@ export function ParticipantsTab() {
     { key: 'cash', header: '현금', numeric: true, hideOnMobile: true, render: (p) => <Money value={p.cash} /> },
     { key: 'total', header: '총자산', numeric: true, render: (p) => <Money value={p.total_assets} /> },
     {
+      key: 'principal',
+      header: '투입 원금',
+      numeric: true,
+      hideOnMobile: true,
+      render: (p) => <Money value={p.principal} />,
+    },
+    { key: 'rate', header: '수익률', numeric: true, render: (p) => <Percent value={p.return_rate} sign colorize /> },
+    {
       key: 'certs',
       header: '인증 승인/반려',
       numeric: true,
@@ -68,7 +88,8 @@ export function ParticipantsTab() {
   return (
     <Stack gap={4}>
       <Text size="sm" tone="muted">
-        실격 처리한 참가자는 주문할 수 없고 랭킹에서 빠져요. 경고는 표시만 바뀌어요.
+        실격 처리한 참가자는 주문할 수 없고 랭킹에서 빠져요. 경고는 표시만 바뀌어요. 수익률은 투입 원금(시드 + 받은 인증
+        보상) 대비 손익이에요.
       </Text>
       <Card padding={participants.error ? 'md' : 'none'}>
         {participants.error ? (

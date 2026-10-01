@@ -1,5 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { adminApi, ApiError, useApi, type SimulateOptions, type SimulationReport } from '../../api';
+import {
+  adminApi,
+  ApiError,
+  useApi,
+  type SimulateOptions,
+  type SimulationDaily,
+  type SimulationReport,
+} from '../../api';
 import { LoadError } from '../../components/app/LoadError';
 import {
   Alert,
@@ -16,6 +23,7 @@ import {
   Table,
   Text,
   TextField,
+  type Column,
 } from '../../components/ui';
 import { formatNumber, formatPercent } from '../../lib/format';
 
@@ -26,38 +34,68 @@ const q = (v: number) =>
       ? `하위 ${formatPercent(v, { digits: 0 })}`
       : `상위 ${formatPercent(1 - v, { digits: 0 })}`;
 
+const QUANTILE_COLUMNS: Column<SimulationDaily['quantiles'][number]>[] = [
+  { key: 'q', header: '구간', render: (x) => q(x.q) },
+  { key: 'rate', header: '변동률', numeric: true, render: (x) => <Percent value={x.rate} sign colorize /> },
+];
+
+/** One regime's daily statistics. Targets are the spec's default-parameter values. */
+function DailyStats({ d, targets }: { d: SimulationDaily; targets: { up: string; down: string } }) {
+  return (
+    <StatGroup>
+      <Stat label="상승일 비율" value={<Percent value={d.up_ratio} />} sub="목표 약 30%" />
+      <Stat label="상승일 평균" value={<Percent value={d.mean_up} sign colorize />} sub={`목표 약 ${targets.up}`} />
+      <Stat label="하락일 평균" value={<Percent value={d.mean_down} sign colorize />} sub={`목표 약 ${targets.down}`} />
+      <Stat label="일일 평균" value={<Percent value={d.mean} sign colorize />} />
+      <Stat label="로그 기대값" value={formatNumber(d.mean_log, 4)} sub="0에 가까울수록 누적 중앙값이 원금 수준" />
+    </StatGroup>
+  );
+}
+
 function Report({ r }: { r: SimulationReport }) {
+  const calmLabel = r.calm_rounds > 0 ? `안정기 ${r.calm_rounds === 1 ? '1회차' : `1~${r.calm_rounds}회차`}` : null;
   return (
     <Stack gap={5}>
       <Text size="sm" tone="muted">
-        경로 {formatNumber(r.paths)}개, {r.rounds}회, 시드 {r.seed ?? '무작위'}, 가격 상한{' '}
-        {r.price_cap ? `${formatNumber(r.price_cap)}원` : '없음'}
+        경로 {formatNumber(r.paths)}개, {r.rounds}회{calmLabel ? `(${calmLabel} 포함)` : ''}, 시드 {r.seed ?? '무작위'},
+        가격 상한{' '}
+        {r.price_cap
+          ? `${formatNumber(r.price_cap)}원(경로의 ${formatPercent(r.cumulative.cap_hit_ratio)}가 도달)`
+          : '없음'}
       </Text>
-      <StatGroup>
-        <Stat label="상승일 비율" value={<Percent value={r.daily.up_ratio} />} sub="목표 약 30%" />
-        <Stat label="상승일 평균" value={<Percent value={r.daily.mean_up} sign colorize />} sub="목표 약 +75%" />
-        <Stat label="하락일 평균" value={<Percent value={r.daily.mean_down} sign colorize />} sub="목표 약 -16.7%" />
-        <Stat label="일일 평균" value={<Percent value={r.daily.mean} sign colorize />} />
-        <Stat
-          label="로그 기대값"
-          value={formatNumber(r.daily.mean_log, 4)}
-          sub="0에 가까울수록 누적 중앙값이 원금 수준"
-        />
-        <Stat label="가격 상한 도달" value={<Percent value={r.cumulative.cap_hit_ratio} />} sub="경로 비율" />
-      </StatGroup>
-      <Grid min="16rem" gap={4}>
-        <Card title="일일 변동률 분위" padding="none">
-          <Table
-            caption="일일 변동률 분위"
-            dense
-            columns={[
-              { key: 'q', header: '구간', render: (x) => q(x.q) },
-              { key: 'rate', header: '변동률', numeric: true, render: (x) => <Percent value={x.rate} sign colorize /> },
-            ]}
-            rows={r.daily.quantiles}
-            rowKey={(x) => x.q}
-          />
+      {r.daily && (
+        <Card title="평소 회차" description="안정기를 뺀 회차의 하루 변동이에요.">
+          <DailyStats d={r.daily} targets={{ up: '+50%', down: '-13.3%' }} />
         </Card>
+      )}
+      {r.calm_daily && calmLabel && (
+        <Card title={calmLabel} description="초반 안정기 상·하한으로 뽑은 하루 변동이에요(기본 -10%~+30%).">
+          <DailyStats d={r.calm_daily} targets={{ up: '+7.5%', down: '-3.3%' }} />
+        </Card>
+      )}
+      <Grid min="16rem" gap={4}>
+        {r.daily && (
+          <Card title="일일 변동률 분위 (평소)" padding="none">
+            <Table
+              caption="평소 회차 일일 변동률 분위"
+              dense
+              columns={QUANTILE_COLUMNS}
+              rows={r.daily.quantiles}
+              rowKey={(x) => x.q}
+            />
+          </Card>
+        )}
+        {r.calm_daily && (
+          <Card title="일일 변동률 분위 (안정기)" padding="none">
+            <Table
+              caption="안정기 회차 일일 변동률 분위"
+              dense
+              columns={QUANTILE_COLUMNS}
+              rows={r.calm_daily.quantiles}
+              rowKey={(x) => x.q}
+            />
+          </Card>
+        )}
         <Card title="누적 배수 분위" padding="none">
           <Table
             caption="누적 배수 분위"
@@ -132,7 +170,7 @@ function SimulatorForm({ options }: { options: SimulateOptions }) {
     <Stack gap={6}>
       <Card
         title="코인 가격 경로 시뮬레이션"
-        description="지금 저장된 파라미터로 병더리움 가격 경로를 여러 번 만들어 분포를 확인해요."
+        description="지금 저장된 파라미터로 병더리움 가격 경로를 여러 번 만들어 분포를 확인해요. 초반 안정기 회차도 실제 정산처럼 반영해요."
       >
         <form onSubmit={submit} noValidate>
           <Stack gap={4}>

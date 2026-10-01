@@ -1,6 +1,8 @@
-# API 계약 (v0.1)
+# API 계약 (v0.2)
 
 백엔드(FastAPI)와 프론트엔드(React)가 공유하는 HTTP 계약이다. 모든 경로는 `/api` 접두사를 가진다.
+
+v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_quantity`·`reward_quantity` → `reward_cash`), 투입 원금 기준 수익률(`Portfolio`·`RankingEntry`·`AdminParticipant`), 코인 초반 안정기(`EventInfo.coin`, `coin_calm_*` 파라미터, 정산 로그 `calm`, 시뮬레이터 `calm_daily`).
 
 ## 공통 규칙
 
@@ -74,8 +76,11 @@ interface Portfolio {
   holdings: HoldingView[];      // 수량 0 종목 제외
   holdings_value: number;
   total_assets: number;         // cash + holdings_value
-  initial_cash: number;         // 1,000,000
-  return_rate: number;          // total_assets / initial_cash − 1
+  initial_cash: number;         // 1,000,000 (시드)
+  rewards_received: number;     // 지금까지 받은 인증 보상 현금 합계
+  principal: number;            // 투입 원금 = initial_cash + rewards_received
+  profit: number;               // 투자 손익 = total_assets − principal (실현·미실현 합)
+  return_rate: number;          // profit / principal. 인증 보상은 손익이 아니라 원금
   day: string | null;           // 평가 기준 운영일
   buy_limit: {                  // 당일 종목별 남은 매수 한도
     ratio: number;              // 0.4
@@ -105,8 +110,8 @@ interface Certification {
   reject_reason: string | null;
   submitted_at: string;
   reviewed_at: string | null;
-  rewarded_at: string | null;   // 병더리움 지급 시각
-  reward_quantity: number | null;
+  rewarded_at: string | null;   // 보상 지급 시각
+  reward_cash: number | null;   // 지급한 현금(원). v0.3(병더리움 지급) 기록은 null
   image_url: string | null;     // 참가자: /api/me/certifications/{id}/image, 삭제 후 null
 }
 
@@ -133,7 +138,13 @@ interface EventInfo {
     day_settled: boolean;        // 오늘 18:00 정산 완료 여부
     round: number | null;        // 오늘 정산 회차(마지막 날 null)
   };
-  certification: { cutoff: string; target_date: string; reward_coin_quantity: number };
+  certification: { cutoff: string; target_date: string; reward_cash: number };  // 승인 1건당 현금
+  coin: {                        // 병더리움 하루 변동폭(변동률은 소수, 2 = +200%)
+    cap: number; floor: number;  // 평소 상·하한(2, -0.4)
+    calm_rounds: number;         // 초반 안정기 회차 수(이벤트 회차 수 이내). 0이면 없음
+    calm_until: string | null;   // 안정기 마지막 회차가 반영되는 운영일(기본 2026-10-09)
+    calm_cap: number; calm_floor: number;  // 안정기 상·하한(0.3, -0.1)
+  };
   initial_cash: number;
   daily_buy_limit_ratio: number;
   clock: {                       // 테스트 시계(STUDY_INVEST_TIME_*)일 때만. 운영(실제 시계)은 null
@@ -145,10 +156,13 @@ interface EventInfo {
 }
 
 interface RankingEntry {
-  rank: number;                  // 동점 공동 순위(1,2,2,4)
+  rank: number;                  // 총자산 순위(1~3위 시상). 동점 공동 순위(1,2,2,4)
   nickname: string;
   total_assets: number;
-  return_rate: number;
+  principal: number;             // 투입 원금 = 시드 + 받은 인증 보상
+  profit: number;                // total_assets − principal
+  return_rate: number;           // profit / principal
+  return_rank: number;           // 수익률 순위(높은 순, 동점 공동)
   certified_days: number;        // 승인된 인증 일수
   streak: number;                // 인증 연속일수
   is_me?: boolean;               // Bearer 토큰이 있으면 표시
@@ -163,7 +177,7 @@ interface RankingEntry {
 | GET | `/api/event` | `EventInfo` |
 | GET | `/api/instruments` | `Instrument[]` |
 | GET | `/api/instruments/{code}/history` | `PricePoint[]` (공시된 운영일만, 오름차순) |
-| GET | `/api/ranking` | `{ day: string\|null, entries: RankingEntry[] }` (총자산 100% 기준, 실격자 제외) |
+| GET | `/api/ranking` | `{ day: string\|null, entries: RankingEntry[] }` (총자산 순 정렬, 실격자 제외. 항목마다 수익률 순위 표시) |
 
 ## 참가자 인증
 
@@ -194,6 +208,7 @@ interface RankingEntry {
 ```ts
 interface AdminParticipant extends Participant {
   identity: string; cash: number; total_assets: number;
+  principal: number; return_rate: number;   // 투입 원금, 수익률(RankingEntry와 같은 정의)
   rejected_certifications: number; approved_certifications: number;
 }
 interface AdminCertification extends Certification {
@@ -202,27 +217,36 @@ interface AdminCertification extends Certification {
   duplicate_of: number | null;   // 같은 이미지 해시의 최초 인증 ID(중복 의심)
   image_url: string | null;      // /api/admin/certifications/{id}/image
 }
-// 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_coin_quantity 0~1,000,
-// virtual_liquidity 0~10^15, coin_cap (0, 10], 실수 파라미터는 유한값만(NaN·Infinity는 422).
+// 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_cash 0~100,000,000,
+// virtual_liquidity 0~10^15, coin_cap·coin_calm_cap (0, 10], coin_floor·coin_calm_floor (-1, 0),
+// coin_calm_rounds 0~100, 실수 파라미터는 유한값만(NaN·Infinity는 422).
 interface Params {
   coin_p_up: number; coin_up_exp: number; coin_down_exp: number;
   coin_cap: number; coin_floor: number; coin_price_cap: number | null;
+  coin_calm_rounds: number;              // 1회차부터 이 회차까지 안정기 상·하한(기본 3)
+  coin_calm_cap: number; coin_calm_floor: number;   // 안정기 상·하한(0.3, -0.1)
   stock_sensitivity: number; stock_min_price: number; virtual_liquidity: number;
   daily_buy_limit_ratio: number;
-  reward_coin_quantity: number;          // 인증 1건당 병더리움 지급 수량(가격 무관)
+  reward_cash: number;                   // 인증 1건당 지급 현금(기본 250,000원 = 시드의 1/4)
   certification_cutoff: string;          // "23:59"
 }
 interface SettlementLog {
   id: number; round: number; trade_day: string; effective_day: string; created_at: string;
   stocks: { code: string; buy_amount: number; adjusted_amount: number;
             concentration: number | null; rate: number; old_price: number; new_price: number }[];
-  coin: { p: number; x: number; direction: "up" | "down"; rate: number; old_price: number; new_price: number };
+  coin: { p: number; x: number; direction: "up" | "down"; rate: number; old_price: number; new_price: number;
+          calm: boolean };   // 초반 안정기 상·하한으로 뽑았는지(v0.4 전 기록은 false)
   params: Params;
+}
+interface SimulationDaily {
+  days: number; up_ratio: number; mean_up: number; mean_down: number; mean: number; mean_log: number;
+  quantiles: { q: number; rate: number }[];
 }
 interface SimulationReport {
   paths: number; rounds: number; seed: number | null; price_cap: number | null;
-  daily: { up_ratio: number; mean_up: number; mean_down: number; mean: number; mean_log: number;
-           quantiles: { q: number; rate: number }[] };
+  calm_rounds: number;                  // 경로마다 안정기로 돈 회차 수(1회차부터)
+  daily: SimulationDaily | null;        // 평소 회차만. 모든 회차가 안정기면 null
+  calm_daily: SimulationDaily | null;   // 안정기 회차만. 안정기가 없으면 null
   cumulative: { quantiles: { q: number; multiple: number }[]; prob_above: { multiple: number; prob: number }[];
                 cap_hit_ratio: number };
 }

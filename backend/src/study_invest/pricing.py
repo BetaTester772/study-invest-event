@@ -27,15 +27,32 @@ class CoinMove:
     rate: float
     old_price: int
     new_price: int
+    calm: bool
+    """초반 안정기 상·하한으로 뽑았는지."""
 
 
-def coin_rate(p: float, x: float, params: EventParams) -> tuple[Literal["up", "down"], float]:
-    """SPEC-COIN-1~4: p < p_up이면 상승일(cap·X^up_exp), 아니면 하락일(floor·X^down_exp)."""
+def is_calm_round(round_no: int, params: EventParams) -> bool:
+    """SPEC-COIN-6: 1회차부터 coin_calm_rounds회차까지는 초반 안정기다."""
+    return 1 <= round_no <= params.coin_calm_rounds
+
+
+def coin_rate(
+    p: float, x: float, params: EventParams, *, calm: bool = False
+) -> tuple[Literal["up", "down"], float]:
+    """SPEC-COIN-1~4: p < p_up이면 상승일(상한·X^up_exp), 아니면 하락일(하한·X^down_exp).
+
+    calm이면 평소 상·하한 대신 안정기 상·하한을 쓴다. 확률과 지수(분포 모양)는 같다.
+    """
     if not (0.0 <= p < 1.0 and 0.0 <= x <= 1.0):
         raise ValueError("p must be in [0, 1) and x in [0, 1]")
+    cap, floor = (
+        (params.coin_calm_cap, params.coin_calm_floor)
+        if calm
+        else (params.coin_cap, params.coin_floor)
+    )
     if p < params.coin_p_up:
-        return "up", params.coin_cap * x**params.coin_up_exp
-    return "down", params.coin_floor * x**params.coin_down_exp
+        return "up", cap * x**params.coin_up_exp
+    return "down", floor * x**params.coin_down_exp
 
 
 def next_coin_price(price: int, rate: float, params: EventParams) -> int:
@@ -45,12 +62,14 @@ def next_coin_price(price: int, rate: float, params: EventParams) -> int:
     return max(PRICE_UNIT, min(new, cap, PRICE_MAX))
 
 
-def draw_coin(price: int, params: EventParams, rng: random.Random) -> CoinMove:
-    """균등난수 두 개(p, X)로 코인 1회 변동을 추출한다."""
+def draw_coin(
+    price: int, params: EventParams, rng: random.Random, *, calm: bool = False
+) -> CoinMove:
+    """균등난수 두 개(p, X)로 코인 1회 변동을 추출한다. calm이면 안정기 상·하한을 쓴다."""
     p = rng.random()
     x = rng.random()
-    direction, rate = coin_rate(p, x, params)
-    return CoinMove(p, x, direction, rate, price, next_coin_price(price, rate, params))
+    direction, rate = coin_rate(p, x, params, calm=calm)
+    return CoinMove(p, x, direction, rate, price, next_coin_price(price, rate, params), calm)
 
 
 # --- 주식 (03-pricing §2) ---------------------------------------------------------

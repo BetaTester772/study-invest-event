@@ -53,7 +53,23 @@ class MarketInfo(Schema):
 class CertificationInfo(Schema):
     cutoff: str
     target_date: date
-    reward_coin_quantity: int
+    reward_cash: int
+    """승인 1건당 다음 운영일 09:00에 지급하는 현금(원)."""
+
+
+class CoinInfo(Schema):
+    """병더리움 하루 변동폭(참가자 안내용). 실제 값은 정산 때의 파라미터를 따른다."""
+
+    cap: float
+    """평소 상승일 최대 변동률(2.0 = +200%)."""
+    floor: float
+    """평소 하락일 최대 변동률(-0.4 = -40%)."""
+    calm_rounds: int
+    """초반 안정기 회차 수(이벤트 회차 수 이내). 0이면 안정기 없음."""
+    calm_until: date | None
+    """안정기 마지막 회차가 반영되는 운영일. 그날 시작가까지 좁게 움직인다."""
+    calm_cap: float
+    calm_floor: float
 
 
 class ClockInfo(Schema):
@@ -78,6 +94,7 @@ class EventInfo(Schema):
     is_operating_day: bool
     market: MarketInfo
     certification: CertificationInfo
+    coin: CoinInfo
     initial_cash: int
     daily_buy_limit_ratio: float
     clock: ClockInfo | None = None
@@ -104,9 +121,17 @@ class PricePoint(Schema):
 
 class RankingEntry(Schema):
     rank: int
+    """총자산 순위(1~3위 시상). 동점은 공동 순위."""
     nickname: str
     total_assets: int
+    principal: int
+    """투입 원금 = 시드 + 받은 인증 보상."""
+    profit: int
+    """투자 손익 = total_assets − principal."""
     return_rate: float
+    """profit / principal."""
+    return_rank: int
+    """수익률 순위(높은 순). 동점은 공동 순위."""
     certified_days: int
     streak: int
     is_me: bool = False
@@ -185,7 +210,14 @@ class Portfolio(Schema):
     holdings_value: int
     total_assets: int
     initial_cash: int
+    rewards_received: int
+    """지금까지 받은 인증 보상 현금 합계."""
+    principal: int
+    """투입 원금 = initial_cash + rewards_received."""
+    profit: int
+    """투자 손익 = total_assets − principal."""
     return_rate: float
+    """profit / principal."""
     day: date | None
     buy_limit: BuyLimit
 
@@ -220,7 +252,7 @@ class Certification(Schema):
     submitted_at: datetime
     reviewed_at: datetime | None
     rewarded_at: datetime | None
-    reward_quantity: int | None
+    reward_cash: int | None
     image_url: str | None
 
 
@@ -240,6 +272,10 @@ class AdminParticipant(Participant):
     identity: str
     cash: int
     total_assets: int
+    principal: int
+    """투입 원금 = 시드 + 받은 인증 보상."""
+    return_rate: float
+    """(total_assets − principal) / principal."""
     rejected_certifications: int
     approved_certifications: int
 
@@ -267,11 +303,14 @@ class Params(Schema):
     coin_cap: float
     coin_floor: float
     coin_price_cap: int | None
+    coin_calm_rounds: int
+    coin_calm_cap: float
+    coin_calm_floor: float
     stock_sensitivity: float
     stock_min_price: int
     virtual_liquidity: int
     daily_buy_limit_ratio: float
-    reward_coin_quantity: int
+    reward_cash: int
     certification_cutoff: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
     @field_validator("certification_cutoff")
@@ -313,6 +352,8 @@ class CoinSettlement(Schema):
     rate: float
     old_price: int
     new_price: int
+    calm: bool = False
+    """초반 안정기 상·하한으로 뽑았는지. 안정기 도입(v0.4) 전 기록은 false."""
 
 
 class SettlementLog(Schema):

@@ -36,7 +36,7 @@
   border-top: 1px solid var(--color-border);
 }
 
-/* The reward coin sits apart from the stocks. */
+/* The coin sits apart from the stocks. */
 .coins {
   border-top: 2px solid var(--color-ink);
   background: color-mix(in srgb, var(--color-surface-2) 60%, var(--color-surface));

@@ -22,7 +22,7 @@ from study_invest.params import (
     AMOUNT_MAX,
     COIN_CAP_MAX,
     PRICE_MAX,
-    REWARD_QUANTITY_MAX,
+    REWARD_CASH_MAX,
     EventParams,
 )
 from study_invest.pricing import next_coin_price, next_stock_price
@@ -246,8 +246,10 @@ class TestNumericLimits:
     @pytest.mark.parametrize(
         ("field", "value"),
         [
-            ("reward_coin_quantity", 2**63),
-            ("reward_coin_quantity", REWARD_QUANTITY_MAX + 1),
+            ("reward_cash", 2**63),
+            ("reward_cash", REWARD_CASH_MAX + 1),
+            ("coin_calm_rounds", 2**63),
+            ("coin_calm_cap", COIN_CAP_MAX * 2),
             ("stock_min_price", PRICE_MAX + 10),
             ("coin_price_cap", PRICE_MAX + 10),
             ("virtual_liquidity", AMOUNT_MAX + 1),
@@ -278,10 +280,8 @@ class TestNumericLimits:
         self, client: TestClient, clock: Clock, admin: dict[str, str]
     ) -> None:
         params = client.get("/api/admin/params", headers=admin).json()
-        client.put(
-            "/api/admin/params", json=dict(params, reward_coin_quantity=2**63), headers=admin
-        )
-        assert client.get("/api/admin/params", headers=admin).json()["reward_coin_quantity"] == 1
+        client.put("/api/admin/params", json=dict(params, reward_cash=2**63), headers=admin)
+        assert client.get("/api/admin/params", headers=admin).json()["reward_cash"] == 250_000
         open_day(client, clock, D1)  # 09:00 배치가 막히지 않는다
 
     def test_computed_prices_never_exceed_price_max(self) -> None:

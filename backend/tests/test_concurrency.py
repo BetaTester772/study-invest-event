@@ -286,14 +286,14 @@ class TestRewardsShareTheParticipantLock:
     def test_reward_payment_waits_for_an_inflight_order(
         self, factory: sessionmaker[Session]
     ) -> None:
-        """보상 지급은 주문과 같은 참가자 잠금을 거친다: 주문 트랜잭션이 끝날 때까지 기다린다.
+        """보상 지급은 주문과 같은 참가자 잠금을 거친다: 주문 트랜잭션이 끝날 때까지 기다린 뒤
+        최신 현금에 더한다.
 
-        이미 병더리움을 가진 참가자라 보상은 기존 보유 행 UPDATE다(새 행 INSERT라면 FK 검사가
-        참가자 행을 잠가 우연히 기다리게 되므로, 잠금 누락을 드러내지 못한다).
+        잠금 없이 미리 읽은 현금에 보상을 더해 쓰면(UPDATE ... SET cash = 읽은 값 + 보상) 행 잠금
+        때문에 순서는 같아 보여도 주문이 뺀 금액이 사라진다. 그래서 순서와 최종 현금을 함께 본다.
         """
         pid = setup_participant(factory)
         with factory() as s:
-            s.add(Holding(participant_id=pid, code="BYUNG", quantity=2, cost=0))
             s.add(
                 StudyCertification(
                     participant_id=pid,
@@ -322,6 +322,8 @@ class TestRewardsShareTheParticipantLock:
         def reward() -> None:
             locked.wait(5)
             with factory() as s:
+                me = s.get(Participant, pid)  # 잠금 전에 읽은 옛 현금(1,000,000원)
+                assert me is not None and me.cash == 1_000_000
                 certification.pay_rewards(s, D2, at(D2, 9), EventParams())
                 timeline.append("reward-done")
                 s.commit()
@@ -329,7 +331,7 @@ class TestRewardsShareTheParticipantLock:
         run_together(order, reward)
         assert timeline == ["order-commit", "reward-done"]
         with factory() as s:
-            coin = s.get(Holding, (pid, "BYUNG"))
+            me = s.get(Participant, pid)
             lb = s.get(Holding, (pid, "LB"))
-            assert coin is not None and coin.quantity == 3
+            assert me is not None and me.cash == 1_000_000 - 14_000 + 250_000
             assert lb is not None and lb.quantity == 1

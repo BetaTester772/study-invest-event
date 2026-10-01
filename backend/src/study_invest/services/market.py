@@ -29,7 +29,7 @@ from ..models import (
 )
 from ..money import PRICE_UNIT
 from ..params import MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
-from ..pricing import draw_coin, settle_stocks
+from ..pricing import draw_coin, is_calm_round, settle_stocks
 from . import certification
 from .common import (
     DomainError,
@@ -165,7 +165,7 @@ def settle_day(
         {c: a for c, a in amounts.items() if c in {i.code for i in STOCKS}},
         params,
     )
-    coin = draw_coin(prices[COIN.code], params, rng)
+    coin = draw_coin(prices[COIN.code], params, rng, calm=is_calm_round(round_no, params))
 
     new_prices = {code: m.new_price for code, m in stock_moves.items()}
     new_prices[COIN.code] = coin.new_price
@@ -210,6 +210,7 @@ def settle_day(
         "rate": coin.rate,
         "old_price": coin.old_price,
         "new_price": coin.new_price,
+        "calm": coin.calm,
     }
     s.add(
         SettlementLog(

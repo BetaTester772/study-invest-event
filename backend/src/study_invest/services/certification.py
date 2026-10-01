@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from ..db import track_new_file
 from ..event_calendar import EventCalendar, to_kst
-from ..instruments import COIN
 from ..models import (
     CertStatus,
     Participant,
@@ -24,7 +23,7 @@ from ..models import (
     StudyCertification,
 )
 from ..params import EventParams
-from .common import DomainError, audit, holding_of, lock_participant
+from .common import DomainError, audit, lock_participant
 
 # 매직 바이트로 형식을 확인한다(Content-Type 헤더는 신뢰하지 않는다).
 IMAGE_TYPES: dict[str, str] = {
@@ -183,9 +182,10 @@ def review(
 
 
 def pay_rewards(s: Session, day: date, now: datetime, params: EventParams) -> list[dict[str, int]]:
-    """day 09:00 공시 시, 이전 날짜로 승인되고 아직 지급되지 않은 인증에 병더리움을 지급한다.
+    """day 09:00 공시 시, 이전 날짜로 승인되고 아직 지급되지 않은 인증에 현금을 지급한다.
 
-    지급 수량은 시세와 무관한 고정 수량(reward_coin_quantity)이며 매입금액 0원으로 편입한다.
+    지급액은 고정 금액(reward_cash, 기본 시드의 1/4)이다. 받은 현금은 그날 장중에 바로 주문에
+    쓸 수 있고, 투입 원금에 더해져 수익률 계산에서 손익으로 치지 않는다.
     """
     certs = s.scalars(
         select(StudyCertification)
@@ -198,19 +198,19 @@ def pay_rewards(s: Session, day: date, now: datetime, params: EventParams) -> li
         )
         .order_by(StudyCertification.id)
     ).all()
-    quantity = params.reward_coin_quantity
+    amount = params.reward_cash
     paid: list[dict[str, int]] = []
-    # 참가자 id 순으로 잠근다(잠금 순서 고정). 주문과 같은 잠금을 거쳐 보유를 바꾼다.
+    # 참가자 id 순으로 잠근다(잠금 순서 고정). 주문과 같은 잠금을 거쳐 최신 현금에 더한다.
     for cert in sorted(certs, key=lambda c: (c.participant_id, c.id)):
         participant = lock_participant(s, cert.participant_id)
-        holding_of(participant, COIN.code).quantity += quantity
+        participant.cash += amount
         cert.rewarded_at = now
-        cert.reward_quantity = quantity
+        cert.reward_cash = amount
         paid.append(
             {
                 "certification_id": cert.id,
                 "participant_id": cert.participant_id,
-                "quantity": quantity,
+                "amount": amount,
             }
         )
         audit(
@@ -220,8 +220,7 @@ def pay_rewards(s: Session, day: date, now: datetime, params: EventParams) -> li
             "reward.pay",
             certification_id=cert.id,
             participant_id=cert.participant_id,
-            code=COIN.code,
-            quantity=quantity,
+            amount=amount,
         )
     s.flush()
     return paid

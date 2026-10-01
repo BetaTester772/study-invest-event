@@ -1,8 +1,8 @@
 # 공부장려 모의투자 이벤트
 
-공부 인증을 게임 재화(병더리움 코인)와 연결한 2주 모의투자 이벤트 시스템.
+공부 인증에 투자금(현금)을 보상으로 주는 2주 모의투자 이벤트 시스템. 주식 4종목과 코인(병더리움) 1종목을 운용한다.
 
-- 시스템 규격서: [docs/spec/README.md](docs/spec/README.md) (v0.3)
+- 시스템 규격서: [docs/spec/README.md](docs/spec/README.md) (v0.4)
 - API 계약: [docs/dev/api.md](docs/dev/api.md)
 - 구현 해석·가정: [docs/dev/implementation-notes.md](docs/dev/implementation-notes.md)
 - DB 연결 풀 설계: [docs/dev/db-pools.md](docs/dev/db-pools.md)

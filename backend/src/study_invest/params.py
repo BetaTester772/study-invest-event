@@ -31,12 +31,15 @@ PRICE_MAX = 1_000_000_000
 """모든 가격의 상한(10억 원). 가격 산정 결과·수동 개입가·가격 파라미터에 적용."""
 QUANTITY_MAX = 1_000_000_000
 """한 주문 수량의 상한."""
-REWARD_QUANTITY_MAX = 1_000
-"""인증 1건당 보상 수량 상한. 11일 모두 받아도 보유 수량이 한계에 닿지 않는다."""
+REWARD_CASH_MAX = 100_000_000
+"""인증 1건당 보상 현금 상한(1억 원). 매일 받아 최저가 종목에 넣고 그 종목이 PRICE_MAX까지 올라도
+현금·평가금액이 BIGINT 안에 머문다."""
 AMOUNT_MAX = 10**15
 """금액 파라미터(가상 유동성 등)의 상한."""
 COIN_CAP_MAX = 10.0
 """코인 일일 상승 상한 파라미터의 최대값(+1000%)."""
+CALM_ROUNDS_MAX = 100
+"""코인 초반 안정기 회차 수 파라미터의 최대값."""
 
 STOCK_DAILY_LIMIT = Fraction(3, 10)
 """주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 감도 계수와 별개로 고정."""
@@ -56,12 +59,18 @@ class EventParams:
     """상승폭 지수: 변동률 = cap × X^up_exp."""
     coin_down_exp: float = 2
     """하락폭 지수: 변동률 = floor × X^down_exp."""
-    coin_cap: float = 3.00
-    """상승일 최대 변동률(+300%)."""
-    coin_floor: float = -0.50
-    """하락일 최대 변동률(-50%)."""
+    coin_cap: float = 2.00
+    """상승일 최대 변동률(+200%). 10회 누적 20배 초과 확률을 1% 미만으로 두는 값(v0.4)."""
+    coin_floor: float = -0.40
+    """하락일 최대 변동률(-40%). 상한과 함께 줄여 로그 기대값을 0 근처(약 -0.004)로 유지한다."""
     coin_price_cap: int | None = 5_000_000
     """코인 운영상 표시 상한(원, 권장). None이면 상한 없음."""
+    coin_calm_rounds: int = 3
+    """초반 안정기 회차 수. 1회차부터 이 회차까지는 안정기 상·하한을 쓴다. 0이면 안정기 없음."""
+    coin_calm_cap: float = 0.30
+    """안정기 상승일 최대 변동률(+30%)."""
+    coin_calm_floor: float = -0.10
+    """안정기 하락일 최대 변동률(-10%)."""
 
     # 주식 (03-pricing §2, 06-abuse-risk §1)
     stock_sensitivity: float = 0.30
@@ -76,8 +85,8 @@ class EventParams:
     """1일 1종목 매수 상한(총자산 대비 비율)."""
 
     # 인증 (05-certification)
-    reward_coin_quantity: int = 1
-    """승인된 인증 1건당 지급하는 병더리움 수량. 시세와 무관한 수량 고정(2026-09-24 결정)."""
+    reward_cash: int = INITIAL_CASH // 4
+    """승인된 인증 1건당 지급하는 현금(원). 기본은 시드의 1/4인 250,000원(2026-10-01 결정)."""
     certification_cutoff: time = field(default=time(23, 59))
     """인증 접수 마감 시각. 해당 분(分)까지 당일로 집계한다."""
 
@@ -88,6 +97,8 @@ class EventParams:
             "coin_down_exp": self.coin_down_exp,
             "coin_cap": self.coin_cap,
             "coin_floor": self.coin_floor,
+            "coin_calm_cap": self.coin_calm_cap,
+            "coin_calm_floor": self.coin_calm_floor,
             "stock_sensitivity": self.stock_sensitivity,
             "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
         }
@@ -108,6 +119,17 @@ class EventParams:
                 self.coin_price_cap is None or price_ok(self.coin_price_cap),
                 f"coin_price_cap must be a multiple of 10 in [10, {PRICE_MAX:,}] or None",
             ),
+            # 안정기 상·하한은 평소 상·하한과 따로 검사한다. 저장된 파라미터가 서로 엇갈려도
+            # (예: 평소 상한을 안정기보다 낮춤) 파라미터를 읽지 못해 배치가 멈추는 일은 없어야 한다.
+            (
+                0 <= self.coin_calm_rounds <= CALM_ROUNDS_MAX,
+                f"coin_calm_rounds must be in [0, {CALM_ROUNDS_MAX}]",
+            ),
+            (
+                0 < self.coin_calm_cap <= COIN_CAP_MAX,
+                f"coin_calm_cap must be in (0, {COIN_CAP_MAX:g}]",
+            ),
+            (-1 < self.coin_calm_floor < 0, "coin_calm_floor must be in (-1, 0)"),
             (0 < self.stock_sensitivity <= 10, "stock_sensitivity must be in (0, 10]"),
             (
                 price_ok(self.stock_min_price),
@@ -119,8 +141,8 @@ class EventParams:
             ),
             (0 < self.daily_buy_limit_ratio <= 1, "daily_buy_limit_ratio must be in (0, 1]"),
             (
-                0 <= self.reward_coin_quantity <= REWARD_QUANTITY_MAX,
-                f"reward_coin_quantity must be in [0, {REWARD_QUANTITY_MAX:,}]",
+                0 <= self.reward_cash <= REWARD_CASH_MAX,
+                f"reward_cash must be in [0, {REWARD_CASH_MAX:,}]",
             ),
         ]
         for ok, message in checks:
@@ -141,6 +163,8 @@ class EventParams:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> EventParams:
+        # 모르는 키는 버리고 없는 키는 기본값을 쓴다. 이전 규칙으로 저장된 파라미터(예: v0.3의
+        # reward_coin_quantity)도 그대로 읽힌다.
         known = {f.name for f in fields(cls)}
         values = {k: v for k, v in data.items() if k in known}
         cutoff = values.get("certification_cutoff")

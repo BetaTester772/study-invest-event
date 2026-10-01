@@ -22,7 +22,7 @@ import {
   useToast,
   type Column,
 } from '../../components/ui';
-import { formatDateTime, formatDay } from '../../lib/format';
+import { formatDateTime, formatDay, formatWon } from '../../lib/format';
 
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic';
 const MAX_SIZE = 10 * 1024 * 1024;
@@ -52,10 +52,18 @@ function CertImageModal({ cert, onClose }: { cert: Certification | null; onClose
   );
 }
 
-function rewardText(c: Certification, rewardQty: number | undefined): string {
-  if (c.rewarded_at)
-    return `병더리움 ${c.reward_quantity ?? rewardQty ?? ''}개 받음 (${formatDateTime(c.rewarded_at)})`;
-  if (c.status === 'approved') return '다음 운영일 09:00 지급 예정';
+function rewardText(c: Certification, rewardCash: number | undefined, lastDay: string | undefined): string {
+  if (c.rewarded_at) {
+    // reward_cash가 없으면 현금 보상 전(v0.3, 병더리움 지급) 기록이다.
+    const what = c.reward_cash != null ? `${formatWon(c.reward_cash)} 받음` : '보상 받음';
+    return `${what} (${formatDateTime(c.rewarded_at)})`;
+  }
+  // 보상은 다음 운영일 09:00에 주므로 마지막 운영일 인증분은 지급일이 없다(인증 일수에는 들어간다).
+  if (c.status !== 'rejected' && c.target_date === lastDay) return '마지막 날 인증은 보상이 없어요';
+  if (c.status === 'approved')
+    return rewardCash != null
+      ? `다음 운영일 09:00에 ${formatWon(rewardCash)} 지급 예정`
+      : '다음 운영일 09:00 지급 예정';
   if (c.status === 'pending') return '승인되면 지급';
   return '—';
 }
@@ -73,7 +81,7 @@ export function CertificationPage() {
   const e = event.data;
   const st = status.data;
   const target = st?.target_date;
-  const rewardQty = e?.certification.reward_coin_quantity;
+  const rewardCash = e?.certification.reward_cash;
   const approvedDays = (certs.data ?? []).filter((c) => c.status === 'approved').map((c) => c.target_date);
 
   const upload = async () => {
@@ -112,7 +120,7 @@ export function CertificationPage() {
       header: '반려 사유',
       render: (c) => c.reject_reason ?? (c.status === 'rejected' ? '사유 없음' : '—'),
     },
-    { key: 'reward', header: '보상', hideOnMobile: true, render: (c) => rewardText(c, rewardQty) },
+    { key: 'reward', header: '보상', hideOnMobile: true, render: (c) => rewardText(c, rewardCash, e?.end) },
     {
       key: 'image',
       header: <span className="sr-only">사진</span>,
@@ -134,7 +142,7 @@ export function CertificationPage() {
     <Container>
       <PageHeader
         title="공부 인증"
-        description="하루에 한 번, 공부한 모습을 사진 한 장으로 올려요. 인증하지 않아도 거래는 할 수 있지만 그날 코인 보상은 없어요."
+        description={`하루에 한 번, 공부한 모습을 사진 한 장으로 올려요. 승인되면 다음 운영일에 투자금${rewardCash != null ? ` ${formatWon(rewardCash)}` : ''}을 받아요. 인증하지 않아도 거래는 할 수 있지만 그날 보상은 없어요.`}
       />
       <Stack gap={8}>
         {event.error && <LoadError error={event.error} onRetry={event.refetch} what="인증 일정" />}
@@ -161,7 +169,7 @@ export function CertificationPage() {
                   title={`${formatDay(st.existing.target_date)} 인증은 이미 올렸어요`}
                 >
                   {st.existing.status === 'approved'
-                    ? `승인됐어요. ${rewardText(st.existing, rewardQty)}.`
+                    ? `승인됐어요. ${rewardText(st.existing, rewardCash, e.end)}.`
                     : st.existing.status === 'rejected'
                       ? `반려됐어요(${st.existing.reject_reason ?? '사유 없음'}). 인증은 하루 한 번이라 이 날짜는 다시 올릴 수 없어요.`
                       : '검수를 기다리는 중이에요. 결과는 아래 목록에서 볼 수 있어요.'}
@@ -201,11 +209,7 @@ export function CertificationPage() {
                   items={[
                     { label: '인증 날짜', value: formatDay(e.certification.target_date) },
                     { label: '접수 마감', value: `매일 ${e.certification.cutoff}` },
-                    {
-                      label: '보상',
-                      value: `병더리움 ${e.certification.reward_coin_quantity}개`,
-                      strong: true,
-                    },
+                    { label: '보상', value: `현금 ${formatWon(e.certification.reward_cash)}`, strong: true },
                   ]}
                 />
               ) : (
@@ -213,7 +217,9 @@ export function CertificationPage() {
               )}
               <Stack gap={2}>
                 <Text size="sm" tone="muted">
-                  승인 시 다음 운영일 09:00 병더리움 {rewardQty ?? 'N'}개 지급. 코인 가격과 관계없이 개수로 받아요.
+                  승인되면 다음 운영일 09:00에 현금으로 받아서 그날 장중에 바로 주문할 수 있어요. 받은 보상은 투입
+                  원금에 더해져서 수익률에서는 손익으로 치지 않아요. 마지막 날 인증은 다음 운영일이 없어 보상이 없지만
+                  인증 일수에는 들어가요.
                 </Text>
                 <Text size="sm" tone="muted">
                   마감 시각이 지나서 올린 사진은 다음 날짜 인증으로 집계돼요. 같은 사진을 다시 쓰면 반려될 수 있어요.
