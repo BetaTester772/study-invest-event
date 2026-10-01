@@ -17,7 +17,7 @@ function event(
     today: '2026-10-08',
     is_operating_day: true,
     certification: { cutoff: '23:59', target_date: '2026-10-08', reward_cash: 250000 },
-    coin: { cap: 3, floor: -0.5, calm_rounds: 3, calm_until: '2026-10-09', calm_cap: 0.3, calm_floor: -0.1 },
+    coin: { cap: 2, floor: -0.4, calm_rounds: 3, calm_until: '2026-10-09', calm_cap: 0.3, calm_floor: -0.1 },
     initial_cash: 1000000,
     daily_buy_limit_ratio: 0.4,
     clock: null,

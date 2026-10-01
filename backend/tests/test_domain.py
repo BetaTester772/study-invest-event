@@ -64,12 +64,12 @@ class TestInstruments:
 
 class TestCoin:
     def test_up_day_below_p_up(self) -> None:
-        assert coin_rate(0.29, 1.0, P) == ("up", 3.0)
-        assert coin_rate(0.0, 0.5, P) == ("up", 3.0 * 0.125)
+        assert coin_rate(0.29, 1.0, P) == ("up", 2.0)
+        assert coin_rate(0.0, 0.5, P) == ("up", 2.0 * 0.125)
 
     def test_down_day_at_or_above_p_up(self) -> None:
-        assert coin_rate(0.30, 1.0, P) == ("down", -0.5)
-        assert coin_rate(0.99, 0.5, P) == ("down", -0.5 * 0.25)
+        assert coin_rate(0.30, 1.0, P) == ("down", -0.4)
+        assert coin_rate(0.99, 0.5, P) == ("down", -0.4 * 0.25)
 
     def test_zero_width(self) -> None:
         assert coin_rate(0.1, 0.0, P)[1] == 0
@@ -79,7 +79,7 @@ class TestCoin:
         rng = random.Random(1)
         for _ in range(10_000):
             _, r = coin_rate(rng.random(), rng.random(), P)
-            assert -0.5 <= r <= 3.0
+            assert -0.4 <= r <= 2.0
 
     def test_invalid_draw(self) -> None:
         with pytest.raises(ValueError):
@@ -106,7 +106,7 @@ class TestCoin:
                 return self.values.pop(0)
 
         move = draw_coin(250_000, P, Seq())
-        assert (move.p, move.x, move.direction, move.new_price) == (0.1, 1.0, "up", 1_000_000)
+        assert (move.p, move.x, move.direction, move.new_price) == (0.1, 1.0, "up", 750_000)
         assert move.calm is False
 
 
@@ -248,8 +248,8 @@ class TestParams:
             0.30,
             3,
             2,
-            3.0,
-            -0.5,
+            2.0,
+            -0.4,
         )
         assert P.stock_sensitivity == 0.30 and P.daily_buy_limit_ratio == 0.40
         assert (P.coin_calm_rounds, P.coin_calm_cap, P.coin_calm_floor) == (3, 0.30, -0.10)

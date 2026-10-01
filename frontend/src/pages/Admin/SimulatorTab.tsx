@@ -65,7 +65,7 @@ function Report({ r }: { r: SimulationReport }) {
       </Text>
       {r.daily && (
         <Card title="평소 회차" description="안정기를 뺀 회차의 하루 변동이에요.">
-          <DailyStats d={r.daily} targets={{ up: '+75%', down: '-16.7%' }} />
+          <DailyStats d={r.daily} targets={{ up: '+50%', down: '-13.3%' }} />
         </Card>
       )}
       {r.calm_daily && calmLabel && (

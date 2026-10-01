@@ -16,6 +16,8 @@ from study_invest.simulator import (
 )
 
 UNCAPPED = replace(EventParams(), coin_price_cap=None)
+V03 = replace(UNCAPPED, coin_cap=3.0, coin_floor=-0.5, coin_calm_rounds=0)
+"""v0.2~v0.3 기본값(하루 -50%~+300%, 안정기 없음). 규격 v0.2 누적 분포표를 재현한다."""
 
 
 @pytest.fixture(scope="module")
@@ -26,8 +28,13 @@ def report() -> SimulationReport:
 
 @pytest.fixture(scope="module")
 def no_calm() -> SimulationReport:
-    """안정기 없는 v0.3 조건. 규격 v0.2 누적 분포표와 비교한다."""
+    """기본 파라미터에서 안정기만 뺀 조건(10회 모두 평소 범위)."""
     return simulate_coin(replace(UNCAPPED, coin_calm_rounds=0), paths=20_000, seed=20261006)
+
+
+@pytest.fixture(scope="module")
+def v03() -> SimulationReport:
+    return simulate_coin(V03, paths=20_000, seed=20261006)
 
 
 def daily(r: SimulationReport) -> DailyStats:
@@ -45,14 +52,14 @@ def test_daily_statistics(report: SimulationReport) -> None:
     d = daily(report)
     assert d.days == 20_000 * 7  # 10회 중 4~10회차
     assert d.up_ratio == pytest.approx(0.30, abs=0.01)
-    assert d.mean_down == pytest.approx(-1 / 6, abs=0.003)  # -0.5·E[X²]
-    assert d.mean_up == pytest.approx(0.75, abs=0.02)  # 3·E[X³]
-    assert d.mean == pytest.approx(0.108, abs=0.01)
-    assert d.mean_log == pytest.approx(-0.003, abs=0.01)
+    assert d.mean_down == pytest.approx(-0.4 / 3, abs=0.003)  # -0.4·E[X²]
+    assert d.mean_up == pytest.approx(0.5, abs=0.02)  # 2·E[X³]
+    assert d.mean == pytest.approx(0.057, abs=0.01)
+    assert d.mean_log == pytest.approx(-0.004, abs=0.01)
     q = dict(d.quantiles)
-    assert q[0.05] == pytest.approx(-0.43, abs=0.01)
-    assert q[0.25] == pytest.approx(-0.21, abs=0.01)
-    assert q[0.95] == pytest.approx(1.74, abs=0.08)
+    assert q[0.05] == pytest.approx(-0.345, abs=0.01)
+    assert q[0.25] == pytest.approx(-0.165, abs=0.01)
+    assert q[0.95] == pytest.approx(1.157, abs=0.08)
 
 
 def test_calm_daily_statistics(report: SimulationReport) -> None:
@@ -69,25 +76,34 @@ def test_calm_daily_statistics(report: SimulationReport) -> None:
     assert q[0.95] == pytest.approx(0.174, abs=0.01)
 
 
+def test_normal_range_keeps_20x_below_1_percent(no_calm: SimulationReport) -> None:
+    """SPEC-COIN-7: 안정기 없이 10회 모두 평소 범위여도 20배 초과 확률은 1% 미만(약 0.45%)."""
+    assert no_calm.calm_rounds == 0 and no_calm.calm_daily is None
+    above = dict(no_calm.prob_above)
+    assert above[20.0] < 0.01
+    assert above[20.0] == pytest.approx(0.0045, abs=0.003)
+    assert dict(no_calm.multiple_quantiles)[0.50] == pytest.approx(0.88, abs=0.05)
+
+
 def test_calm_keeps_median_and_narrows_spread(
     report: SimulationReport, no_calm: SimulationReport
 ) -> None:
     """안정기는 누적 중앙값(약 0.88배)을 유지하면서 양쪽 꼬리를 좁힌다(03-pricing §1.5)."""
     with_calm, without = dict(report.multiple_quantiles), dict(no_calm.multiple_quantiles)
     assert with_calm[0.50] == pytest.approx(0.88, abs=0.05)
-    assert with_calm[0.25] == pytest.approx(0.43, abs=0.03)
-    assert with_calm[0.75] == pytest.approx(1.96, abs=0.15)
+    assert with_calm[0.25] == pytest.approx(0.52, abs=0.03)
+    assert with_calm[0.75] == pytest.approx(1.64, abs=0.12)
     assert with_calm[0.10] > without[0.10] and with_calm[0.90] < without[0.90]
-    assert dict(report.prob_above)[20.0] == pytest.approx(0.009, abs=0.004)
+    assert dict(report.prob_above)[20.0] == pytest.approx(0.0015, abs=0.002)
 
 
-def test_cumulative_matches_v02_table(no_calm: SimulationReport) -> None:
-    assert no_calm.calm_rounds == 0 and no_calm.calm_daily is None
-    q = dict(no_calm.multiple_quantiles)
+def test_cumulative_matches_v02_table(v03: SimulationReport) -> None:
+    """v0.3까지의 기본값은 규격 v0.2 표(중앙값 0.88배, 20배 초과 약 2%)를 재현한다."""
+    q = dict(v03.multiple_quantiles)
     assert q[0.50] == pytest.approx(0.88, abs=0.05)
     assert q[0.25] == pytest.approx(0.38, abs=0.03)
     assert q[0.75] == pytest.approx(2.25, abs=0.15)
-    above = dict(no_calm.prob_above)
+    above = dict(v03.prob_above)
     assert above[20.0] == pytest.approx(0.02, abs=0.005)
 
 
@@ -100,9 +116,16 @@ def test_all_calm_rounds_have_no_normal_daily() -> None:
 
 
 def test_cap_is_applied() -> None:
-    capped = simulate_coin(replace(EventParams(), coin_calm_rounds=0), paths=5_000, seed=1)
+    v03_capped = replace(V03, coin_price_cap=EventParams().coin_price_cap)
+    capped = simulate_coin(v03_capped, paths=5_000, seed=1)
     assert dict(capped.prob_above)[20.0] == 0
     assert 0.005 < capped.cap_hit_ratio < 0.05
+
+
+def test_default_params_rarely_touch_price_cap() -> None:
+    """표시 상한(5,000,000원 = 20배)에 한 번이라도 닿는 경로도 안정기 없이 1% 미만(약 0.6%)."""
+    capped = simulate_coin(replace(EventParams(), coin_calm_rounds=0), paths=20_000, seed=1)
+    assert capped.cap_hit_ratio < 0.01
 
 
 def test_seed_reproducible() -> None:

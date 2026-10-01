@@ -21,8 +21,8 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
     kind: 'float',
     group: 'coin',
   },
-  { key: 'coin_cap', label: '코인 일일 상한', hint: '소수. 3 = +300%', kind: 'float', group: 'coin' },
-  { key: 'coin_floor', label: '코인 일일 하한', hint: '소수. -0.5 = -50%', kind: 'float', group: 'coin' },
+  { key: 'coin_cap', label: '코인 일일 상한', hint: '소수. 2 = +200%', kind: 'float', group: 'coin' },
+  { key: 'coin_floor', label: '코인 일일 하한', hint: '소수. -0.4 = -40%', kind: 'float', group: 'coin' },
   {
     key: 'coin_price_cap',
     label: '코인 가격 상한(원)',

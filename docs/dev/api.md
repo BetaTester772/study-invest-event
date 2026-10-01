@@ -139,8 +139,8 @@ interface EventInfo {
     round: number | null;        // 오늘 정산 회차(마지막 날 null)
   };
   certification: { cutoff: string; target_date: string; reward_cash: number };  // 승인 1건당 현금
-  coin: {                        // 병더리움 하루 변동폭(변동률은 소수, 3 = +300%)
-    cap: number; floor: number;  // 평소 상·하한(3, -0.5)
+  coin: {                        // 병더리움 하루 변동폭(변동률은 소수, 2 = +200%)
+    cap: number; floor: number;  // 평소 상·하한(2, -0.4)
     calm_rounds: number;         // 초반 안정기 회차 수(이벤트 회차 수 이내). 0이면 없음
     calm_until: string | null;   // 안정기 마지막 회차가 반영되는 운영일(기본 2026-10-09)
     calm_cap: number; calm_floor: number;  // 안정기 상·하한(0.3, -0.1)

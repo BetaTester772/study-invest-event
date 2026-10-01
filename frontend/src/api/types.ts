@@ -142,7 +142,7 @@ export interface EventInfo {
   clock: ClockInfo | null;
 }
 
-/** BYUNG daily move range (rates are decimals: 3 = +300%). */
+/** BYUNG daily move range (rates are decimals: 2 = +200%). */
 export interface CoinInfo {
   cap: number;
   floor: number;
