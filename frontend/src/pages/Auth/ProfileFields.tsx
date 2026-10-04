@@ -38,7 +38,7 @@ export function ProfileFields({
     <>
       <TextField
         label="이름"
-        hint="실명. 운영진만 봐요."
+        hint="운영진에게만 보여요."
         autoComplete="name"
         value={value.name}
         onChange={(e) => set('name', e.target.value)}
