@@ -24,7 +24,7 @@ export function describeMarket(event: EventInfo): MarketSummary {
   const roundText = market.round
     ? `오늘은 ${market.round}회차 정산일이에요.`
     : isLastDay
-      ? '오늘이 마지막 운영일이라 마감 뒤에는 가격이 바뀌지 않아요.'
+      ? '오늘이 마지막 운영일이에요.'
       : '';
 
   if (today < event.start) {
