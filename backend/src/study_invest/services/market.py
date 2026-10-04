@@ -28,7 +28,7 @@ from ..models import (
     Side,
 )
 from ..money import PRICE_UNIT
-from ..params import MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
+from ..params import KST, MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
 from ..pricing import draw_coin, is_calm_round, settle_stocks
 from . import certification
 from .common import (
@@ -367,6 +367,43 @@ def advance_price(
         detail["round"] = settled.detail["round"]
         detail["manual_kept"] = settled.detail["manual_kept"]
     return BatchResult("advance", effective, detail)
+
+
+def qa_next_step(
+    s: Session, now: datetime, calendar: EventCalendar, rng: random.Random
+) -> tuple[BatchResult, datetime]:
+    """이벤트를 다음 단계 하나만 진행한다(QA 전용). (결과, 단계가 일어난 시각)을 돌려준다.
+
+    09:00 공시 → 18:00 장 마감·정산 → 다음 운영일 09:00 공시 순서다. 호출자는 커밋한 뒤
+    앱 시계를 돌려받은 시각으로 옮겨야 장 운영 시간·주문 일자가 단계와 맞는다.
+    반영일이 없는 마지막 날은 정산 없이 18:00 마감까지만 가고, 그 뒤는 더 갈 단계가 없다.
+    """
+    batch_lock(s)
+    day = latest_opened_day(s)
+    if day is None:
+        at = datetime.combine(calendar.start, MARKET_OPEN, KST)
+        result = open_day(s, calendar.start, at, calendar, ignore_clock=True)
+        audit(s, at, "admin", "qa.next_step", step="open", day=calendar.start.isoformat())
+        return result, at
+    md = market_day(s, day)
+    assert md is not None
+    close_at = datetime.combine(day, MARKET_CLOSE, KST)
+    if md.settled_at is None:
+        if calendar.round_of(day) is None:
+            if to_kst(now) >= close_at:
+                raise DomainError("EVENT_ENDED", "이벤트의 마지막 단계입니다.")
+            audit(s, close_at, "admin", "qa.next_step", step="close", day=day.isoformat())
+            return BatchResult("close", day, {}), close_at
+        result = settle_day(s, day, close_at, calendar, rng)
+        audit(s, close_at, "admin", "qa.next_step", step="settle", day=day.isoformat())
+        return result, close_at
+    effective = calendar.next_operating_day(day)
+    if effective is None:
+        raise DomainError("EVENT_ENDED", "이벤트의 마지막 단계입니다.")
+    at = datetime.combine(effective, MARKET_OPEN, KST)
+    result = open_day(s, effective, at, calendar)
+    audit(s, at, "admin", "qa.next_step", step="open", day=effective.isoformat())
+    return result, at
 
 
 # --- 관리자 수동 가격 개입 (F-11) ---------------------------------------------------
