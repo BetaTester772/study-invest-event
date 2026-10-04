@@ -1,7 +1,7 @@
 """school email verification
 
-1인 1계정을 학교 메일(@skku.edu·@g.skku.edu) 인증으로 확인한다. 기존 참가자는 email이 비어 있어
-재인증 전까지 거래·공부 인증을 할 수 없다. 새 참가자는 identity가 없다(NULL).
+1인 1계정을 학교 메일(@skku.edu·@g.skku.edu)로 확인한다. 기존 참가자는 email이 비어 있다(미인증).
+새 참가자는 identity가 없다(NULL).
 downgrade는 identity가 NULL인 참가자(메일로 가입한 참가자)가 있으면 실패한다.
 
 Revision ID: 0003

@@ -25,7 +25,7 @@ from ..normalize import (
 )
 from ..params import INITIAL_CASH
 from .common import DomainError, audit
-from .email_verification import email_taken, ensure_email_free, registered_participant
+from .email_verification import email_taken, ensure_email_free
 
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
 
@@ -148,6 +148,7 @@ def register(
     _ensure_unique(s, email, profile, nickname)
     participant = Participant(
         email=email.canonical,
+        email_address=email.address,
         verified_at=now if verified else None,
         verified_via=VerifyMethod.EMAIL if verified else None,
         name=profile.name,
@@ -178,19 +179,23 @@ def verify_email(
     profile: Profile | None,
     now: datetime,
 ) -> None:
-    """미인증 참가자(메일 인증 도입 전 가입, 또는 메일 인증을 끈 채 가입)의 학교 메일 인증.
+    """학교 메일 코드로 인증한다. 메일 코드로 아직 인증하지 않은 계정만(미인증 또는 관리자 인증).
 
+    관리자 인증은 메일을 확인하지 않으므로, 잘못 적은 메일도 여기서 바로잡을 수 있다. 메일 코드로
+    인증된 계정은 등록 메일이 본인 것으로 확인됐으므로 바꿀 수 없다(세션 탈취 → 메일 변경 →
+    비밀번호 재설정으로 계정을 가져가는 경로 차단).
     메일을 인증한 주소로 바꾸고, profile이 있으면 이름·학번·학과도 채운다(도입 전 계정).
     자기 계정이 이미 쓰는 메일·학번은 그대로 써도 된다.
     """
-    if participant.verified:
-        raise DomainError("ALREADY_VERIFIED", "이미 인증을 마쳤습니다.")
+    if participant.email_verified:
+        raise DomainError("ALREADY_VERIFIED", "이미 학교 메일 인증을 마쳤습니다.")
     ensure_email_free(s, email, participant.id)
     if profile is not None:
         ensure_student_id_free(s, profile.student_id, participant.id)
     try:
         with s.begin_nested():
             participant.email = email.canonical
+            participant.email_address = email.address
             participant.verified_at = now
             participant.verified_via = VerifyMethod.EMAIL
             if profile is not None:
@@ -198,7 +203,11 @@ def verify_email(
                 participant.student_id = profile.student_id
                 participant.department = profile.department
     except IntegrityError as exc:  # 다른 참가자가 같은 메일·학번으로 동시에 인증
-        if s.scalar(select(Participant.id).where(Participant.email == email.canonical)):
+        if s.scalar(
+            select(Participant.id).where(
+                Participant.email == email.canonical, Participant.id != participant.id
+            )
+        ):
             raise email_taken() from exc
         raise _student_id_taken() from exc
     audit(s, now, f"participant:{participant.id}", "participant.verify_email")
@@ -221,12 +230,8 @@ def set_verified(s: Session, participant: Participant, verified: bool, now: date
     )
 
 
-def login(s: Session, identity: str, password: str, now: datetime) -> tuple[Participant, str]:
-    """학번으로 로그인한다. 학교 메일(두 도메인 어느 쪽이든)이나 메일 인증 도입 전 식별자도 받는다.
-
-    입력에 맞는 계정을 학번 → 학교 메일 → 예전 식별자 순으로 찾고, 비밀번호가 맞는 첫 계정으로
-    로그인한다(예전 식별자가 다른 사람의 학번과 같은 숫자여도 각자 로그인할 수 있다).
-    """
+def _accounts(s: Session, identity: str) -> list[Participant]:
+    """입력에 맞는 계정: 학번 → 학교 메일(두 도메인 어느 쪽이든) → 메일 인증 도입 전 식별자 순."""
     candidates: list[Participant] = []
     student_id = normalize_student_id(identity)
     if STUDENT_ID.fullmatch(student_id):
@@ -240,18 +245,59 @@ def login(s: Session, identity: str, password: str, now: datetime) -> tuple[Part
     candidates += s.scalars(
         select(Participant).where(Participant.identity == normalize_identity(identity))
     )
-    for participant in candidates:
-        if verify_password(password, participant.password_hash):
-            return participant, issue_token(s, participant, now)
+    return candidates
+
+
+def login(s: Session, identity: str, password: str, now: datetime) -> tuple[Participant, str]:
+    """학번으로 로그인한다. 학교 메일(두 도메인 어느 쪽이든)이나 메일 인증 도입 전 식별자도 받는다.
+
+    입력에 맞는 계정을 학번 → 학교 메일 → 예전 식별자 순으로 찾고, 비밀번호가 맞는 첫 계정으로
+    로그인한다(예전 식별자가 다른 사람의 학번과 같은 숫자여도 각자 로그인할 수 있다).
+    """
+    for participant in _accounts(s, identity):
+        stored = participant.password_hash
+        if not verify_password(password, stored):
+            continue
+        # 비밀번호 확인(scrypt, 느림) 동안 재설정이 끝났을 수 있다. 행을 공유 잠금으로 다시 읽어
+        # 그대로일 때만 토큰을 만든다. 재설정의 UPDATE는 이 잠금을 기다리고, 그 뒤의 로그인 삭제가
+        # 이 토큰까지 지운다. 그러지 않으면 옛 비밀번호 로그인이 재설정 뒤에도 살아남는다.
+        current = s.scalars(
+            select(Participant)
+            .where(Participant.id == participant.id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        ).one()
+        if current.password_hash != stored:
+            continue
+        return current, issue_token(s, current, now)
     raise DomainError("INVALID_CREDENTIALS", "학번 또는 비밀번호가 올바르지 않습니다.", 401)
 
 
+def account_for_reset(s: Session, identity: str) -> Participant:
+    """비밀번호 재설정 대상: 학번(또는 학교 메일)으로 찾은, 학교 메일이 등록된 계정.
+
+    코드는 항상 이 계정의 등록 메일로만 보낸다. 다른 주소로 받을 수 있으면 남의 학번만 알아도
+    계정을 가져갈 수 있다.
+    """
+    for participant in _accounts(s, identity):
+        if participant.email_address:
+            return participant
+    raise DomainError(
+        "ACCOUNT_NOT_FOUND",
+        "이 학번으로 가입했거나 학교 메일을 등록한 계정이 없습니다. 학번을 확인하거나 운영진에게"
+        " 문의하세요.",
+        404,
+    )
+
+
 def reset_password(
-    s: Session, email: SchoolEmail, password: str, now: datetime
+    s: Session, participant: Participant, password: str, now: datetime
 ) -> tuple[Participant, str]:
-    """학교 메일 코드로 확인한 참가자의 비밀번호를 바꾼다. 다른 기기의 로그인은 모두 끊는다."""
-    participant = registered_participant(s, email)
+    """등록 메일 코드로 확인한 참가자의 비밀번호를 바꾼다. 다른 기기의 로그인은 모두 끊는다."""
     participant.password_hash = hash_password(password)
+    # UPDATE를 먼저 보내 행 잠금을 잡는다. 진행 중인 로그인(공유 잠금)이 끝나길 기다린 뒤라
+    # 아래 DELETE가 그 로그인의 토큰까지 지운다(login 참고).
+    s.flush()
     s.execute(delete(AuthSession).where(AuthSession.participant_id == participant.id))
     audit(s, now, f"participant:{participant.id}", "participant.reset_password")
     return participant, issue_token(s, participant, now)

@@ -194,7 +194,7 @@ class EmailCodeRequest(BaseModel):
 
 class EmailCodeResponse(Schema):
     email: str
-    """코드를 보낸 주소."""
+    """코드를 보낸 주소. 등록 메일로 보냈으면 가린 주소(k***@g.skku.edu)."""
     expires_in: int
     """코드 유효시간(초)."""
     resend_after: int
@@ -216,14 +216,20 @@ class RegisterRequest(BaseModel):
     """개인정보(학교 메일·이름·학번·학과) 수집·이용 동의. true여야 한다."""
 
 
-class VerifyEmailRequest(BaseModel):
-    """미인증 참가자의 학교 메일 인증. 보통은 가입 때 낸 메일로 받은 코드만 보낸다.
+class MyEmailCodeRequest(BaseModel):
+    email: Email | None = None
+    """비우면 등록 메일로 보낸다. 다른 주소로 인증하려면 그 주소."""
 
+
+class VerifyEmailRequest(BaseModel):
+    """학교 메일 코드 인증. 보통은 코드만 보낸다(등록 메일로 받은 코드).
+
+    email: 다른 주소로 코드를 받았으면 그 주소(인증하면 등록 메일이 그 주소로 바뀐다).
     이름·학번·학과·동의는 그 정보가 없는 계정(Participant.needs_profile, 메일 인증 도입 전
-    가입)만 함께 보낸다. 다른 메일로 인증하면 등록 메일이 그 주소로 바뀐다.
+    가입)만 함께 보낸다.
     """
 
-    email: Email
+    email: Email | None = None
     code: Code
     name: Name | None = None
     student_id: StudentId | None = None
@@ -231,8 +237,14 @@ class VerifyEmailRequest(BaseModel):
     privacy_consent: bool = False
 
 
+class PasswordResetCodeRequest(BaseModel):
+    identity: Identity
+    """학번(학교 메일도 받는다). 코드는 그 계정의 등록 메일로만 간다."""
+
+
 class PasswordResetRequest(BaseModel):
-    email: Email
+    identity: Identity
+    """코드를 요청할 때와 같은 학번(또는 학교 메일)."""
     code: Code
     password: str = Field(min_length=8, max_length=128)
     """새 비밀번호."""
@@ -249,11 +261,14 @@ class Participant(Schema):
     nickname: str
     status: ParticipantStatus
     joined_at: datetime
-    email: str | None
-    """학교 메일(@g.skku.edu로 합쳐 보관). 메일 인증 도입 전 계정·이벤트 후 파기면 null."""
+    masked_email: str | None
+    """가린 등록 메일(k***@g.skku.edu). 본인 응답에도 전체 주소는 싣지 않는다. 없으면 null."""
     verified: bool
     """인증(학교 메일 코드 또는 관리자 확인)을 마쳤는지. signup.verified_only_trading이면 false인
     동안 주문할 수 없다."""
+    email_verified: bool
+    """학교 메일 코드로 인증했다(등록 메일이 본인 것으로 확인됨). false면 메일 인증을 할 수 있다
+    (미인증이거나 관리자 인증만 받은 계정)."""
     needs_profile: bool
     """이름·학번·학과가 없다(메일 인증 도입 전 계정). 인증할 때 함께 받는다."""
 
@@ -352,6 +367,8 @@ class CertificationStatus(Schema):
 class AdminParticipant(Participant):
     identity: str | None
     """메일 인증 도입 전 식별자. 그 뒤 가입한 참가자는 null."""
+    email: str | None
+    """등록 학교 메일 전체 주소(코드를 보내는 주소). 관리자만 본다."""
     name: str | None
     student_id: str | None
     department: str | None

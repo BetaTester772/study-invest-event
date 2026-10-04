@@ -59,7 +59,13 @@ class TestRegistration:
             assert r.status_code == 200, identity
         h = {"Authorization": f"Bearer {r.json()['token']}"}
         me = client.get("/api/me", headers=h).json()
-        assert me["email"] == "alice@g.skku.edu" and me["verified"] is True
+        # 본인 응답에도 메일은 가려서만 준다
+        assert (me["masked_email"], me["verified"], me["email_verified"]) == (
+            "a***@g.skku.edu",
+            True,
+            True,
+        )
+        assert "alice@g.skku.edu" not in str(me)
         assert client.post("/api/auth/logout", headers=h).status_code == 204
         assert client.get("/api/me", headers=h).status_code == 401
 

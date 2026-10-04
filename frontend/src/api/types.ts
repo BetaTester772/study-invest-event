@@ -42,10 +42,12 @@ export interface Participant {
   nickname: string;
   status: ParticipantStatus;
   joined_at: string;
-  /** 학교 메일(@g.skku.edu로 합쳐 보관). 비밀번호 재설정 코드를 받는 주소. 없으면 null. */
-  email: string | null;
+  /** 가린 등록 메일(k***@g.skku.edu). 본인 응답에도 전체 주소는 오지 않는다. 없으면 null. */
+  masked_email: string | null;
   /** 학교 메일 코드나 관리자 확인으로 인증했는지. `signup.verified_only_trading`이면 false인 동안 주문 불가. */
   verified: boolean;
+  /** 학교 메일 코드로 인증했는지. false면 메일 인증을 할 수 있다(미인증 또는 관리자 인증만). */
+  email_verified: boolean;
   /** 이름·학번·학과가 없는 계정(메일 인증 도입 전 가입). 인증할 때 함께 받는다. */
   needs_profile: boolean;
 }
@@ -216,7 +218,7 @@ export interface EmailCodeRequest {
 }
 
 export interface EmailCodeResponse {
-  /** 코드를 보낸 주소. */
+  /** 코드를 보낸 주소. 등록 메일로 보냈으면 가린 주소. */
   email: string;
   /** 코드 유효시간(초). */
   expires_in: number;
@@ -241,17 +243,30 @@ export interface RegisterRequest extends ProfileFields {
   privacy_consent: boolean;
 }
 
-/** 미인증 계정의 학교 메일 인증. 이름·학번·학과·동의는 `needs_profile`인 계정만 보낸다. */
+/** 비우면 등록 메일로, 주소를 주면 그 주소로 인증 코드를 보낸다. */
+export interface MyEmailCodeRequest {
+  email?: string;
+}
+
+/**
+ * 학교 메일 코드 인증. 등록 메일로 받았으면 코드만, 다른 주소로 받았으면 그 주소도.
+ * 이름·학번·학과·동의는 `needs_profile`인 계정만 보낸다.
+ */
 export interface VerifyEmailRequest extends Partial<ProfileFields> {
-  email: string;
+  email?: string;
   code: string;
   privacy_consent?: boolean;
 }
 
 export type VerifyMethod = 'email' | 'admin';
 
+/** 학번(학교 메일도 받는다). 코드는 그 계정의 등록 메일로만 간다. */
+export interface PasswordResetCodeRequest {
+  identity: string;
+}
+
 export interface PasswordResetRequest {
-  email: string;
+  identity: string;
   code: string;
   /** 새 비밀번호(8자 이상). */
   password: string;
@@ -274,6 +289,8 @@ export interface OrderRequest {
 export interface AdminParticipant extends Participant {
   /** 메일 인증 도입 전 아이디. 그 뒤 가입한 참가자는 null. */
   identity: string | null;
+  /** 등록 학교 메일 전체 주소(관리자만). */
+  email: string | null;
   /** 이름·학번·학과. 재인증 전 계정이거나 이벤트 후 파기했으면 null. */
   name: string | null;
   student_id: string | null;

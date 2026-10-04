@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, authApi } from '../../api';
+import { ApiError, authApi, type EmailCodeResponse } from '../../api';
 import { Alert, Button, Checkbox, Stack, Text, TextField } from '../../components/ui';
 import styles from './SchoolEmailFields.module.css';
 
@@ -29,48 +29,13 @@ const REQUEST_ERRORS: Record<string, string> = {
   EMAIL_DOMAIN_NOT_ALLOWED: '학교 메일(@skku.edu 또는 @g.skku.edu)만 쓸 수 있어요.',
   INVALID_EMAIL: '메일 주소를 다시 확인해 주세요. +가 들어간 별칭 주소는 쓸 수 없어요.',
   EMAIL_TAKEN: '이미 참가한 학교 메일이에요. @skku.edu와 @g.skku.edu는 같은 계정으로 봐요.',
-  EMAIL_NOT_REGISTERED: '이 학교 메일로 가입한 계정이 없어요. 메일 주소를 확인하거나 참가 신청을 해 주세요.',
 };
 
-/** verify: 참가 신청·재인증(아직 안 쓴 메일). reset: 비밀번호 재설정(가입한 메일). */
-export type CodePurpose = 'verify' | 'reset';
-
-const HINTS: Record<CodePurpose, string> = {
-  verify: '@skku.edu 또는 @g.skku.edu. 같은 ID의 두 주소는 한 사람으로 봐요.',
-  reset: '가입할 때 인증한 학교 메일이에요. @skku.edu와 @g.skku.edu 어느 쪽을 써도 돼요.',
-};
-
-/** 코드 확인 단계(가입·재인증 제출)에서 나오는 오류 중 코드 칸에 보여 줄 것. */
+/** 코드 확인 단계(가입·인증·재설정 제출)에서 나오는 오류 중 코드 칸에 보여 줄 것. */
 export const CODE_ERRORS = new Set(['INVALID_CODE', 'CODE_EXPIRED', 'CODE_ATTEMPTS_EXCEEDED']);
 
-interface SchoolEmailFieldsProps {
-  email: string;
-  onEmailChange: (email: string) => void;
-  code: string;
-  onCodeChange: (code: string) => void;
-  emailError?: string;
-  codeError?: string;
-  onEmailError: (message: string | undefined) => void;
-  purpose?: CodePurpose;
-  /** false면 메일 주소만 받는다(메일 인증 없이 가입하는 운영). */
-  withCode?: boolean;
-  /** withCode=false일 때 메일 칸 안내. */
-  hint?: string;
-}
-
-/** 학교 메일 입력 + 인증 코드 받기 + 코드 입력. 참가 신청·재인증·비밀번호 재설정 화면이 함께 쓴다. */
-export function SchoolEmailFields({
-  email,
-  onEmailChange,
-  code,
-  onCodeChange,
-  emailError,
-  codeError: codeErr,
-  onEmailError,
-  purpose = 'verify',
-  withCode = true,
-  hint,
-}: SchoolEmailFieldsProps) {
+/** 코드 요청 상태: 보내는 중, 보낸 주소, 재요청 카운트다운, 오류 안내. */
+function useCodeRequest() {
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -82,50 +47,49 @@ export function SchoolEmailFields({
     return () => window.clearTimeout(timer);
   }, [resendLeft]);
 
-  const requestCode = async () => {
-    const invalid = schoolEmailError(email);
-    onEmailError(invalid);
-    if (invalid) return;
+  /** onError가 true를 돌려주면(칸 옆에 보여 줌) 공통 안내는 띄우지 않는다. */
+  const run = async (send: () => Promise<EmailCodeResponse>, onError?: (err: unknown) => boolean) => {
     setSending(true);
     setNotice(null);
     try {
-      const send = purpose === 'reset' ? authApi.requestPasswordResetCode : authApi.requestEmailCode;
-      const res = await send({ email: email.trim() });
+      const res = await send();
       setSentTo(res.email);
       setResendLeft(res.resend_after);
-      onCodeChange('');
+      return true;
     } catch (err) {
-      if (err instanceof ApiError && REQUEST_ERRORS[err.code]) {
-        onEmailError(REQUEST_ERRORS[err.code]);
-      } else {
+      if (!onError?.(err)) {
         setNotice(err instanceof ApiError ? err.message : '인증 메일을 보내지 못했어요. 잠시 뒤 다시 시도해 주세요.');
       }
+      return false;
     } finally {
       setSending(false);
     }
   };
+  return { sending, sentTo, setSentTo, notice, resendLeft, run };
+}
 
+function CodeSteps({
+  state,
+  label,
+  onClick,
+  disabled,
+  code,
+  onCodeChange,
+  codeError,
+}: {
+  state: ReturnType<typeof useCodeRequest>;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  code: string;
+  onCodeChange: (code: string) => void;
+  codeError?: string;
+}) {
+  const { sending, sentTo, notice, resendLeft } = state;
   return (
-    <Stack gap={3}>
-      <TextField
-        label="학교 메일"
-        hint={hint ?? HINTS[purpose]}
-        type="email"
-        autoComplete="email"
-        inputMode="email"
-        placeholder="example@g.skku.edu"
-        value={email}
-        onChange={(e) => {
-          onEmailChange(e.target.value);
-          setSentTo(null);
-        }}
-        error={emailError}
-        required
-      />
-      {withCode && (
-        <>
-      <Button variant="secondary" onClick={requestCode} loading={sending} disabled={resendLeft > 0}>
-        {resendLeft > 0 ? `${resendLeft}초 뒤에 다시 받을 수 있어요` : sentTo ? '코드 다시 받기' : '인증 코드 받기'}
+    <>
+      <Button variant="secondary" onClick={onClick} loading={sending} disabled={disabled || resendLeft > 0}>
+        {resendLeft > 0 ? `${resendLeft}초 뒤에 다시 받을 수 있어요` : sentTo ? '코드 다시 받기' : label}
       </Button>
       {notice && <Alert tone="danger">{notice}</Alert>}
       {sentTo && (
@@ -141,10 +105,128 @@ export function SchoolEmailFields({
         maxLength={6}
         value={code}
         onChange={(e) => onCodeChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
-        error={codeErr}
+        error={codeError}
         required
       />
-        </>
+    </>
+  );
+}
+
+interface CodeSenderProps {
+  /** 코드를 요청한다(등록 메일로, 또는 학번으로 찾은 계정의 등록 메일로). 응답 주소는 가려져 온다. */
+  request: () => Promise<EmailCodeResponse>;
+  /** 요청 전에 확인할 것(예: 학번 형식). 오류 문구를 돌려주면 요청하지 않는다. */
+  validate?: () => string | undefined;
+  /** 요청 오류를 칸 옆에 보여 줬으면 true. */
+  onRequestError?: (err: unknown) => boolean;
+  label?: string;
+  code: string;
+  onCodeChange: (code: string) => void;
+  codeError?: string;
+}
+
+/** 주소를 입력받지 않고 코드를 받는다: 등록 메일 인증, 학번으로 비밀번호 재설정. */
+export function CodeSender({
+  request,
+  validate,
+  onRequestError,
+  label = '인증 코드 받기',
+  code,
+  onCodeChange,
+  codeError: codeErr,
+}: CodeSenderProps) {
+  const state = useCodeRequest();
+  const onClick = async () => {
+    if (validate?.()) return;
+    if (await state.run(request, onRequestError)) onCodeChange('');
+  };
+  return (
+    <Stack gap={3}>
+      <CodeSteps
+        state={state}
+        label={label}
+        onClick={() => void onClick()}
+        code={code}
+        onCodeChange={onCodeChange}
+        codeError={codeErr}
+      />
+    </Stack>
+  );
+}
+
+interface SchoolEmailFieldsProps {
+  email: string;
+  onEmailChange: (email: string) => void;
+  code: string;
+  onCodeChange: (code: string) => void;
+  emailError?: string;
+  codeError?: string;
+  onEmailError: (message: string | undefined) => void;
+  /** 코드를 보내는 API. 기본은 참가 신청용(POST /api/auth/email-code). */
+  send?: (email: string) => Promise<EmailCodeResponse>;
+  /** false면 메일 주소만 받는다(메일 인증 없이 가입하는 운영). */
+  withCode?: boolean;
+  hint?: string;
+}
+
+/** 학교 메일 입력 + 인증 코드 받기 + 코드 입력. 참가 신청과 다른 메일로 인증할 때 쓴다. */
+export function SchoolEmailFields({
+  email,
+  onEmailChange,
+  code,
+  onCodeChange,
+  emailError,
+  codeError: codeErr,
+  onEmailError,
+  send = (address) => authApi.requestEmailCode({ email: address }),
+  withCode = true,
+  hint = '@skku.edu 또는 @g.skku.edu. 같은 ID의 두 주소는 한 사람으로 봐요.',
+}: SchoolEmailFieldsProps) {
+  const state = useCodeRequest();
+
+  const requestCode = async () => {
+    const invalid = schoolEmailError(email);
+    onEmailError(invalid);
+    if (invalid) return;
+    const ok = await state.run(
+      () => send(email.trim()),
+      (err) => {
+        if (err instanceof ApiError && REQUEST_ERRORS[err.code]) {
+          onEmailError(REQUEST_ERRORS[err.code]);
+          return true;
+        }
+        return false;
+      },
+    );
+    if (ok) onCodeChange('');
+  };
+
+  return (
+    <Stack gap={3}>
+      <TextField
+        label="학교 메일"
+        hint={hint}
+        type="email"
+        autoComplete="email"
+        inputMode="email"
+        placeholder="example@g.skku.edu"
+        value={email}
+        onChange={(e) => {
+          onEmailChange(e.target.value);
+          state.setSentTo(null);
+        }}
+        error={emailError}
+        required
+      />
+      {withCode && (
+        <CodeSteps
+          state={state}
+          label="인증 코드 받기"
+          onClick={() => void requestCode()}
+          code={code}
+          onCodeChange={onCodeChange}
+          codeError={codeErr}
+        />
       )}
     </Stack>
   );

@@ -12,7 +12,8 @@ from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 
-from ..models import Order, StudyCertification
+from ..models import CodePurpose, Order, Participant, StudyCertification
+from ..normalize import mask_email
 from ..services import auth, certification, trading
 from ..services.common import DomainError, get_params
 from . import schemas, views
@@ -26,6 +27,7 @@ from .deps import (
     VerifiedMeDep,
 )
 from .email_codes import consume_code
+from .routes_public import send_code
 
 router = APIRouter(prefix="/api/me")
 
@@ -35,6 +37,43 @@ def me(participant: MeDep) -> schemas.Participant:
     return schemas.Participant.model_validate(participant)
 
 
+def _ensure_can_verify_email(participant: Participant) -> None:
+    if participant.email_verified:
+        raise DomainError("ALREADY_VERIFIED", "이미 학교 메일 인증을 마쳤습니다.")
+
+
+@router.post("/email/code", response_model=schemas.EmailCodeResponse, status_code=202)
+def request_my_email_code(
+    body: schemas.MyEmailCodeRequest,
+    participant: MeDep,
+    state: StateDep,
+    s: SessionDep,
+    real_now: RealNowDep,
+) -> schemas.EmailCodeResponse:
+    """학교 메일 인증 코드를 보낸다. 주소를 비우면 등록 메일로 보내고 응답 주소는 가린다.
+
+    다른 주소(email)는 등록 메일을 잘못 적었거나 메일이 없는 계정(메일 인증 도입 전)이 쓴다.
+    """
+    _ensure_can_verify_email(participant)
+    if body.email is not None:
+        return send_code(
+            state, s, body.email, real_now, CodePurpose.VERIFY, requester_id=participant.id
+        )
+    if participant.email_address is None:
+        raise DomainError(
+            "EMAIL_REQUIRED", "등록된 학교 메일이 없습니다. 메일 주소를 입력하세요.", 422
+        )
+    return send_code(
+        state,
+        s,
+        participant.email_address,
+        real_now,
+        CodePurpose.VERIFY,
+        requester_id=participant.id,
+        shown=mask_email,
+    )
+
+
 @router.post("/email", response_model=schemas.Participant)
 def verify_email(
     body: schemas.VerifyEmailRequest,
@@ -42,19 +81,24 @@ def verify_email(
     s: SessionDep,
     real_now: RealNowDep,
 ) -> schemas.Participant:
-    """미인증 참가자의 학교 메일 인증(코드는 POST /api/auth/email-code로 받는다).
+    """학교 메일 코드로 인증한다(코드는 POST /api/me/email/code). 주소를 비우면 등록 메일.
 
-    메일 인증 없이 가입한 참가자, 또는 메일 인증 도입 전에 가입한 참가자(이름·학번·학과도 받는다).
+    메일 코드로 아직 인증하지 않은 계정만(미인증, 관리자 인증). 메일 인증 도입 전 계정은
+    이름·학번·학과·동의도 함께 받는다.
     """
-    if participant.verified:
-        raise DomainError("ALREADY_VERIFIED", "이미 인증을 마쳤습니다.")
+    _ensure_can_verify_email(participant)
+    raw_email = body.email if body.email is not None else participant.email_address
+    if raw_email is None:
+        raise DomainError(
+            "EMAIL_REQUIRED", "등록된 학교 메일이 없습니다. 메일 주소를 입력하세요.", 422
+        )
     profile = None
     if participant.needs_profile:
         if body.name is None or body.student_id is None or body.department is None:
             raise DomainError("PROFILE_REQUIRED", "이름·학번·학과를 함께 입력하세요.", 422)
         auth.ensure_privacy_consent(body.privacy_consent)
         profile = auth.Profile(body.name, body.student_id, body.department)
-    email = consume_code(s, body.email, body.code, real_now)
+    email = consume_code(s, raw_email, body.code, real_now)
     auth.verify_email(s, participant, email, profile, real_now)
     s.commit()
     return schemas.Participant.model_validate(participant)

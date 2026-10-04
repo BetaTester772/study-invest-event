@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+from .normalize import mask_email
 
 
 class AwareDateTime(TypeDecorator[datetime]):
@@ -117,8 +118,11 @@ class Participant(Base):
     identity: Mapped[str | None] = mapped_column(String(128), unique=True)
     """메일 인증 도입 전에 쓰던 자유 입력 식별자(정규화됨). 그 뒤 가입한 참가자는 None."""
     email: Mapped[str | None] = mapped_column(String(254), unique=True)
-    """학교 메일의 1인 1계정 키(normalize.SchoolEmail.canonical). 메일 인증을 끈 운영에서는 확인하지
-    않은 채 저장된다(비밀번호 재설정 코드를 받는 주소). 이벤트 후 파기하면 None."""
+    """학교 메일의 1인 1계정 키(normalize.SchoolEmail.canonical, ID@g.skku.edu). 메일 인증을 끈
+    운영에서는 확인하지 않은 채 저장된다. 이벤트 후 파기하면 None."""
+    email_address: Mapped[str | None] = mapped_column(String(254))
+    """인증·재설정 코드를 보내는 주소(입력한 도메인 그대로). skku.edu와 g.skku.edu는 같은 ID여도
+    메일함이 다를 수 있어 키(email)와 따로 둔다. 이벤트 후 파기하면 None."""
     verified_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
     """인증 시각(학교 메일 코드 또는 관리자 확인). None이면 미인증이라, 관리자가 '인증된 참가자만
     거래'(EventParams.verified_only_trading)를 켜면 주문할 수 없다."""
@@ -145,6 +149,16 @@ class Participant(Base):
     @property
     def verified(self) -> bool:
         return self.verified_at is not None
+
+    @property
+    def masked_email(self) -> str | None:
+        """본인에게 보여 주는 가린 등록 메일(k***@g.skku.edu)."""
+        return mask_email(self.email_address) if self.email_address else None
+
+    @property
+    def email_verified(self) -> bool:
+        """학교 메일 코드로 인증했다(등록 메일이 본인 것으로 확인됨). 관리자 인증과 구분."""
+        return self.verified_via == VerifyMethod.EMAIL
 
     @property
     def needs_profile(self) -> bool:

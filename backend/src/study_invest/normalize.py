@@ -73,3 +73,9 @@ def parse_school_email(value: str) -> SchoolEmail:
     if not _LOCAL_PART.fullmatch(local) or ".." in local:
         raise SchoolEmailError("INVALID_EMAIL")
     return SchoolEmail(f"{local}@{domain}", f"{local}@{CANONICAL_SCHOOL_DOMAIN}")
+
+
+def mask_email(address: str) -> str:
+    """본인 응답용 가린 주소: kim@g.skku.edu → k***@g.skku.edu."""
+    local, _, domain = address.partition("@")
+    return f"{local[:1]}***@{domain}"

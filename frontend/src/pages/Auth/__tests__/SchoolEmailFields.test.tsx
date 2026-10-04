@@ -5,7 +5,7 @@ import { ApiError, authApi } from '../../../api';
 import { profileErrors } from '../ProfileFields';
 import { validateRegister } from '../RegisterPage';
 import { validateReset } from '../ResetPasswordPage';
-import { SchoolEmailFields, codeError, schoolEmailError } from '../SchoolEmailFields';
+import { CodeSender, SchoolEmailFields, codeError, schoolEmailError } from '../SchoolEmailFields';
 
 describe('schoolEmailError', () => {
   it.each(['abc@g.skku.edu', 'abc@skku.edu', ' ABC@G.SKKU.EDU ', 'a.b_c-1@g.skku.edu', 'ＡＢＣ＠Ｇ.ＳＫＫＵ.ＥＤＵ'])(
@@ -67,18 +67,18 @@ describe('validateRegister', () => {
 });
 
 describe('validateReset', () => {
-  it('needs a school email, a code and a matching new password', () => {
-    expect(validateReset('kim@skku.edu', '123456', 'newpass456', 'newpass456')).toEqual({});
-    expect(Object.keys(validateReset('kim@gmail.com', '1', 'short', 'other')).sort()).toEqual([
+  it('needs a student ID, a code and a matching new password', () => {
+    expect(validateReset('2021310123', '123456', 'newpass456', 'newpass456')).toEqual({});
+    expect(Object.keys(validateReset(' ', '1', 'short', 'other')).sort()).toEqual([
       'code',
       'confirm',
-      'email',
+      'identity',
       'password',
     ]);
   });
 });
 
-function Harness({ purpose }: { purpose?: 'verify' | 'reset' }) {
+function Harness() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | undefined>();
@@ -90,7 +90,6 @@ function Harness({ purpose }: { purpose?: 'verify' | 'reset' }) {
       onCodeChange={setCode}
       emailError={error}
       onEmailError={setError}
-      purpose={purpose}
     />
   );
 }
@@ -119,17 +118,41 @@ describe('SchoolEmailFields', () => {
     expect(screen.getByText(/학교 메일\(@skku.edu 또는 @g.skku.edu\)만/)).toBeInTheDocument();
   });
 
-  it('uses the password reset endpoint for the reset purpose', async () => {
-    const verify = vi.spyOn(authApi, 'requestEmailCode');
-    const reset = vi
-      .spyOn(authApi, 'requestPasswordResetCode')
-      .mockRejectedValue(new ApiError(404, 'EMAIL_NOT_REGISTERED', 'none'));
-    render(<Harness purpose="reset" />);
-    await userEvent.type(screen.getByLabelText(/학교 메일/), 'kim@g.skku.edu');
+  it('sends to the registered address without asking for it and shows the masked address', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue({ email: 'k***@skku.edu', expires_in: 600, resend_after: 60 });
+    function Sender() {
+      const [code, setCode] = useState('');
+      return <CodeSender label="등록한 메일로 코드 받기" request={request} code={code} onCodeChange={setCode} />;
+    }
+    render(<Sender />);
+    expect(screen.queryByLabelText(/학교 메일/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '등록한 메일로 코드 받기' }));
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/k\*\*\*@skku.edu\(으\)로 인증 코드를 보냈어요/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /초 뒤에 다시/ })).toBeDisabled();
+  });
+
+  it('does not request when validation fails and shows request errors next to the field', async () => {
+    const request = vi.fn().mockRejectedValue(new ApiError(404, 'ACCOUNT_NOT_FOUND', '없는 학번'));
+    const onError = vi.fn().mockReturnValue(true);
+    let invalid = '학번을 입력해 주세요.' as string | undefined;
+    render(
+      <CodeSender
+        request={request}
+        validate={() => invalid}
+        onRequestError={onError}
+        code=""
+        onCodeChange={() => {}}
+      />,
+    );
     await userEvent.click(screen.getByRole('button', { name: '인증 코드 받기' }));
-    expect(reset).toHaveBeenCalledWith({ email: 'kim@g.skku.edu' });
-    expect(verify).not.toHaveBeenCalled();
-    expect(await screen.findByText(/이 학교 메일로 가입한 계정이 없어요/)).toBeInTheDocument();
+    expect(request).not.toHaveBeenCalled();
+    invalid = undefined;
+    await userEvent.click(screen.getByRole('button', { name: '인증 코드 받기' }));
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(screen.queryByText('없는 학번')).not.toBeInTheDocument(); // 칸 옆에서 처리
   });
 
   it('shows only the email field without the code step', () => {

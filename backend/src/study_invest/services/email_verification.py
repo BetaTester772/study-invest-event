@@ -98,11 +98,14 @@ def request_code(
     now: datetime,
     daily_limit: int,
     purpose: CodePurpose = CodePurpose.VERIFY,
+    requester_id: int | None = None,
 ) -> tuple[SchoolEmail, EmailVerification, str]:
     """새 코드를 만든다. 반환한 코드를 메일로 보내는 것은 호출자 몫이다(커밋 후, 연결 반납 후).
 
-    VERIFY는 아직 아무 계정도 쓰지 않은 메일, RESET_PASSWORD는 가입한 메일에만 보낸다.
-    재요청 대기·하루 한도는 용도와 상관없이 메일마다 센다(메일함 폭탄 방지).
+    VERIFY는 다른 사람의 인증된 계정이 쓰지 않는 메일, RESET_PASSWORD는 가입한 메일에만 보낸다.
+    requester_id: 로그인한 본인의 요청이면 그 계정(자기 메일이면 인증 여부와 상관없이 보낸다).
+    재요청 대기·하루 한도는 용도와 상관없이 메일마다 센다(메일함 폭탄 방지). 발송에 실패해도
+    기록은 남아 한도에 센다(SMTP 장애 중 무한 재시도 방지).
     """
     email = parse(raw_email)
     # 재요청 대기·하루 한도 검사와 발급을 직렬화한다. 그러지 않으면 동시 요청이 둘 다 "최근 코드
@@ -111,10 +114,10 @@ def request_code(
     if s.get_bind().dialect.name == "postgresql":
         s.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": CODE_LOCK_KEY})
     if purpose is CodePurpose.VERIFY:
-        # 인증된 계정이 쓰는 메일이면 거부. 미인증 계정의 메일이면 보낸다(메일 인증을 끈 채 가입한
-        # 본인이 나중에 인증할 수 있게). 다른 사람은 그 메일로 가입할 수 없다(가입 때 다시 검사).
+        # 다른 사람의 인증된 계정이 쓰는 메일이면 거부. 미인증 계정의 메일이면 보낸다(그 주인이
+        # 나중에 인증할 수 있게). 다른 사람은 그 메일로 가입·인증할 수 없다(사용할 때 다시 검사).
         owner = s.scalars(select(Participant).where(Participant.email == email.canonical)).first()
-        if owner is not None and owner.verified:
+        if owner is not None and owner.id != requester_id and owner.verified:
             raise email_taken()
     else:
         registered_participant(s, email)
@@ -154,11 +157,6 @@ def request_code(
     )
     s.add(row)
     return email, row, code
-
-
-def discard(s: Session, row_id: int) -> None:
-    """메일을 보내지 못한 코드를 지운다(재발송 대기·발송 한도에 세지 않는다)."""
-    s.execute(delete(EmailVerification).where(EmailVerification.id == row_id))
 
 
 def message(code: str, purpose: CodePurpose = CodePurpose.VERIFY) -> tuple[str, str]:
@@ -232,6 +230,7 @@ def purge(
         raise DomainError("EVENT_NOT_ENDED", "이벤트 종료 후에 삭제할 수 있습니다.")
     has_info = or_(
         Participant.email.is_not(None),
+        Participant.email_address.is_not(None),
         Participant.name.is_not(None),
         Participant.student_id.is_not(None),
         Participant.department.is_not(None),
@@ -241,7 +240,7 @@ def purge(
     s.execute(
         update(Participant)
         .where(has_info)
-        .values(email=None, name=None, student_id=None, department=None)
+        .values(email=None, email_address=None, name=None, student_id=None, department=None)
     )
     s.execute(delete(EmailVerification))
     audit(

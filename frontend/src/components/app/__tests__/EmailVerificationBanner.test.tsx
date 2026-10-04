@@ -9,8 +9,9 @@ const ME: Participant = {
   nickname: 'kim',
   status: 'normal',
   joined_at: '2026-10-06T09:00:00+09:00',
-  email: 'kim@g.skku.edu',
+  masked_email: 'k***@g.skku.edu',
   verified: false,
+  email_verified: false,
   needs_profile: false,
 };
 

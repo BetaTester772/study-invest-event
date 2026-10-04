@@ -23,6 +23,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from study_invest import mail
+from study_invest.api.deps import MAIL_CONCURRENCY
 from study_invest.config import Settings
 from study_invest.event_calendar import EventCalendar
 from study_invest.models import EmailVerification, Participant
@@ -130,14 +131,30 @@ class TestCodeRequest:
         assert r.status_code == 503 and r.json()["detail"]["code"] == "MAIL_QUOTA_EXCEEDED"
         assert len(mailer.sent) == 2
 
-    def test_send_failure_is_503_and_not_counted(
-        self, client: TestClient, mailer: FakeMailer
+    def test_send_failure_is_503_and_still_counted(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
     ) -> None:
         mailer.fail = True
         r = request(client, "kim@g.skku.edu")
         assert r.status_code == 503 and r.json()["detail"]["code"] == "MAIL_SEND_FAILED"
+        # 실패한 발송도 재요청 대기에 센다(SMTP 장애 중 무한 재시도 방지)
         mailer.fail = False
-        assert request(client, "kim@g.skku.edu").status_code == 202  # 대기 없이 바로 재요청
+        assert request(client, "kim@g.skku.edu").json()["detail"]["code"] == "CODE_RECENTLY_SENT"
+        clock.now += timedelta(minutes=1)
+        assert request(client, "kim@g.skku.edu").status_code == 202
+
+    def test_concurrent_mail_sends_are_capped(self, client: TestClient, mailer: FakeMailer) -> None:
+        state = client.app.state.study_invest  # type: ignore[attr-defined]
+        for _ in range(MAIL_CONCURRENCY):  # 다른 요청들이 SMTP를 기다리는 중
+            assert state.mail_slots.acquire(blocking=False)
+        try:
+            r = request(client, "kim@g.skku.edu")
+            assert r.status_code == 503 and r.json()["detail"]["code"] == "MAIL_BUSY"
+        finally:
+            for _ in range(MAIL_CONCURRENCY):
+                state.mail_slots.release()
+        assert mailer.sent == []
+        assert request(client, "kim@g.skku.edu").status_code == 202  # 코드를 만들기 전에 거절
 
 
 class TestCodeCheck:
@@ -183,7 +200,7 @@ class TestCodeCheck:
         code = email_code(client, "kim@skku.edu")
         r = register_with(client, "kim@g.skku.edu", "kim", code)
         assert r.status_code == 201
-        assert r.json()["participant"]["email"] == "kim@g.skku.edu"
+        assert r.json()["participant"]["masked_email"] == "k***@g.skku.edu"
 
     def test_register_race_same_person_other_domain(self, client: TestClient) -> None:
         # 두 도메인으로 각각 코드를 받아 두고 하나로 먼저 가입하면, 다른 쪽은 거부
@@ -241,7 +258,7 @@ class TestLegacyReverification:
         code = email_code(client, "lee@skku.edu")
         r = _verify(client, h, "lee@skku.edu", code)
         assert r.status_code == 200
-        assert r.json()["verified"] is True and r.json()["email"] == "lee@g.skku.edu"
+        assert r.json()["verified"] is True and r.json()["masked_email"] == "l***@skku.edu"
         open_day(client, clock, D1)
         r = client.post(
             "/api/me/orders", json={"code": "LB", "side": "buy", "quantity": 1}, headers=h
@@ -298,7 +315,7 @@ class TestPurge:
             assert email_verification.purge(s, after, cal) == (1, 2)
             s.commit()
         me = client.get("/api/me", headers=h).json()
-        assert me["email"] is None and me["verified"] is True
+        assert me["masked_email"] is None and me["verified"] is True
 
 
 class TestScaledClock:
@@ -464,13 +481,14 @@ class TestProfile:
         assert [row[k] for k in ("email", "name", "student_id", "department")] == [None] * 4
 
 
-def _reset_code(client: TestClient, email: str) -> Any:
-    return client.post("/api/auth/password-reset/code", json={"email": email})
+def _reset_code(client: TestClient, identity: str) -> Any:
+    return client.post("/api/auth/password-reset/code", json={"identity": identity})
 
 
-def _reset(client: TestClient, email: str, code: str, password: str = "newpass456") -> Any:
+def _reset(client: TestClient, identity: str, code: str, password: str = "newpass456") -> Any:
     return client.post(
-        "/api/auth/password-reset", json={"email": email, "code": code, "password": password}
+        "/api/auth/password-reset",
+        json={"identity": identity, "code": code, "password": password},
     )
 
 
@@ -479,70 +497,85 @@ def _login(client: TestClient, identity: str, password: str) -> Any:
 
 
 class TestPasswordReset:
-    def test_reset_flow(self, client: TestClient, clock: Clock, mailer: FakeMailer) -> None:
-        old = register(client, "kim")  # kim@g.skku.edu
+    def test_reset_by_student_id(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        r = register_with(client, "kim@skku.edu", "kim", student_id="2021310123")
+        old = {"Authorization": f"Bearer {r.json()['token']}"}
         clock.now += timedelta(minutes=1)
-        r = _reset_code(client, "kim@skku.edu")  # 다른 도메인으로 요청해도 같은 계정
-        assert r.status_code == 202 and r.json()["email"] == "kim@skku.edu"
+        r = _reset_code(client, "2021310123")
+        # 등록한 주소(입력한 도메인 그대로)로 보내고, 응답에는 가린 주소만
+        assert r.status_code == 202 and r.json()["email"] == "k***@skku.edu"
         to, subject, body = mailer.sent[-1]
         assert to == "kim@skku.edu" and "비밀번호 재설정" in subject and "비밀번호" in body
-        r = _reset(client, "kim@g.skku.edu", mailer.last_code(to))
+        r = _reset(client, "2021310123", mailer.last_code(to))
         assert r.status_code == 200 and r.json()["participant"]["nickname"] == "kim"
         # 새 토큰은 되고, 이전 로그인은 모두 끊긴다
         new = {"Authorization": f"Bearer {r.json()['token']}"}
         assert client.get("/api/me", headers=new).status_code == 200
         assert client.get("/api/me", headers=old).status_code == 401
-        assert _login(client, "kim@g.skku.edu", "password123").status_code == 401
-        assert _login(client, "kim@g.skku.edu", "newpass456").status_code == 200
+        assert _login(client, "2021310123", "password123").status_code == 401
+        assert _login(client, "2021310123", "newpass456").status_code == 200
 
-    def test_unregistered_email(self, client: TestClient, mailer: FakeMailer) -> None:
-        r = _reset_code(client, "nobody@g.skku.edu")
-        assert r.status_code == 404 and r.json()["detail"]["code"] == "EMAIL_NOT_REGISTERED"
-        assert _reset_code(client, "nobody@gmail.com").status_code == 422
+    def test_reset_by_email_also_works(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        register(client, "kim")  # kim@g.skku.edu
+        clock.now += timedelta(minutes=1)
+        assert _reset_code(client, "kim@skku.edu").json()["email"] == "k***@g.skku.edu"
+        assert mailer.sent[-1][0] == "kim@g.skku.edu"  # 등록 주소로만
+        r = _reset(client, "kim@skku.edu", mailer.last_code("kim@g.skku.edu"))
+        assert r.status_code == 200
+
+    def test_unknown_account(self, client: TestClient, mailer: FakeMailer) -> None:
+        for identity in ("2099999999", "nobody@g.skku.edu", "whatever"):
+            r = _reset_code(client, identity)
+            assert r.status_code == 404 and r.json()["detail"]["code"] == "ACCOUNT_NOT_FOUND"
+        # 메일이 없는 예전 계정도 재설정할 수 없다
+        _legacy(client)
+        assert _reset_code(client, "2020123456").json()["detail"]["code"] == "ACCOUNT_NOT_FOUND"
         assert mailer.sent == []
 
     def test_signup_code_cannot_reset_and_vice_versa(
         self, client: TestClient, clock: Clock, mailer: FakeMailer
     ) -> None:
-        # 가입 코드로는 비밀번호를 바꿀 수 없다
         signup = email_code(client, "kim@g.skku.edu")
-        r = _reset(client, "kim@g.skku.edu", signup)
-        assert r.json()["detail"]["code"] in {"CODE_EXPIRED", "EMAIL_NOT_REGISTERED"}
         assert register_with(client, "kim@g.skku.edu", "kim", signup).status_code == 201
-        # 재설정 코드로는 가입·재인증할 수 없다
+        sid = student_id_for("kim@g.skku.edu")
+        # 이미 쓴 가입 코드로는 비밀번호를 바꿀 수 없다
+        assert _reset(client, sid, signup).json()["detail"]["code"] == "CODE_EXPIRED"
         clock.now += timedelta(minutes=1)
-        _reset_code(client, "kim@g.skku.edu")
+        _reset_code(client, sid)
         reset = mailer.last_code("kim@g.skku.edu")
-        h = _legacy(client)
-        assert _verify(client, h, "kim@g.skku.edu", reset).json()["detail"]["code"] in {
-            "CODE_EXPIRED",
-            "EMAIL_TAKEN",
-        }
-        assert _reset(client, "kim@g.skku.edu", reset).status_code == 200
+        # 재설정 코드로는 가입할 수 없다
+        r = register_with(client, "kim@g.skku.edu", "kim2", reset, student_id="2026999998")
+        assert r.json()["detail"]["code"] in {"CODE_EXPIRED", "EMAIL_TAKEN"}
+        assert _reset(client, sid, reset).status_code == 200
 
     def test_wrong_code_attempts_and_single_use(
         self, client: TestClient, clock: Clock, mailer: FakeMailer
     ) -> None:
         register(client, "kim")
+        sid = student_id_for("kim@g.skku.edu")
         clock.now += timedelta(minutes=1)
-        _reset_code(client, "kim@g.skku.edu")
+        _reset_code(client, sid)
         code = mailer.last_code("kim@g.skku.edu")
         wrong = f"{(int(code) + 1) % 10**6:06d}"
-        r = _reset(client, "kim@g.skku.edu", wrong)
+        r = _reset(client, sid, wrong)
         assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_CODE"
-        assert _reset(client, "kim@g.skku.edu", code).status_code == 200
-        assert _reset(client, "kim@g.skku.edu", code).json()["detail"]["code"] == "CODE_EXPIRED"
-        assert _reset(client, "kim@g.skku.edu", code, "short").status_code == 422
+        assert _reset(client, sid, code).status_code == 200
+        assert _reset(client, sid, code).json()["detail"]["code"] == "CODE_EXPIRED"
+        assert _reset(client, sid, code, "short").status_code == 422
 
     def test_cooldown_shared_with_signup_code(self, client: TestClient) -> None:
         register(client, "kim")  # 방금 가입 코드를 받았다
-        r = _reset_code(client, "kim@g.skku.edu")
+        r = _reset_code(client, student_id_for("kim@g.skku.edu"))
         assert r.status_code == 429 and r.json()["detail"]["code"] == "CODE_RECENTLY_SENT"
 
     def test_reset_works_after_event(self, client: TestClient, clock: Clock) -> None:
         register(client, "kim")
         clock.set(date(2026, 10, 20))
-        assert _reset_code(client, "kim@g.skku.edu").status_code == 202
+        assert _reset_code(client, student_id_for("kim@g.skku.edu")).status_code == 202
 
 
 class TestLoginByStudentId:
@@ -607,8 +640,8 @@ class TestSignupWithoutCode:
     ) -> None:
         h = _register_without_code(client, "kim@skku.edu", "kim")
         me = client.get("/api/me", headers=h).json()
-        assert (me["email"], me["verified"], me["needs_profile"]) == (
-            "kim@g.skku.edu",
+        assert (me["masked_email"], me["verified"], me["needs_profile"]) == (
+            "k***@skku.edu",
             False,
             False,
         )
@@ -717,7 +750,7 @@ class TestVerifiedOnlyTrading:
         code = email_code(client, "kim@skku.edu")
         r = client.post("/api/me/email", json={"email": "kim@skku.edu", "code": code}, headers=h)
         assert r.status_code == 200, r.text
-        assert r.json()["verified"] is True and r.json()["email"] == "kim@g.skku.edu"
+        assert r.json()["verified"] is True and r.json()["masked_email"] == "k***@skku.edu"
         open_day(client, clock, D1)
         assert _order(client, h).status_code == 201
         row = client.get("/api/admin/participants", headers=admin).json()[0]
@@ -769,3 +802,112 @@ class TestVerifiedOnlyTrading:
         )
         assert r.status_code == 422 and r.json()["detail"]["code"] == "PROFILE_REQUIRED"
         assert _verify(client, h, "lee@g.skku.edu", code).status_code == 200
+
+
+def _my_code(client: TestClient, h: dict[str, str], email: str | None = None) -> Any:
+    return client.post(
+        "/api/me/email/code", json={} if email is None else {"email": email}, headers=h
+    )
+
+
+class TestMyEmailCode:
+    def test_code_to_registered_address_then_code_only(
+        self, client: TestClient, mailer: FakeMailer
+    ) -> None:
+        h = _register_without_code(client, "kim@skku.edu", "kim")
+        r = _my_code(client, h)
+        # 등록한 주소(입력한 도메인 그대로)로 보내고 응답은 가린 주소
+        assert r.status_code == 202 and r.json()["email"] == "k***@skku.edu"
+        assert mailer.sent[-1][0] == "kim@skku.edu"
+        r = client.post("/api/me/email", json={"code": mailer.last_code("kim@skku.edu")}, headers=h)
+        assert r.status_code == 200, r.text
+        me = r.json()
+        assert (me["verified"], me["email_verified"], me["masked_email"]) == (
+            True,
+            True,
+            "k***@skku.edu",
+        )
+        # 메일 코드로 인증한 뒤에는 메일을 바꿀 수 없다
+        assert _my_code(client, h).json()["detail"]["code"] == "ALREADY_VERIFIED"
+        assert _my_code(client, h, "other@g.skku.edu").json()["detail"]["code"] == (
+            "ALREADY_VERIFIED"
+        )
+
+    def test_other_address_replaces_registered_email(
+        self, client: TestClient, admin: dict[str, str], mailer: FakeMailer
+    ) -> None:
+        h = _register_without_code(client, "typo@g.skku.edu", "kim")
+        r = _my_code(client, h, "kim@g.skku.edu")
+        assert r.status_code == 202 and r.json()["email"] == "kim@g.skku.edu"  # 직접 입력은 그대로
+        code = mailer.last_code("kim@g.skku.edu")
+        r = client.post("/api/me/email", json={"email": "kim@g.skku.edu", "code": code}, headers=h)
+        assert r.status_code == 200 and r.json()["masked_email"] == "k***@g.skku.edu"
+        row = client.get("/api/admin/participants", headers=admin).json()[0]
+        assert (row["email"], row["verified_via"]) == ("kim@g.skku.edu", "email")
+        # 바뀐 뒤 옛 주소는 비어 새로 가입할 수 있다
+        assert request(client, "typo@g.skku.edu").status_code == 202
+
+    def test_admin_verified_account_can_still_fix_email(
+        self, client: TestClient, clock: Clock, admin: dict[str, str], mailer: FakeMailer
+    ) -> None:
+        h = _register_without_code(client, "typo@g.skku.edu", "kim")
+        pid = client.get("/api/me", headers=h).json()["id"]
+        client.patch(f"/api/admin/participants/{pid}", json={"verified": True}, headers=admin)
+        me = client.get("/api/me", headers=h).json()
+        assert (me["verified"], me["email_verified"]) == (True, False)
+        # 관리자 인증은 메일을 확인하지 않으므로 메일 인증으로 바로잡을 수 있다
+        assert _my_code(client, h, "kim@g.skku.edu").status_code == 202
+        r = client.post(
+            "/api/me/email",
+            json={"email": "kim@g.skku.edu", "code": mailer.last_code("kim@g.skku.edu")},
+            headers=h,
+        )
+        assert r.status_code == 200 and r.json()["email_verified"] is True
+        row = client.get("/api/admin/participants", headers=admin).json()[0]
+        assert (row["email"], row["verified_via"]) == ("kim@g.skku.edu", "email")
+
+    def test_other_persons_verified_email_is_refused(self, client: TestClient) -> None:
+        register(client, "kim")  # kim@g.skku.edu, 메일 인증
+        h = _register_without_code(client, "lee@g.skku.edu", "lee")
+        r = _my_code(client, h, "kim@skku.edu")
+        assert r.json()["detail"]["code"] == "EMAIL_TAKEN"
+
+    def test_legacy_account_without_email_must_type_one(self, client: TestClient) -> None:
+        h = _legacy(client)
+        r = _my_code(client, h)
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "EMAIL_REQUIRED"
+        assert _my_code(client, h, "lee@g.skku.edu").status_code == 202
+
+
+class TestNoConnectionHeldDuringSend:
+    def test_pool_is_free_while_smtp_runs(self, tmp_path: Any) -> None:
+        """메일을 보내는 동안 DB 연결을 잡고 있지 않다(느린 SMTP가 api 풀을 막지 않게).
+
+        메모리 SQLite(StaticPool)로는 확인할 수 없어 파일 SQLite(QueuePool)로 앱을 따로 띄운다.
+        """
+        from study_invest.api.app import create_app
+
+        seen: list[int] = []
+
+        class PoolProbe(FakeMailer):
+            def send(self, to: str, subject: str, body: str) -> None:
+                seen.append(app.state.study_invest.pools.api.pool.checkedout())
+                super().send(to, subject, body)
+
+        mailer = PoolProbe()
+        app = create_app(
+            Settings(
+                database_url=f"sqlite:///{tmp_path / 'pool.db'}",
+                upload_dir=tmp_path / "uploads",
+                auto_create_schema=True,
+            ),
+            mailer=mailer,
+        )
+        with TestClient(app) as c:
+            assert (
+                c.post("/api/auth/email-code", json={"email": "kim@g.skku.edu"}).status_code == 202
+            )
+            mailer.fail = True
+            r = c.post("/api/auth/email-code", json={"email": "lee@g.skku.edu"})
+            assert r.status_code == 503
+        assert seen == [0, 0]

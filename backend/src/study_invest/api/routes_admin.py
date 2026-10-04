@@ -28,6 +28,7 @@ from ..services.common import (
     audit,
     current_prices,
     get_params,
+    params_lock,
     rewards_received,
     set_params,
     valuate,
@@ -53,8 +54,10 @@ def _admin_participant(
         status=p.status,
         joined_at=p.joined_at,
         identity=p.identity,
-        email=p.email,
+        email=p.email_address or p.email,
+        masked_email=p.masked_email,
         verified=p.verified,
+        email_verified=p.email_verified,
         needs_profile=p.needs_profile,
         name=p.name,
         student_id=p.student_id,
@@ -154,6 +157,7 @@ def read_params(s: SessionDep) -> schemas.Params:
 
 @router.put("/params", response_model=schemas.Params)
 def update_params(body: schemas.Params, s: SessionDep, now: NowDep) -> schemas.Params:
+    params_lock(s)
     values = body.model_dump()
     if values["verified_only_trading"] is None:  # 파라미터 폼은 이 스위치를 보내지 않는다
         values["verified_only_trading"] = get_params(s).verified_only_trading
@@ -176,6 +180,7 @@ def set_trading_access(
     body: schemas.TradingAccess, s: SessionDep, now: NowDep
 ) -> schemas.TradingAccess:
     """'인증된 참가자만 거래' 스위치. 부정 행위가 보이면 켠다(파라미터 이력·감사 로그에 남음)."""
+    params_lock(s)
     set_params(s, replace(get_params(s), verified_only_trading=body.verified_only), now)
     s.commit()
     return body

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import random
 import secrets
+import threading
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor
 from dataclasses import dataclass, field
@@ -28,6 +29,9 @@ from ..params import EventParams
 from ..services import auth
 from ..services.common import DomainError, get_params
 
+MAIL_CONCURRENCY = 8
+"""동시 SMTP 발송 상한. 스레드풀(기본 40) 중 이 이상은 메일 대기에 쓰지 않는다."""
+
 
 @dataclass
 class AppState:
@@ -42,6 +46,10 @@ class AppState:
     rng: random.Random
     mailer: Mailer
     """인증 메일 발송(SmtpMailer, SMTP 미설정이면 LogMailer)."""
+    mail_slots: threading.BoundedSemaphore = field(
+        default_factory=lambda: threading.BoundedSemaphore(MAIL_CONCURRENCY)
+    )
+    """동시에 SMTP로 보내는 메일 수 상한. 느린 SMTP가 공용 스레드풀을 다 차지하지 않게 한다."""
     time_scale: float = 1.0
     """clock의 배속. 스케줄러는 다음 배치까지 남은 시계 초를 이 값으로 나눠 실제로 기다린다."""
     cpu_executor: Executor | None = field(default=None)

@@ -2,7 +2,7 @@
 
 백엔드(FastAPI)와 프론트엔드(React)가 공유하는 HTTP 계약이다. 모든 경로는 `/api` 접두사를 가진다.
 
-v0.3 (2026-10-04): 1인 1계정을 학교 메일(@skku.edu·@g.skku.edu)·학번으로 확인. `register` 요청을 `{email, code?, name, student_id, department, nickname, password, privacy_consent}`로 변경(기본은 코드 없이 미인증 가입), 로그인은 학번으로. `POST /api/auth/email-code`, `POST /api/me/email`(인증), `POST /api/auth/password-reset/code`·`/api/auth/password-reset`(비밀번호 재설정), `GET·PUT /api/admin/trading-access`('인증된 참가자만 거래' 스위치) 추가. `Participant.email`·`verified`·`needs_profile`, `EventInfo.signup`, `AdminParticipant`의 `name`·`student_id`·`department`·`verified_at`·`verified_via` 추가, `identity`는 nullable. `PATCH /api/admin/participants/{id}`가 `verified`도 받는다. 스위치가 켜지면 미인증 참가자의 주문은 403 `VERIFICATION_REQUIRED`.
+v0.3 (2026-10-04): 1인 1계정을 학교 메일(@skku.edu·@g.skku.edu)·학번으로 확인. `register` 요청을 `{email, code?, name, student_id, department, nickname, password, privacy_consent}`로 변경(기본은 코드 없이 미인증 가입), 로그인은 학번으로. `POST /api/auth/email-code`(가입용 코드), `POST /api/me/email/code`·`/api/me/email`(로그인 후 메일 인증), `POST /api/auth/password-reset/code`·`/api/auth/password-reset`(학번으로 비밀번호 재설정), `GET·PUT /api/admin/trading-access`('인증된 참가자만 거래' 스위치) 추가. `Participant.masked_email`·`verified`·`email_verified`·`needs_profile`, `EventInfo.signup`, `AdminParticipant`의 `email`·`name`·`student_id`·`department`·`verified_at`·`verified_via` 추가, `identity`는 nullable. `PATCH /api/admin/participants/{id}`가 `verified`도 받는다. 스위치가 켜지면 미인증 참가자의 주문은 403 `VERIFICATION_REQUIRED`.
 
 v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_quantity`·`reward_quantity` → `reward_cash`), 투입 원금 기준 수익률(`Portfolio`·`RankingEntry`·`AdminParticipant`), 코인 초반 안정기(`EventInfo.coin`, `coin_calm_*` 파라미터, 정산 로그 `calm`, 시뮬레이터 `calm_daily`).
 
@@ -24,7 +24,7 @@ v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_qu
 | 429 | `CODE_RECENTLY_SENT`, `TOO_MANY_CODES` | 인증 코드 재요청 60초 대기 / 메일 하나에 24시간 5통 초과 |
 | 413 | `PAYLOAD_TOO_LARGE` | 요청 본문이 한도 초과(업로드 10MB+여유, 그 외 1MiB). 본문을 받기 전에 거부 |
 | 503 | `DB_BUSY`, `DB_UNAVAILABLE` | api 연결 풀이 가득 참(10초 대기 초과) / DB 연결 불가. `Retry-After: 2` |
-| 503 | `MAIL_SEND_FAILED`, `MAIL_QUOTA_EXCEEDED` | 인증 메일 발송 실패(바로 다시 요청 가능) / 24시간 발송 상한(`STUDY_INVEST_MAIL_DAILY_LIMIT`) 도달 |
+| 503 | `MAIL_SEND_FAILED`, `MAIL_BUSY`, `MAIL_QUOTA_EXCEEDED` | 인증 메일 발송 실패(코드 기록은 남아 60초 뒤 재요청) / 동시 발송이 꽉 참(코드를 만들기 전 거절, 바로 재요청 가능) / 24시간 발송 상한(`STUDY_INVEST_MAIL_DAILY_LIMIT`) 도달 |
 
 ## 공용 타입
 
@@ -63,8 +63,9 @@ interface Participant {
   nickname: string;
   status: ParticipantStatus;
   joined_at: string;
-  email: string | null;      // 학교 메일(@g.skku.edu로 합쳐 보관). 비밀번호 재설정 주소. 도입 전 계정·파기 후 null
+  masked_email: string | null; // 가린 등록 메일(k***@skku.edu). 본인 응답에도 전체 주소는 없다. 없으면 null
   verified: boolean;         // 학교 메일 코드나 관리자 확인으로 인증했는지
+  email_verified: boolean;   // 학교 메일 코드로 인증했는지. false면 메일 인증 가능(미인증·관리자 인증만)
   needs_profile: boolean;    // 이름·학번·학과가 없음(메일 인증 도입 전 계정) → 인증할 때 함께 받는다
 }
 
@@ -198,8 +199,8 @@ interface RankingEntry {
 | POST | `/api/auth/email-code` | `{email}` | 202 `{email, expires_in, resend_after}` (코드를 보낸 주소, 600, 60) / 422 `INVALID_EMAIL`, `EMAIL_DOMAIN_NOT_ALLOWED`, 409 `EMAIL_TAKEN`, `REGISTRATION_CLOSED`, 429, 503 |
 | POST | `/api/auth/register` | `{email, code?, name, student_id, department, nickname, password, privacy_consent}` | 201 `{token, participant: Participant}` / 400 코드 오류, 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN`, `NICKNAME_TAKEN`, 422 `PRIVACY_CONSENT_REQUIRED`, `CODE_REQUIRED` |
 | POST | `/api/auth/login` | `{identity, password}` | `{token, participant}` / 401 `INVALID_CREDENTIALS` |
-| POST | `/api/auth/password-reset/code` | `{email}` | 202 `{email, expires_in, resend_after}` / 404 `EMAIL_NOT_REGISTERED`, 422, 429, 503 |
-| POST | `/api/auth/password-reset` | `{email, code, password}` | `{token, participant}` — 새 비밀번호로 로그인, 다른 기기 로그인은 모두 끊는다 / 400 코드 오류 |
+| POST | `/api/auth/password-reset/code` | `{identity}` | 202 `{email, expires_in, resend_after}` — `identity`는 학번(학교 메일도 받음). 코드는 그 계정의 **등록 메일로만** 가고 `email`은 가린 주소 / 404 `ACCOUNT_NOT_FOUND`(없는 학번, 메일 없는 예전 계정), 429, 503 |
+| POST | `/api/auth/password-reset` | `{identity, code, password}` | `{token, participant}` — 새 비밀번호로 로그인, 다른 기기 로그인은 모두 끊는다(재설정과 동시에 옛 비밀번호로 한 로그인도) / 400 코드 오류, 404 |
 | POST | `/api/auth/logout` | – | 204 |
 
 - `email`: 학교 메일만(`@skku.edu`, `@g.skku.edu`, 하위 도메인 불가). NFKC·대소문자 무시·앞뒤 공백 제거 뒤 검사한다. ID는 영문 소문자·숫자·`.`·`_`·`-` 1~64자(`+` 별칭 불가). **같은 ID의 두 도메인은 한 사람**으로 보고 `ID@g.skku.edu`로 합쳐 저장·중복 검사한다. 코드 메일은 입력한 주소 그대로 보낸다.
@@ -214,7 +215,8 @@ interface RankingEntry {
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | GET | `/api/me` | – | `Participant` |
-| POST | `/api/me/email` | `{email, code, name?, student_id?, department?, privacy_consent?}` | `Participant` — 미인증 계정의 학교 메일 인증(코드는 `/api/auth/email-code`). 보통 등록한 메일과 코드만 보낸다. `needs_profile`인 계정은 이름·학번·학과·동의도(없으면 422 `PROFILE_REQUIRED`). 다른 메일로 인증하면 등록 메일이 바뀐다. 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN`, `STUDENT_ID_TAKEN` |
+| POST | `/api/me/email/code` | `{email?}` | 202 `{email, expires_in, resend_after}` — 비우면 등록 메일로 보내고 `email`은 가린 주소. 주소를 주면 그 주소로(등록 메일을 잘못 적었거나 메일이 없는 예전 계정) / 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN`, 422 `EMAIL_REQUIRED`(메일 없는 계정이 주소를 비움), 429, 503 |
+| POST | `/api/me/email` | `{email?, code, name?, student_id?, department?, privacy_consent?}` | `Participant` — 학교 메일 코드 인증. 등록 메일로 받았으면 코드만, 다른 주소로 받았으면 그 주소도(인증하면 등록 메일이 그 주소로 바뀜). 메일 코드로 아직 인증하지 않은 계정만(미인증, 관리자 인증만): 메일 코드로 인증된 계정은 409 `ALREADY_VERIFIED`. `needs_profile`인 계정은 이름·학번·학과·동의도(없으면 422 `PROFILE_REQUIRED`). 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN` |
 | GET | `/api/me/portfolio` | – | `Portfolio` |
 | GET | `/api/me/orders` | `?limit=100` | `Order[]` (최신순) |
 | POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분). `code`는 1~16자, `quantity`는 정수(64비트 범위 밖이면 422). '인증된 참가자만 거래'가 켜져 있고 미인증이면 403 `VERIFICATION_REQUIRED` |
@@ -228,6 +230,7 @@ interface RankingEntry {
 ```ts
 interface AdminParticipant extends Participant {
   identity: string | null;   // 메일 인증 도입 전 식별자. 그 뒤 가입한 참가자는 null
+  email: string | null;      // 등록 학교 메일 전체 주소(코드를 보내는 주소). 관리자만
   name: string | null; student_id: string | null; department: string | null;  // 도입 전 계정·파기 후 null
   verified_at: string | null;
   verified_via: "email" | "admin" | null;   // 학교 메일 코드 / 관리자 확인. 미인증이면 null

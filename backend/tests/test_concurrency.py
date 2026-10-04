@@ -11,6 +11,7 @@ import random
 import threading
 import time as time_mod
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import date, datetime, time
 from typing import Any
 
@@ -24,6 +25,7 @@ from study_invest.db import Base, make_engine, make_session_factory
 from study_invest.event_calendar import EventCalendar
 from study_invest.models import (
     AuditLog,
+    AuthSession,
     CertStatus,
     EmailVerification,
     Holding,
@@ -37,7 +39,13 @@ from study_invest.models import (
 from study_invest.normalize import parse_school_email
 from study_invest.params import KST, EventParams
 from study_invest.services import auth, certification, email_verification, market, trading
-from study_invest.services.common import DomainError, market_day
+from study_invest.services.common import (
+    DomainError,
+    get_params,
+    market_day,
+    params_lock,
+    set_params,
+)
 
 pytestmark = pytest.mark.skipif(
     not TEST_DB_URL.startswith("postgresql"), reason="PostgreSQL 전용(행·advisory 잠금)"
@@ -256,6 +264,75 @@ class TestUniqueConflicts:
         ]
         with factory() as s:
             assert s.scalar(select(func.count()).select_from(EmailVerification)) == 2
+
+    def test_params_switch_and_form_save_do_not_overwrite_each_other(
+        self, factory: sessionmaker[Session]
+    ) -> None:
+        """'인증된 참가자만 거래' 스위치와 파라미터 폼 저장이 동시에 와도 둘 다 남는다."""
+
+        def toggle() -> str:  # PUT /api/admin/trading-access 와 같은 순서
+            with factory() as s:
+                params_lock(s)
+                current = get_params(s)
+                time_mod.sleep(0.3)  # 그 사이 폼 저장이 들어온다
+                set_params(s, replace(current, verified_only_trading=True), at(D1, 8))
+                s.commit()
+                return "toggle"
+
+        def form() -> str:  # PUT /api/admin/params(스위치 값은 현재 값 유지)
+            time_mod.sleep(0.1)
+            with factory() as s:
+                params_lock(s)
+                current = get_params(s)
+                set_params(s, replace(current, reward_cash=100_000), at(D1, 8))
+                s.commit()
+                return "form"
+
+        assert run_together(toggle, form) == ["toggle", "form"]
+        with factory() as s:
+            final = get_params(s)
+        assert (final.verified_only_trading, final.reward_cash) == (True, 100_000)
+
+    def test_password_reset_ends_login_racing_with_old_password(
+        self, factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """재설정 중 옛 비밀번호로 로그인해도 그 로그인은 살아남지 않는다."""
+        pid = setup_participant(factory)
+        sid = student_id_for("alice")
+        original = auth.verify_password
+
+        def slow_verify(password: str, stored: str) -> bool:
+            ok = original(password, stored)
+            time_mod.sleep(0.4)  # 비밀번호 확인(scrypt) 동안 재설정이 끝난다
+            return ok
+
+        monkeypatch.setattr(auth, "verify_password", slow_verify)
+
+        def login() -> str:
+            with factory() as s:
+                _, token = auth.login(s, sid, "password123", at(D1, 8))
+                s.commit()
+                return token
+
+        def reset() -> str:
+            time_mod.sleep(0.1)
+            with factory() as s:
+                me = s.get(Participant, pid)
+                assert me is not None
+                auth.reset_password(s, me, "newpass456", at(D1, 8))
+                s.commit()
+                return "reset"
+
+        results = run_together(login, reset)
+        with factory() as s:
+            sessions = s.scalar(
+                select(func.count())
+                .select_from(AuthSession)
+                .where(AuthSession.participant_id == pid)
+            )
+        assert results[1] == "reset"
+        assert getattr(results[0], "code", None) == "INVALID_CREDENTIALS"
+        assert sessions == 1  # 재설정이 발급한 토큰만
 
     def test_duplicate_registration_is_domain_error(self, factory: sessionmaker[Session]) -> None:
         def register(nickname: str, domain: str) -> Callable[[], str]:
