@@ -525,3 +525,9 @@ class TestNewsPool:
             text = a.headline + a.subtitle + a.body
             assert not any(b in text for b in banned), a.headline
             assert not re.search(r"\d+\s*%", text), a.headline  # 변동률 숫자는 쓰지 않는다
+        # 공통 풀: 업종이 드러나는 소재 금지, 종목명 바로 뒤 조사 금지(받침에 따라 달라짐)
+        industry = ("서비스 장애", "접속", "앱", "출석", "반도체", "스마트폰", "자동차", "가전")
+        for a in [a for pool in COMMON_POOLS.values() for a in pool]:
+            text = a.headline + a.subtitle + a.body
+            assert not any(w in text for w in industry), a.headline
+            assert not re.search(r"\{name\}[이가은는을를의과와]", text), a.headline
