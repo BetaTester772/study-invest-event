@@ -1,5 +1,6 @@
 import type { ProfileFields as Profile } from '../../api';
 import { TextField } from '../../components/ui';
+import { digitsOnly } from './SchoolEmailFields';
 
 export type ProfileErrors = Partial<Record<keyof Profile, string>>;
 
@@ -51,7 +52,7 @@ export function ProfileFields({
         inputMode="numeric"
         placeholder="2026310000"
         value={value.student_id}
-        onChange={(e) => set('student_id', e.target.value.replace(/\D/g, '').slice(0, 10))}
+        onChange={(e) => set('student_id', digitsOnly(e.target.value, 10))}
         error={errors.student_id}
         required
       />

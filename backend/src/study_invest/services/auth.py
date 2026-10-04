@@ -102,6 +102,13 @@ def ensure_registration_open(now: datetime, calendar: EventCalendar) -> None:
         raise DomainError("REGISTRATION_CLOSED", "이벤트가 종료되어 참가 신청을 받지 않습니다.")
 
 
+def ensure_verification_open(now: datetime, calendar: EventCalendar) -> None:
+    """이벤트가 끝나면 학교 메일 인증을 받지 않는다. 종료 후 개인정보를 지운(purge) 뒤 미인증
+    계정이 메일·학번 등을 다시 등록해 재수집되지 않게 한다."""
+    if calendar.is_ended(to_kst(now).date()):
+        raise DomainError("EVENT_ENDED", "이벤트가 종료되어 학교 메일 인증을 받지 않습니다.")
+
+
 def ensure_privacy_consent(consent: bool) -> None:
     if not consent:
         raise DomainError(

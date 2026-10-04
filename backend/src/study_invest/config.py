@@ -111,7 +111,10 @@ class Settings:
     가입시킨다. 미인증 참가자는 나중에 메일 코드로 스스로 인증하거나 관리자가 인증 처리한다.
     인증된 참가자만 거래하게 하는 스위치는 관리자 파라미터(verified_only_trading)다."""
     smtp_host: str = ""
-    """인증 메일 SMTP 서버(예: smtp.gmail.com). 비우면 메일 대신 로그로 남긴다(로컬 개발용)."""
+    """인증 메일 SMTP 서버(예: smtp.gmail.com). 비우면 메일을 보낼 수 없다(코드 요청은 503).
+    mail_log_only를 켜면 대신 로그로 남긴다."""
+    mail_log_only: bool = False
+    """SMTP 없이 메일 내용(코드 포함)을 로그로 남긴다. 로컬 개발·CI 전용, 운영 금지."""
     smtp_port: int = 587
     smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
     smtp_username: str = ""
@@ -158,6 +161,7 @@ class Settings:
             time_origin=_env_datetime(env, "STUDY_INVEST_TIME_ORIGIN"),
             email_verification=_env_flag(env, "STUDY_INVEST_EMAIL_VERIFICATION", False),
             smtp_host=env.get("STUDY_INVEST_SMTP_HOST", "").strip(),
+            mail_log_only=_env_flag(env, "STUDY_INVEST_MAIL_LOG_ONLY", False),
             smtp_port=int(env.get("STUDY_INVEST_SMTP_PORT", "").strip() or cls.smtp_port),
             smtp_security=cast(
                 Literal["starttls", "ssl", "none"],

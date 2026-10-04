@@ -48,12 +48,14 @@ def request_my_email_code(
     participant: MeDep,
     state: StateDep,
     s: SessionDep,
+    now: NowDep,
     real_now: RealNowDep,
 ) -> schemas.EmailCodeResponse:
     """학교 메일 인증 코드를 보낸다. 주소를 비우면 등록 메일로 보내고 응답 주소는 가린다.
 
     다른 주소(email)는 등록 메일을 잘못 적었거나 메일이 없는 계정(메일 인증 도입 전)이 쓴다.
     """
+    auth.ensure_verification_open(now, state.calendar)
     _ensure_can_verify_email(participant)
     if body.email is not None:
         return send_code(
@@ -78,7 +80,9 @@ def request_my_email_code(
 def verify_email(
     body: schemas.VerifyEmailRequest,
     participant: MeDep,
+    state: StateDep,
     s: SessionDep,
+    now: NowDep,
     real_now: RealNowDep,
 ) -> schemas.Participant:
     """학교 메일 코드로 인증한다(코드는 POST /api/me/email/code). 주소를 비우면 등록 메일.
@@ -86,6 +90,7 @@ def verify_email(
     메일 코드로 아직 인증하지 않은 계정만(미인증, 관리자 인증). 메일 인증 도입 전 계정은
     이름·학번·학과·동의도 함께 받는다.
     """
+    auth.ensure_verification_open(now, state.calendar)
     _ensure_can_verify_email(participant)
     raw_email = body.email if body.email is not None else participant.email_address
     if raw_email is None:

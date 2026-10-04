@@ -5,7 +5,7 @@ import { ApiError, authApi } from '../../../api';
 import { profileErrors } from '../ProfileFields';
 import { validateRegister } from '../RegisterPage';
 import { validateReset } from '../ResetPasswordPage';
-import { CodeSender, SchoolEmailFields, codeError, schoolEmailError } from '../SchoolEmailFields';
+import { CodeSender, SchoolEmailFields, codeError, digitsOnly, schoolEmailError } from '../SchoolEmailFields';
 
 describe('schoolEmailError', () => {
   it.each(['abc@g.skku.edu', 'abc@skku.edu', ' ABC@G.SKKU.EDU ', 'a.b_c-1@g.skku.edu', 'ＡＢＣ＠Ｇ.ＳＫＫＵ.ＥＤＵ'])(
@@ -25,6 +25,14 @@ describe('schoolEmailError', () => {
     ['a..b@g.skku.edu', '확인'],
   ])('rejects %s', (email, fragment) => {
     expect(schoolEmailError(email)).toContain(fragment);
+  });
+});
+
+describe('digitsOnly', () => {
+  it('keeps full-width digits by normalizing them first', () => {
+    expect(digitsOnly('２０２１３１０１２３', 10)).toBe('2021310123');
+    expect(digitsOnly('2021-310 123', 10)).toBe('2021310123');
+    expect(digitsOnly('１２３４５６７', 6)).toBe('123456');
   });
 });
 
@@ -107,6 +115,22 @@ describe('SchoolEmailFields', () => {
     expect(request).toHaveBeenCalledWith({ email: 'Kim@SKKU.edu' });
     expect(await screen.findByText(/kim@skku.edu\(으\)로 인증 코드를 보냈어요/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /초 뒤에 다시/ })).toBeDisabled();
+  });
+
+  it('lets a corrected address get a code right away', async () => {
+    const request = vi
+      .spyOn(authApi, 'requestEmailCode')
+      .mockResolvedValue({ email: 'kmi@skku.edu', expires_in: 600, resend_after: 60 });
+    render(<Harness />);
+    const field = screen.getByLabelText(/학교 메일/);
+    await userEvent.type(field, 'kmi@skku.edu');
+    await userEvent.click(screen.getByRole('button', { name: '인증 코드 받기' }));
+    expect(await screen.findByRole('button', { name: /초 뒤에 다시/ })).toBeDisabled();
+    await userEvent.clear(field);
+    await userEvent.type(field, 'kim@skku.edu'); // 오타 수정
+    expect(screen.getByRole('button', { name: '인증 코드 받기' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: '인증 코드 받기' }));
+    expect(request).toHaveBeenLastCalledWith({ email: 'kim@skku.edu' });
   });
 
   it('does not call the API for a non-school address', async () => {

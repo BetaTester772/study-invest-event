@@ -24,7 +24,7 @@ v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_qu
 | 429 | `CODE_RECENTLY_SENT`, `TOO_MANY_CODES` | 인증 코드 재요청 60초 대기 / 메일 하나에 24시간 5통 초과 |
 | 413 | `PAYLOAD_TOO_LARGE` | 요청 본문이 한도 초과(업로드 10MB+여유, 그 외 1MiB). 본문을 받기 전에 거부 |
 | 503 | `DB_BUSY`, `DB_UNAVAILABLE` | api 연결 풀이 가득 참(10초 대기 초과) / DB 연결 불가. `Retry-After: 2` |
-| 503 | `MAIL_SEND_FAILED`, `MAIL_BUSY`, `MAIL_QUOTA_EXCEEDED` | 인증 메일 발송 실패(코드 기록은 남아 60초 뒤 재요청) / 동시 발송이 꽉 참(코드를 만들기 전 거절, 바로 재요청 가능) / 24시간 발송 상한(`STUDY_INVEST_MAIL_DAILY_LIMIT`) 도달 |
+| 503 | `MAIL_SEND_FAILED`, `MAIL_BUSY`, `MAIL_QUOTA_EXCEEDED`, `MAIL_NOT_CONFIGURED` | 인증 메일 발송 실패(코드 기록은 남아 60초 뒤 재요청) / 동시 발송이 꽉 참(코드를 만들기 전 거절, 바로 재요청 가능) / 24시간 발송 상한(`STUDY_INVEST_MAIL_DAILY_LIMIT`) 도달 / SMTP 미설정(코드를 만들기 전 거절) |
 
 ## 공용 타입
 
@@ -215,8 +215,8 @@ interface RankingEntry {
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | GET | `/api/me` | – | `Participant` |
-| POST | `/api/me/email/code` | `{email?}` | 202 `{email, expires_in, resend_after}` — 비우면 등록 메일로 보내고 `email`은 가린 주소. 주소를 주면 그 주소로(등록 메일을 잘못 적었거나 메일이 없는 예전 계정) / 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN`, 422 `EMAIL_REQUIRED`(메일 없는 계정이 주소를 비움), 429, 503 |
-| POST | `/api/me/email` | `{email?, code, name?, student_id?, department?, privacy_consent?}` | `Participant` — 학교 메일 코드 인증. 등록 메일로 받았으면 코드만, 다른 주소로 받았으면 그 주소도(인증하면 등록 메일이 그 주소로 바뀜). 메일 코드로 아직 인증하지 않은 계정만(미인증, 관리자 인증만): 메일 코드로 인증된 계정은 409 `ALREADY_VERIFIED`. `needs_profile`인 계정은 이름·학번·학과·동의도(없으면 422 `PROFILE_REQUIRED`). 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN` |
+| POST | `/api/me/email/code` | `{email?}` | 202 `{email, expires_in, resend_after}` — 비우면 등록 메일로 보내고 `email`은 가린 주소. 주소를 주면 그 주소로(등록 메일을 잘못 적었거나 메일이 없는 예전 계정) / 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN`, `EVENT_ENDED`(이벤트 종료 후), 422 `EMAIL_REQUIRED`(메일 없는 계정이 주소를 비움), 429, 503 |
+| POST | `/api/me/email` | `{email?, code, name?, student_id?, department?, privacy_consent?}` | `Participant` — 학교 메일 코드 인증. 등록 메일로 받았으면 코드만, 다른 주소로 받았으면 그 주소도(인증하면 등록 메일이 그 주소로 바뀜). 메일 코드로 아직 인증하지 않은 계정만(미인증, 관리자 인증만): 메일 코드로 인증된 계정은 409 `ALREADY_VERIFIED`. `needs_profile`인 계정은 이름·학번·학과·동의도(없으면 422 `PROFILE_REQUIRED`). 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN`, `EVENT_ENDED` |
 | GET | `/api/me/portfolio` | – | `Portfolio` |
 | GET | `/api/me/orders` | `?limit=100` | `Order[]` (최신순) |
 | POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분). `code`는 1~16자, `quantity`는 정수(64비트 범위 밖이면 422). '인증된 참가자만 거래'가 켜져 있고 미인증이면 403 `VERIFICATION_REQUIRED` |

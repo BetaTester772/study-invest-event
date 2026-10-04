@@ -75,8 +75,10 @@ services:
       STUDY_INVEST_TIME_ORIGIN: ${STUDY_INVEST_TIME_ORIGIN:-}
       # 1이면 가입 때 학교 메일 인증 코드 필수. 0(기본)이면 메일 주소만 받고 미인증으로 가입.
       STUDY_INVEST_EMAIL_VERIFICATION: ${STUDY_INVEST_EMAIL_VERIFICATION:-0}
-      # 학교 메일 인증·비밀번호 재설정 코드 SMTP. HOST를 비우면 메일 대신 로그로 남는다(로컬 개발 전용).
+      # 학교 메일 인증·비밀번호 재설정 코드 SMTP.
       STUDY_INVEST_SMTP_HOST: ${STUDY_INVEST_SMTP_HOST:-}
+      # SMTP 없이 코드를 로그로 남긴다(로컬 개발·CI 전용). 0이면 SMTP 미설정 시 코드 요청 503
+      STUDY_INVEST_MAIL_LOG_ONLY: ${STUDY_INVEST_MAIL_LOG_ONLY:-0}
       STUDY_INVEST_SMTP_PORT: ${STUDY_INVEST_SMTP_PORT:-587}
       STUDY_INVEST_SMTP_SECURITY: ${STUDY_INVEST_SMTP_SECURITY:-starttls}
       STUDY_INVEST_SMTP_USERNAME: ${STUDY_INVEST_SMTP_USERNAME:-}

@@ -21,6 +21,11 @@ export function schoolEmailError(email: string): string | undefined {
   return undefined;
 }
 
+/** 숫자만 남긴다. 서버(NFKC)처럼 전각 숫자 '２０２１'도 먼저 반각으로 바꾼 뒤 거른다. */
+export function digitsOnly(value: string, max: number): string {
+  return value.normalize('NFKC').replace(/\D/g, '').slice(0, max);
+}
+
 export function codeError(code: string): string | undefined {
   return /^\d{6}$/.test(code) ? undefined : '메일로 받은 6자리 숫자를 입력해 주세요.';
 }
@@ -65,7 +70,13 @@ function useCodeRequest() {
       setSending(false);
     }
   };
-  return { sending, sentTo, setSentTo, notice, resendLeft, run };
+  /** 주소를 고치면 처음부터: 재요청 대기는 서버가 주소마다 세므로 새 주소는 바로 받을 수 있다. */
+  const reset = () => {
+    setSentTo(null);
+    setResendLeft(0);
+    setNotice(null);
+  };
+  return { sending, sentTo, notice, resendLeft, run, reset };
 }
 
 function CodeSteps({
@@ -104,7 +115,7 @@ function CodeSteps({
         autoComplete="one-time-code"
         maxLength={6}
         value={code}
-        onChange={(e) => onCodeChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        onChange={(e) => onCodeChange(digitsOnly(e.target.value, 6))}
         error={codeError}
         required
       />
@@ -213,7 +224,7 @@ export function SchoolEmailFields({
         value={email}
         onChange={(e) => {
           onEmailChange(e.target.value);
-          state.setSentTo(null);
+          state.reset();
         }}
         error={emailError}
         required

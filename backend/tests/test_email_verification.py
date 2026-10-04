@@ -379,8 +379,40 @@ class TestSmtpMailer:
             ("quit",),
         ]
 
-    def test_without_host_logs(self) -> None:
-        assert isinstance(mail.make_mailer(Settings()), mail.LogMailer)
+    def test_without_host_fails_closed_unless_log_only(self) -> None:
+        # SMTP가 없으면 코드를 로그로 흘리지 않는다. 로그 전용은 명시적으로 켤 때만(개발·CI)
+        assert isinstance(mail.make_mailer(Settings()), mail.NoMailer)
+        assert isinstance(mail.make_mailer(Settings(mail_log_only=True)), mail.LogMailer)
+
+    def test_no_mailer_refuses_codes_but_signup_works(self, tmp_path: Any) -> None:
+        from study_invest.api.app import create_app
+
+        app = create_app(
+            Settings(
+                database_url="sqlite://", upload_dir=tmp_path / "uploads", auto_create_schema=True
+            ),
+            clock=lambda: kst(D1, time(8)),
+        )
+        with TestClient(app) as c:
+            r = c.post("/api/auth/email-code", json={"email": "kim@g.skku.edu"})
+            assert r.status_code == 503 and r.json()["detail"]["code"] == "MAIL_NOT_CONFIGURED"
+            r = c.post(
+                "/api/auth/register",
+                json={
+                    "email": "kim@g.skku.edu",
+                    **profile_for("kim@g.skku.edu"),
+                    "nickname": "kim",
+                    "password": "tiger-moon-river-42",
+                    "privacy_consent": True,
+                },
+            )
+            assert r.status_code == 201  # 코드 없는 가입은 그대로
+            r = c.post("/api/auth/password-reset/code", json={"identity": "kim@g.skku.edu"})
+            assert r.json()["detail"]["code"] == "MAIL_NOT_CONFIGURED"
+            # 거절은 코드를 만들기 전이라 재요청 대기에 걸리지 않는다
+            state = app.state.study_invest
+            with state.session_factory() as s:
+                assert s.scalars(select(EmailVerification)).first() is None
 
     def test_settings_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("STUDY_INVEST_SMTP_HOST", "smtp.gmail.com")
@@ -978,3 +1010,31 @@ class TestWeakPassword:
             )
             s.commit()
         assert _login(client, "old-user", "password123").status_code == 200
+
+
+class TestAfterEvent:
+    def test_no_email_verification_after_event_ends(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        """이벤트 종료 후 개인정보를 지운 뒤 미인증 계정이 메일·학번을 다시 등록할 수 없다."""
+        h = _register_without_code(client, "kim@g.skku.edu", "kim")
+        clock.set(date(2026, 10, 17))
+        state = client.app.state.study_invest  # type: ignore[attr-defined]
+        with state.session_factory() as s:
+            email_verification.purge(s, clock.now, EventCalendar())
+            s.commit()
+        r = _my_code(client, h, "kim@g.skku.edu")
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "EVENT_ENDED"
+        r = client.post(
+            "/api/me/email",
+            json={
+                "email": "kim@g.skku.edu",
+                "code": "123456",
+                **profile_for("kim@g.skku.edu"),
+                "privacy_consent": True,
+            },
+            headers=h,
+        )
+        assert r.json()["detail"]["code"] == "EVENT_ENDED"
+        row = client.get("/api/admin/participants", headers=admin).json()[0]
+        assert [row[k] for k in ("email", "name", "student_id", "department")] == [None] * 4

@@ -3,8 +3,8 @@
 skku.edu·g.skku.edu 주소만 받고, 같은 ID의 두 도메인은 한 사람으로 본다(normalize.py).
 코드는 6자리 숫자, 10분 유효, 5번 틀리면 무효. 메일마다 가장 최근 코드만 쓸 수 있다.
 
-시각(now)은 실제 시각을 쓴다. 테스트 시계 배속(STUDY_INVEST_TIME_SCALE)을 따르면
-10분 유효시간이 몇십 초로 줄어든다.
+유효시간·재요청 간격의 시각(now)은 테스트 시계 배속(STUDY_INVEST_TIME_SCALE)과 상관없이 실제
+시각이다(라우트가 RealNowDep을 넘긴다). 배속을 따르면 10분이 몇십 초로 줄어들기 때문이다.
 """
 
 from __future__ import annotations

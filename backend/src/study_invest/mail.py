@@ -56,7 +56,8 @@ class SmtpMailer:
 
 
 class LogMailer:
-    """SMTP 미설정: 메일 내용을 로그로 남긴다. 운영에서는 쓰지 않는다(코드가 로그에 남는다)."""
+    """메일 대신 로그로 남긴다(STUDY_INVEST_MAIL_LOG_ONLY=1, 로컬 개발·CI 전용). 코드가 로그에
+    평문으로 남으므로 운영에서는 켜지 않는다."""
 
     def send(self, to: str, subject: str, body: str) -> None:
         log.warning(
@@ -64,10 +65,26 @@ class LogMailer:
         )
 
 
+class NoMailer:
+    """SMTP 미설정이고 로그 전용 모드도 아니다: 메일을 보낼 수 없다(fail closed).
+
+    코드를 로그로 흘리지 않는다. 앱은 뜨고(코드 없는 가입·로그인은 된다), 코드를 요청하면
+    발급 전에 503 MAIL_NOT_CONFIGURED로 거절한다(routes_public.send_code)."""
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        raise RuntimeError("메일 발송이 설정되지 않았습니다(STUDY_INVEST_SMTP_HOST).")
+
+
 def make_mailer(settings: Settings) -> Mailer:
     if not settings.smtp_host:
-        log.warning("STUDY_INVEST_SMTP_HOST가 비어 있어 인증 메일을 로그로만 남깁니다.")
-        return LogMailer()
+        if settings.mail_log_only:
+            log.warning("STUDY_INVEST_MAIL_LOG_ONLY=1: 인증 메일을 로그로만 남깁니다(개발 전용).")
+            return LogMailer()
+        log.error(
+            "STUDY_INVEST_SMTP_HOST가 비어 있어 인증·비밀번호 재설정 메일을 보낼 수 없습니다. "
+            "로컬 개발이면 STUDY_INVEST_MAIL_LOG_ONLY=1로 로그에 남길 수 있습니다."
+        )
+        return NoMailer()
     if settings.smtp_security not in ("starttls", "ssl", "none"):
         raise ValueError("STUDY_INVEST_SMTP_SECURITY는 starttls, ssl, none 중 하나여야 합니다.")
     sender = settings.mail_from or settings.smtp_username

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..clock import ScaledClock
 from ..event_calendar import EventCalendar, to_kst
 from ..instruments import BY_CODE, INSTRUMENTS
+from ..mail import NoMailer
 from ..models import CodePurpose, MarketDay, PriceHistory
 from ..normalize import mask_email
 from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
@@ -187,6 +188,12 @@ def send_code(
     shown: Callable[[str], str] = lambda address: address,
 ) -> schemas.EmailCodeResponse:
     """코드를 발급하고 메일로 보낸다. shown: 응답에 보여 줄 주소(등록 메일이면 가린 주소)."""
+    if isinstance(state.mailer, NoMailer):  # 코드를 만들기 전에 거절한다(재요청 대기에 안 걸리게)
+        raise DomainError(
+            "MAIL_NOT_CONFIGURED",
+            "지금은 인증 메일을 보낼 수 없습니다. 운영진에게 문의하세요.",
+            503,
+        )
     # 느린 SMTP가 공용 스레드풀을 다 차지하지 않게 동시 발송 수를 제한한다. 꽉 차면 코드를 만들기
     # 전에 바로 거절한다(재요청 대기에 걸리지 않게).
     if not state.mail_slots.acquire(blocking=False):
