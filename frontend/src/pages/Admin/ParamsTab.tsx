@@ -10,7 +10,7 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   {
     key: 'coin_up_exp',
     label: '코인 상승폭 지수',
-    hint: '기본 3. 낮추면 큰 상승이 잦아져요.',
+    hint: '기본 2. 낮추면 큰 상승이 잦아져요.',
     kind: 'float',
     group: 'coin',
   },
@@ -21,7 +21,7 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
     kind: 'float',
     group: 'coin',
   },
-  { key: 'coin_cap', label: '코인 일일 상한', hint: '소수. 2 = +200%', kind: 'float', group: 'coin' },
+  { key: 'coin_cap', label: '코인 일일 상한', hint: '소수. 0.8 = +80%', kind: 'float', group: 'coin' },
   { key: 'coin_floor', label: '코인 일일 하한', hint: '소수. -0.4 = -40%', kind: 'float', group: 'coin' },
   {
     key: 'coin_price_cap',

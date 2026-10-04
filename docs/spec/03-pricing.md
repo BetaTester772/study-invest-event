@@ -17,7 +17,7 @@
 ### 1.2 알고리즘 (매 운영일 18:00, 1회)
 
 ```text
-입력: 현재가 P, 회차 n, p_up=0.30, up_exp=3, down_exp=2, cap=+2.00, floor=-0.40,
+입력: 현재가 P, 회차 n, p_up=0.30, up_exp=2, down_exp=2, cap=+0.80, floor=-0.40,
       calm_rounds=3, calm_cap=+0.30, calm_floor=-0.10
 
 0. if n <= calm_rounds:           # 초반 안정기 (SPEC-COIN-6)
@@ -25,7 +25,7 @@
 1. p ~ Uniform(0, 1)
 2. X ~ Uniform(0, 1)
 3. if p < p_up:                  # 상승일 (약 30%)
-       r = cap   * X^up_exp      #  = +200% * X^3  (안정기 +30% * X^3)
+       r = cap   * X^up_exp      #  = +80% * X^2  (안정기 +30% * X^2)
    else:                         # 하락일 (약 70%)
        r = floor * X^down_exp    #  = -40%  * X^2  (안정기 -10% * X^2)
 4. P' = round( P * (1 + r), 10원 )

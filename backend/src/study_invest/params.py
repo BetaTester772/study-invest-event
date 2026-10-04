@@ -55,12 +55,12 @@ class EventParams:
     # 병더리움 (03-pricing §1)
     coin_p_up: float = 0.30
     """상승일 발생 확률."""
-    coin_up_exp: float = 3
+    coin_up_exp: float = 2
     """상승폭 지수: 변동률 = cap × X^up_exp."""
     coin_down_exp: float = 2
     """하락폭 지수: 변동률 = floor × X^down_exp."""
-    coin_cap: float = 2.00
-    """상승일 최대 변동률(+200%). 10회 누적 20배 초과 확률을 1% 미만으로 두는 값(v0.4)."""
+    coin_cap: float = 0.80
+    """상승일 최대 변동률(+80%)."""
     coin_floor: float = -0.40
     """하락일 최대 변동률(-40%). 상한과 함께 줄여 로그 기대값을 0 근처(약 -0.004)로 유지한다."""
     coin_price_cap: int | None = 5_000_000
