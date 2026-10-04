@@ -45,11 +45,11 @@ const ACTION_COPY: Record<Action, { title: string; button: string; description: 
     done: '밀린 배치를 실행했어요',
   },
   advance: {
-    title: '가격을 지금 바로 변동시킬까요?',
-    button: '지금 변동시키기',
+    title: '다음 단계로 넘어갈까요?',
+    button: '다음 단계로',
     description:
-      '최신 공시일을 18:00 전이어도 정산하고, 다음 운영일 시작가를 바로 공시해요. 시계를 앞질러 이벤트가 한 회차 진행되고 되돌릴 수 없어요.',
-    done: '가격을 변동시켰어요',
+      '장 열림(09:00 공시) → 장 닫힘(18:00 마감·정산) → 다음 날 장 열림 순으로 한 단계씩 진행하고, 앱 시계도 그 시각으로 옮겨요. 되돌릴 수 없어요.',
+    done: '다음 단계로 넘어갔어요',
   },
 };
 
@@ -137,7 +137,7 @@ export function BatchTab() {
           : action === 'settle'
             ? [await adminApi.batchSettle(day || undefined)]
             : action === 'advance'
-              ? [await adminApi.qaAdvancePrice()]
+              ? [await adminApi.qaNextStep()]
               : await adminApi.batchRunDue();
       setResults(res);
       toast.success(ACTION_COPY[action].done, res.length === 0 ? '실행할 배치가 없었어요.' : `${res.length}건 실행`);
@@ -197,15 +197,15 @@ export function BatchTab() {
       {qa.data?.enabled && (
         <Card
           title="QA 도구"
-          description="09:00·18:00을 기다리지 않고 가격이 한 회차 움직이는 걸 바로 확인해요. QA 서버에서만 보여요."
+          description="09:00·18:00을 기다리지 않고 장 열림 → 장 닫힘 → 다음 날 장 열림을 버튼 하나로 순환시켜요. QA 서버에서만 보여요."
           tone="sunken"
         >
           <Stack gap={4}>
             <Alert tone="warning">
-              최신 공시일을 정산하고 다음 운영일 시작가를 바로 공시해요. 누를 때마다 이벤트가 하루씩 앞서가요. 아직 공시된 날이 없으면 이벤트 첫날 시작가부터 공시해요. 무제한 모드(STUDY_INVEST_QA_UNLIMITED)면 이벤트 종료일 뒤로도 계속 진행돼요.
+              누를 때마다 한 단계씩 진행해요: 장 열림(공시) → 장 닫힘(마감·정산) → 다음 날 장 열림. 앱 시계도 그 시각으로 옮겨 주문 가능 여부가 단계와 맞아요. 아직 공시된 날이 없으면 이벤트 첫날 장 열림부터 시작해요. 무제한 모드(STUDY_INVEST_QA_UNLIMITED)면 이벤트 종료일 뒤로도 계속 돌아요.
             </Alert>
             <Stack direction="row" gap={2} wrap>
-              <Button onClick={() => setConfirm('advance')}>지금 가격 변동시키기</Button>
+              <Button onClick={() => setConfirm('advance')}>다음 단계로 (장 열림 → 닫힘 → 다음 날)</Button>
             </Stack>
           </Stack>
         </Card>

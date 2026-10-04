@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from ..clock import OffsetClock
 from ..event_calendar import to_kst
 from ..models import (
     AuditLog,
@@ -251,6 +252,22 @@ def batch_run_due(state: StateDep, now: NowDep) -> list[schemas.BatchResult]:
 async def qa_status(state: StateDep) -> schemas.QaStatus:  # I/O 없음 → async
     """QA 도구 사용 가능 여부. 화면이 버튼을 보일지 정한다."""
     return schemas.QaStatus(enabled=state.settings.qa_tools)
+
+
+@router.post("/qa/next-step", response_model=schemas.BatchResult)
+def qa_next_step(state: StateDep, s: BatchSessionDep, now: NowDep) -> schemas.BatchResult:
+    """공시(09:00) → 마감·정산(18:00) → 다음 날 공시 순으로 한 단계만 진행한다.
+
+    진행한 뒤 앱 시계를 그 단계의 시각으로 옮긴다.
+    """
+    if not state.settings.qa_tools:
+        raise DomainError("QA_DISABLED", "이 서버는 QA 도구가 꺼져 있습니다.", 403)
+    result, at = market.qa_next_step(s, now, state.calendar, state.rng)
+    s.commit()
+    if not isinstance(state.clock, OffsetClock):
+        state.clock = OffsetClock(state.clock)
+    state.clock.jump_to(at)
+    return _batch(result)
 
 
 @router.post("/qa/advance-price", response_model=schemas.BatchResult)

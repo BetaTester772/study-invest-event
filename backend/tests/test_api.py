@@ -717,3 +717,28 @@ class TestRankingAndAdmin:
         coin = client.get("/api/event").json()["coin"]
         expected = until.isoformat() if isinstance(until, date) else until
         assert (coin["calm_rounds"], coin["calm_until"]) == (shown, expected)
+
+
+class TestQaNextStep:
+    URL = "/api/admin/qa/next-step"
+
+    def test_steps_through_open_close_next_day(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        state = client.app.state.study_invest  # type: ignore[attr-defined]
+        assert client.post(self.URL, headers=admin).status_code == 403
+        state.settings = dataclasses.replace(state.settings, qa_tools=True)
+        clock.set(date(2026, 10, 1))
+        rng.queue = [0.5, 1.0]
+        steps = []
+        for _ in range(4):
+            r = client.post(self.URL, headers=admin)
+            assert r.status_code == 200, r.text
+            event = client.get("/api/event").json()
+            steps.append((r.json()["action"], r.json()["day"], event["market"]["is_open"]))
+        assert steps == [
+            ("open", D1.isoformat(), True),
+            ("settle", D1.isoformat(), False),
+            ("open", D2.isoformat(), True),
+            ("settle", D2.isoformat(), False),
+        ]

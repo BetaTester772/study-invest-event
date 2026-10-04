@@ -19,7 +19,7 @@ from typing import Annotated
 from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..clock import ScaledClock
+from ..clock import OffsetClock, ScaledClock
 from ..config import Settings
 from ..db import DatabasePools
 from ..event_calendar import EventCalendar
@@ -105,6 +105,8 @@ async def get_real_now(state: StateDep) -> datetime:
     """실제 시각. 인증 코드 유효시간·재발송 간격처럼 사람이 기다리는 시간은 테스트 시계 배속을
     따르지 않는다(배속 24면 10분이 25초가 된다). 테스트가 주입한 시계는 그대로 쓴다."""
     clock = state.clock
+    if isinstance(clock, OffsetClock):
+        return clock.real()
     return clock.source() if isinstance(clock, ScaledClock) else clock()
 
 

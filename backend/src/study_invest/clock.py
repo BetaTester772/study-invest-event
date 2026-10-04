@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .params import KST
 
@@ -40,3 +40,26 @@ class ScaledClock:
     def to_real(self, at: datetime) -> datetime:
         """이 시계가 at을 가리키는 실제 시각(KST)."""
         return (self.origin + (at - self.virtual_origin) / self.scale).astimezone(KST)
+
+
+class OffsetClock:
+    """base 시계에 오프셋을 더한 시계. QA가 "다음 단계"로 시각을 건너뛸 때 쓴다.
+
+    jump_to 뒤에도 base처럼 계속 흐른다. 실제 시각이 필요한 곳은 real()로 풀어서 쓴다.
+    """
+
+    def __init__(self, base: Callable[[], datetime]) -> None:
+        self.base = base
+        self.offset = timedelta(0)
+
+    def __call__(self) -> datetime:
+        return self.base() + self.offset
+
+    def jump_to(self, at: datetime) -> None:
+        if at.tzinfo is None or at.utcoffset() is None:
+            raise ValueError("timezone-aware datetime required")
+        self.offset = at - self.base()
+
+    def real(self) -> datetime:
+        base = self.base
+        return base.source() if isinstance(base, ScaledClock) else base()
