@@ -29,8 +29,8 @@ from ..models import (
 )
 from ..money import PRICE_UNIT
 from ..params import KST, MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
-from ..pricing import draw_coin, is_calm_round, settle_stocks
-from . import certification
+from ..pricing import draw_coin, draw_stock_noise, is_calm_round, settle_stocks
+from . import certification, news
 from .common import (
     DomainError,
     audit,
@@ -172,12 +172,24 @@ def settle_day(
     params = get_params(s)
     prices = prices_on(s, day)
     amounts = buy_amounts(s, day)
-    stock_moves = settle_stocks(
-        {i.code: prices[i.code] for i in STOCKS},
-        {c: a for c, a in amounts.items() if c in {i.code for i in STOCKS}},
-        params,
-    )
+    # 난수는 코인(p, X) → 주식 잡음 순서로 뽑는다. 테스트의 StubRandom은 코인용 난수를 큐로 넣고
+    # 나머지는 0.5를 돌려주므로, 이 순서면 주식 잡음이 전 종목 같은 배수가 되어 상쇄된다.
     coin = draw_coin(prices[COIN.code], params, rng, calm=is_calm_round(round_no, params))
+    stock_codes = [i.code for i in STOCKS]
+    today_news = news.news_on(s, day)  # 09:00에 발표된 그날 호재·악재
+    stock_moves = settle_stocks(
+        {code: prices[code] for code in stock_codes},
+        {c: a for c, a in amounts.items() if c in stock_codes},
+        params,
+        noise=draw_stock_noise(stock_codes, params, rng),
+        news=news.news_rates(today_news),
+    )
+    # 다음 운영일 뉴스는 코인·잡음 다음에 뽑는다(반영일이 없는 마지막 날에는 만들지 않는다).
+    next_news = (
+        news.create_random_news(s, effective, now, params, rng)
+        if calendar.round_of(effective) is not None
+        else None
+    )
 
     new_prices = {code: m.new_price for code, m in stock_moves.items()}
     new_prices[COIN.code] = coin.new_price
@@ -208,8 +220,11 @@ def settle_day(
             "code": m.code,
             "buy_amount": m.buy_amount,
             "adjusted_amount": m.adjusted_amount,
+            "noise_factor": m.noise_factor,
             "concentration": None if m.concentration is None else float(m.concentration),
             "rate": float(m.rate),
+            "news_rate": None if m.news_rate is None else float(m.news_rate),
+            "total_rate": float(m.total_rate),
             "old_price": m.old_price,
             "new_price": m.new_price,
         }
@@ -236,6 +251,21 @@ def settle_day(
         )
     )
     md.settled_at = now
+    news_detail = {
+        "applied": [
+            {"code": n.code, "kind": n.kind.value, "rate": n.rate, "headline": n.headline}
+            for n in today_news
+        ],
+        "next": None
+        if next_news is None
+        else {
+            "day": effective.isoformat(),
+            "code": next_news.code,
+            "kind": next_news.kind.value,
+            "rate": next_news.rate,
+            "headline": next_news.headline,
+        },
+    }
     audit(
         s,
         now,
@@ -245,6 +275,7 @@ def settle_day(
         round=round_no,
         new_prices=new_prices,
         manual_kept=sorted(manual),
+        news=news_detail,
     )
     return BatchResult(
         "settle",
@@ -254,6 +285,7 @@ def settle_day(
             "effective_day": effective.isoformat(),
             "new_prices": new_prices,
             "manual_kept": sorted(manual),
+            "news": news_detail,
         },
     )
 

@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -18,12 +18,14 @@ from ..event_calendar import to_kst
 from ..models import (
     AuditLog,
     CertStatus,
+    MarketDay,
+    NewsKind,
     Participant,
     SettlementLog,
     StudyCertification,
 )
 from ..params import EventParams
-from ..services import auth, certification, market
+from ..services import auth, certification, market, news
 from ..services.common import (
     DomainError,
     audit,
@@ -204,6 +206,51 @@ def manual_price(
         change_rate=market.change_rate(record),
         source=record.source,
     )
+
+
+def _settled_days(s: SessionDep) -> set[date]:
+    return set(s.scalars(select(MarketDay.day).where(MarketDay.settled_at.is_not(None))))
+
+
+@router.get("/news", response_model=list[schemas.AdminNewsItem])
+def list_news(s: SessionDep) -> list[schemas.AdminNewsItem]:
+    """미래 날짜를 포함한 전체 호재·악재, 최신 날짜부터."""
+    settled = _settled_days(s)
+    return [views.admin_news_item(n, n.day in settled) for n in news.all_news(s)]
+
+
+@router.put("/news/{day}/{code}", response_model=schemas.AdminNewsItem)
+def manual_news(
+    day: date,
+    code: str,
+    body: schemas.ManualNewsRequest,
+    state: StateDep,
+    s: BatchSessionDep,
+    now: NowDep,
+) -> schemas.AdminNewsItem:
+    """아직 정산되지 않은 운영일의 뉴스를 쓴다. 같은 날·종목이 있으면(무작위 생성분도) 덮어쓴다."""
+    item = news.set_manual_news(
+        s,
+        day,
+        code,
+        NewsKind(body.kind),
+        body.rate,
+        body.headline,
+        now,
+        state.calendar,
+        subtitle=body.subtitle,
+        body=body.body,
+        byline=body.byline,
+    )
+    s.commit()
+    return views.admin_news_item(item, settled=False)
+
+
+@router.delete("/news/{day}/{code}", status_code=204)
+def remove_news(day: date, code: str, state: StateDep, s: BatchSessionDep, now: NowDep) -> Response:
+    news.delete_news(s, day, code, now, state.calendar)
+    s.commit()
+    return Response(status_code=204)
 
 
 def _batch(result: BatchResult) -> schemas.BatchResult:

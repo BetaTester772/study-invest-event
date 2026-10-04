@@ -15,6 +15,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     String,
     TypeDecorator,
@@ -109,6 +110,20 @@ class PriceSource(StrEnum):
     SETTLEMENT = "settlement"
     CARRY_OVER = "carry_over"
     MANUAL = "manual"
+
+
+class NewsKind(StrEnum):
+    GOOD = "good"
+    """호재: 정산 때 변동률에 +rate를 곱해 얹는다."""
+    BAD = "bad"
+    """악재: 정산 때 변동률에 −rate를 곱해 얹는다."""
+
+
+class NewsSource(StrEnum):
+    RANDOM = "random"
+    """전날 정산 때 확률적으로 생성."""
+    MANUAL = "manual"
+    """관리자가 작성."""
 
 
 class Participant(Base):
@@ -249,6 +264,34 @@ class PriceHistory(Base):
     price: Mapped[int] = mapped_column(BigInteger)
     previous_price: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source: Mapped[PriceSource] = mapped_column(_enum(PriceSource))
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime())
+
+
+class NewsItem(Base):
+    """호재·악재 (03-pricing §3). 운영일 09:00 공시와 함께 발표되고 그날 18:00 정산에 반영된다.
+
+    한 운영일에 종목당 1건. 무작위 생성분은 전날 정산 때 만들어지고, 관리자는 아직 정산되지
+    않은 운영일에 직접 쓰거나 지울 수 있다.
+    """
+
+    __tablename__ = "news_items"
+    __table_args__ = (UniqueConstraint("day", "code"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    """발표·반영 운영일."""
+    code: Mapped[str] = mapped_column(String(16))
+    kind: Mapped[NewsKind] = mapped_column(_enum(NewsKind))
+    rate: Mapped[float] = mapped_column(Float)
+    """효과 크기(양수, 0 < rate ≤ 1). 부호는 kind가 정한다."""
+    headline: Mapped[str] = mapped_column(String(120))
+    subtitle: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    """부제 한 줄. 제목만 쓴 관리자 뉴스는 None."""
+    body: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    """기사 본문 2~3문장."""
+    byline: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    """가상 매체명(바이라인)."""
+    source: Mapped[NewsSource] = mapped_column(_enum(NewsSource))
     created_at: Mapped[datetime] = mapped_column(AwareDateTime())
 
 

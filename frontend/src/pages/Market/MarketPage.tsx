@@ -3,6 +3,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { InstrumentBoard } from '../../components/app/InstrumentBoard';
 import { LoadError } from '../../components/app/LoadError';
 import { MarketStatus } from '../../components/app/MarketStatus';
+import { NewsCard } from '../../components/app/NewsCard';
 import { Card, Container, LinkButton, Skeleton, Stack, Text } from '../../components/ui';
 import { formatDay } from '../../lib/format';
 
@@ -10,6 +11,7 @@ export function MarketPage() {
   const { status } = useAuth();
   const event = useApi(() => publicApi.event(), [], { refreshInterval: 60_000 });
   const instruments = useApi(() => publicApi.instruments(), [], { refreshInterval: 60_000 });
+  const news = useApi(() => publicApi.news(), [], { refreshInterval: 60_000 });
   const certs = useApi(() => meApi.certifications(), [status], { enabled: status === 'authenticated' });
 
   const stamped = certs.data?.filter((c) => c.status === 'approved').map((c) => c.target_date);
@@ -26,6 +28,12 @@ export function MarketPage() {
           <Card padding="lg">
             <Skeleton lines={3} height="1.5rem" />
           </Card>
+        )}
+
+        {news.error ? (
+          <LoadError error={news.error} onRetry={news.refetch} what="뉴스" />
+        ) : (
+          <NewsCard news={news.data} loading={news.loading} today={priceDay} />
         )}
 
         <Stack gap={3} as="section" aria-labelledby="board-title">

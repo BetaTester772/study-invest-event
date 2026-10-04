@@ -17,9 +17,9 @@ from ..mail import NoMailer
 from ..models import CodePurpose, MarketDay, PriceHistory
 from ..normalize import mask_email
 from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
-from ..services import auth, email_verification, market, ranking
+from ..services import auth, email_verification, market, news, ranking
 from ..services.common import DomainError, current_prices, get_params, latest_opened_day
-from . import schemas
+from . import schemas, views
 from .deps import AppState, NowDep, OptionalMeDep, RealNowDep, SessionDep, StateDep, TokenDep
 from .email_codes import consume_code
 
@@ -118,9 +118,11 @@ def instruments(s: SessionDep) -> list[schemas.Instrument]:
         if day
         else {}
     )
+    today_news = {n.code: n for n in news.news_on(s, day)} if day else {}
     result = []
     for inst in INSTRUMENTS:
         rec = records.get(inst.code)
+        item = today_news.get(inst.code)
         result.append(
             schemas.Instrument(
                 code=inst.code,
@@ -131,9 +133,16 @@ def instruments(s: SessionDep) -> list[schemas.Instrument]:
                 previous_price=rec.previous_price if rec else None,
                 change_rate=market.change_rate(rec) if rec else None,
                 day=day,
+                news=views.news_item(item) if item else None,
             )
         )
     return result
+
+
+@router.get("/news", response_model=list[schemas.NewsItem])
+def news_list(s: SessionDep) -> list[schemas.NewsItem]:
+    """공시된 운영일까지의 호재·악재, 최신 날짜부터. 공시 전 날짜의 뉴스는 보이지 않는다."""
+    return [views.news_item(n) for n in news.published_news(s)]
 
 
 @router.get("/instruments/{code}/history", response_model=list[schemas.PricePoint])

@@ -4,13 +4,14 @@ import { Alert, Button, Card, Container, PageHeader, Stack, Tabs, TextField } fr
 import { AuditTab } from './AuditTab';
 import { BatchTab } from './BatchTab';
 import { CertReviewTab } from './CertReviewTab';
+import { NewsTab } from './NewsTab';
 import { ParamsTab } from './ParamsTab';
 import { ParticipantsTab } from './ParticipantsTab';
 import { PriceTab } from './PriceTab';
 import { SimulatorTab } from './SimulatorTab';
 import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
-type AdminTab = 'certs' | 'participants' | 'params' | 'batch' | 'price' | 'sim' | 'audit';
+type AdminTab = 'certs' | 'participants' | 'params' | 'batch' | 'price' | 'news' | 'sim' | 'audit';
 
 function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string | null }) {
   const [key, setKey] = useState('');
@@ -126,6 +127,7 @@ export function AdminPage() {
           { value: 'params', label: '파라미터', content: <ParamsTab /> },
           { value: 'batch', label: '배치·정산', content: <BatchTab /> },
           { value: 'price', label: '가격 개입', content: <PriceTab /> },
+          { value: 'news', label: '호재·악재', content: <NewsTab /> },
           { value: 'sim', label: '시뮬레이터', content: <SimulatorTab /> },
           { value: 'audit', label: '감사 로그', content: <AuditTab /> },
         ]}
