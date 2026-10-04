@@ -101,6 +101,10 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
         initial_cash=INITIAL_CASH,
         daily_buy_limit_ratio=params.daily_buy_limit_ratio,
         clock=_clock_info(state.clock, now, cal),
+        signup=schemas.SignupInfo(
+            email_verification=state.settings.email_verification,
+            verified_only_trading=params.verified_only_trading,
+        ),
     )
 
 
@@ -203,7 +207,7 @@ def request_email_code(
     now: NowDep,
     real_now: RealNowDep,
 ) -> schemas.EmailCodeResponse:
-    """학교 메일로 6자리 인증 코드를 보낸다(참가 신청·재인증 공용)."""
+    """학교 메일로 6자리 인증 코드를 보낸다(참가 신청·미인증 계정의 인증 공용)."""
     auth.ensure_registration_open(now, state.calendar)
     return _send_code(state, s, body.email, real_now, CodePurpose.VERIFY)
 
@@ -214,10 +218,19 @@ def register(
 ) -> schemas.AuthResponse:
     auth.ensure_registration_open(now, state.calendar)
     auth.ensure_privacy_consent(body.privacy_consent)
-    email = consume_code(s, body.email, body.code, real_now)
+    # 코드가 있으면 확인해 인증된 채로 가입한다. 메일 인증을 켠 운영이면 코드가 꼭 있어야 한다.
+    # 끈 운영(기본)이면 주소만 받아 미인증으로 가입한다(나중에 메일 코드나 관리자가 인증).
+    verify = body.code is not None
+    if verify:
+        assert body.code is not None
+        email = consume_code(s, body.email, body.code, real_now)
+    elif state.settings.email_verification:
+        raise DomainError("CODE_REQUIRED", "학교 메일로 받은 인증 코드를 입력하세요.", 422)
+    else:
+        email = email_verification.parse(body.email)
     profile = auth.Profile(body.name, body.student_id, body.department)
     participant, token = auth.register(
-        s, email, profile, body.nickname, body.password, now, state.calendar
+        s, email, profile, body.nickname, body.password, now, state.calendar, verified=verify
     )
     s.commit()
     return schemas.AuthResponse(

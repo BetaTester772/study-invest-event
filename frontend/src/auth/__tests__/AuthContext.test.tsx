@@ -10,7 +10,8 @@ const ME: Participant = {
   status: 'normal',
   joined_at: '2026-10-06T09:00:00+09:00',
   email: 'alice@g.skku.edu',
-  email_verified: true,
+  verified: true,
+  needs_profile: false,
 };
 
 function Probe() {
@@ -84,10 +85,10 @@ describe('AuthProvider', () => {
     expect(tokenStore.get()).toBeNull();
   });
 
-  it('sends accounts without a verified school email to /verify-email', async () => {
-    vi.spyOn(meApi, 'me').mockResolvedValue({ ...ME, email: null, email_verified: false });
+  it('lets unverified accounts use protected pages (verification is optional by default)', async () => {
+    vi.spyOn(meApi, 'me').mockResolvedValue({ ...ME, verified: false });
     renderApp();
-    await waitFor(() => expect(screen.getByText('verify email page')).toBeInTheDocument());
-    expect(screen.queryByText('protected page')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('authenticated:alice')).toBeInTheDocument());
+    expect(screen.getByText('protected page')).toBeInTheDocument();
   });
 });

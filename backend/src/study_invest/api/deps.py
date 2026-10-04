@@ -136,11 +136,15 @@ MeDep = Annotated[Participant, Depends(current_participant)]
 OptionalMeDep = Annotated[Participant | None, Depends(optional_participant)]
 
 
-async def verified_participant(participant: MeDep) -> Participant:
-    """학교 메일 인증을 마친 참가자만(메일 인증 도입 전 계정은 재인증해야 한다)."""
-    if not participant.email_verified:
+def verified_participant(participant: MeDep, s: SessionDep) -> Participant:
+    """주문용. 관리자가 '인증된 참가자만 거래'(verified_only_trading)를 켰으면 미인증 계정은 403.
+
+    파라미터를 DB에서 읽으므로 동기 def(스레드풀)."""
+    if not participant.verified and get_params(s).verified_only_trading:
         raise DomainError(
-            "EMAIL_VERIFICATION_REQUIRED", "학교 메일 인증을 마쳐야 이용할 수 있습니다.", 403
+            "VERIFICATION_REQUIRED",
+            "지금은 인증된 참가자만 거래할 수 있습니다. 학교 메일 인증을 마쳐 주세요.",
+            403,
         )
     return participant
 

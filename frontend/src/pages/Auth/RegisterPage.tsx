@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ApiError, type ProfileFields as ProfileFieldsValue } from '../../api';
+import { ApiError, publicApi, useApi, type ProfileFields as ProfileFieldsValue } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
 import { EMPTY_PROFILE, ProfileFields, profileErrors, trimProfile, type ProfileErrors } from './ProfileFields';
@@ -25,11 +25,12 @@ export interface RegisterForm extends ProfileFieldsValue {
   consent: boolean;
 }
 
-export function validateRegister(f: RegisterForm): Errors {
+/** requireCode: 학교 메일 인증 코드를 받는 운영(`signup.email_verification`)인지. */
+export function validateRegister(f: RegisterForm, requireCode = true): Errors {
   const errors: Errors = profileErrors(f);
   const email = schoolEmailError(f.email);
   if (email) errors.email = email;
-  const code = codeError(f.code);
+  const code = requireCode ? codeError(f.code) : undefined;
   if (code) errors.code = code;
   const nick = f.nickname.trim();
   if (nick.length < 2 || nick.length > 20) errors.nickname = '닉네임은 2~20자로 정해 주세요.';
@@ -41,6 +42,9 @@ export function validateRegister(f: RegisterForm): Errors {
 
 export function RegisterPage() {
   const { register, status } = useAuth();
+  const event = useApi(() => publicApi.event(), []);
+  // 설정을 못 받으면 코드 없는 가입 폼(기본값)을 보여 준다. 서버가 코드를 요구하면 CODE_REQUIRED로 알려 준다.
+  const requireCode = event.data?.signup.email_verification ?? false;
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -62,14 +66,14 @@ export function RegisterPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const v = validateRegister(form);
+    const v = validateRegister(form, requireCode);
     setErrors(v);
     if (Object.keys(v).length > 0) return;
     setSubmitting(true);
     try {
       await register({
         email: form.email.trim(),
-        code: form.code,
+        ...(requireCode ? { code: form.code } : {}),
         ...trimProfile(form),
         nickname: form.nickname.trim(),
         password: form.password,
@@ -80,7 +84,8 @@ export function RegisterPage() {
     } catch (err) {
       if (err instanceof ApiError && err.code === 'EMAIL_TAKEN') {
         setErrors({ email: '이미 참가한 학교 메일이에요. 로그인해 주세요.' });
-      } else if (err instanceof ApiError && CODE_ERRORS.has(err.code)) {
+      } else if (err instanceof ApiError && (CODE_ERRORS.has(err.code) || err.code === 'CODE_REQUIRED')) {
+        if (err.code === 'CODE_REQUIRED') event.refetch();
         setErrors({ code: err.message });
       } else if (err instanceof ApiError && err.code === 'STUDENT_ID_TAKEN') {
         setErrors({ student_id: '이미 다른 계정에 등록된 학번이에요. 본인 학번이 맞다면 운영진에게 문의해 주세요.' });
@@ -99,13 +104,19 @@ export function RegisterPage() {
     <Container size="sm">
       <PageHeader
         title="참가 신청"
-        description="학교 메일로 본인 확인을 하고, 한 사람당 한 계정만 만들 수 있어요. 모두 같은 1,000,000원으로 시작하고, 중간에 들어와도 똑같이 받아요."
+        description="학교 메일과 학번으로 한 사람당 한 계정만 만들 수 있어요. 모두 같은 1,000,000원으로 시작하고, 중간에 들어와도 똑같이 받아요."
       />
       <Card>
         <form onSubmit={onSubmit} noValidate>
           <Stack gap={4}>
             {errors.form && <Alert tone="danger">{errors.form}</Alert>}
             <SchoolEmailFields
+              withCode={requireCode}
+              hint={
+                requireCode
+                  ? undefined
+                  : '@skku.edu 또는 @g.skku.edu. 비밀번호를 잊었을 때 재설정 코드를 받는 주소예요. 한 메일에 한 계정이에요.'
+              }
               email={form.email}
               onEmailChange={(v) => set('email', v)}
               code={form.code}

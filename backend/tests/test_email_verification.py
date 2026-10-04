@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from conftest import (
+    PNG,
     Clock,
     FakeMailer,
     email_code,
@@ -16,6 +17,7 @@ from conftest import (
     profile_for,
     register,
     register_with,
+    student_id_for,
 )
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -234,28 +236,12 @@ def _verify(client: TestClient, h: dict[str, str], email: str, code: str, **over
 
 
 class TestLegacyReverification:
-    def test_unverified_cannot_trade_or_certify(self, client: TestClient, clock: Clock) -> None:
-        h = _legacy(client)
-        me = client.get("/api/me", headers=h).json()
-        assert me["email_verified"] is False and me["email"] is None
-        open_day(client, clock, D1)
-        r = client.post(
-            "/api/me/orders", json={"code": "LB", "side": "buy", "quantity": 1}, headers=h
-        )
-        assert r.status_code == 403
-        assert r.json()["detail"]["code"] == "EMAIL_VERIFICATION_REQUIRED"
-        r = client.post(
-            "/api/me/certifications", headers=h, files={"file": ("a.png", b"x", "image/png")}
-        )
-        assert r.json()["detail"]["code"] == "EMAIL_VERIFICATION_REQUIRED"
-        assert client.get("/api/me/portfolio", headers=h).status_code == 200  # 조회는 된다
-
     def test_verify_then_trade_and_login_by_email(self, client: TestClient, clock: Clock) -> None:
         h = _legacy(client)
         code = email_code(client, "lee@skku.edu")
         r = _verify(client, h, "lee@skku.edu", code)
         assert r.status_code == 200
-        assert r.json()["email_verified"] is True and r.json()["email"] == "lee@g.skku.edu"
+        assert r.json()["verified"] is True and r.json()["email"] == "lee@g.skku.edu"
         open_day(client, clock, D1)
         r = client.post(
             "/api/me/orders", json={"code": "LB", "side": "buy", "quantity": 1}, headers=h
@@ -312,7 +298,7 @@ class TestPurge:
             assert email_verification.purge(s, after, cal) == (1, 2)
             s.commit()
         me = client.get("/api/me", headers=h).json()
-        assert me["email"] is None and me["email_verified"] is True
+        assert me["email"] is None and me["verified"] is True
 
 
 class TestScaledClock:
@@ -586,3 +572,200 @@ class TestLoginByStudentId:
         assert _login(client, "2020123456", "kim-secret").json()["participant"]["nickname"] == (
             "kim"
         )
+
+
+def _order(client: TestClient, h: dict[str, str]) -> Any:
+    return client.post(
+        "/api/me/orders", json={"code": "LB", "side": "buy", "quantity": 1}, headers=h
+    )
+
+
+def _set_verified_only(client: TestClient, admin: dict[str, str], on: bool) -> None:
+    r = client.put("/api/admin/trading-access", json={"verified_only": on}, headers=admin)
+    assert r.status_code == 200 and r.json() == {"verified_only": on}
+
+
+def _register_without_code(client: TestClient, email: str, nickname: str) -> dict[str, str]:
+    r = client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            **profile_for(email),
+            "nickname": nickname,
+            "password": "password123",
+            "privacy_consent": True,
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["participant"]["verified"] is False
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+class TestSignupWithoutCode:
+    def test_default_signup_needs_email_but_no_code(
+        self, client: TestClient, mailer: FakeMailer
+    ) -> None:
+        h = _register_without_code(client, "kim@skku.edu", "kim")
+        me = client.get("/api/me", headers=h).json()
+        assert (me["email"], me["verified"], me["needs_profile"]) == (
+            "kim@g.skku.edu",
+            False,
+            False,
+        )
+        assert mailer.sent == []
+        info = client.get("/api/event").json()["signup"]
+        assert info == {"email_verification": False, "verified_only_trading": False}
+        # 메일은 여전히 학교 메일만, 1인 1계정
+        r = client.post(
+            "/api/auth/register",
+            json={
+                "email": "kim@g.skku.edu",
+                **profile_for("other"),
+                "nickname": "kim2",
+                "password": "password123",
+                "privacy_consent": True,
+            },
+        )
+        assert r.json()["detail"]["code"] == "EMAIL_TAKEN"
+        r = client.post(
+            "/api/auth/register",
+            json={
+                "email": "x@gmail.com",
+                **profile_for("x"),
+                "nickname": "xx",
+                "password": "password123",
+                "privacy_consent": True,
+            },
+        )
+        assert r.json()["detail"]["code"] == "EMAIL_DOMAIN_NOT_ALLOWED"
+
+    def test_password_reset_uses_unverified_email(
+        self, client: TestClient, mailer: FakeMailer
+    ) -> None:
+        _register_without_code(client, "kim@g.skku.edu", "kim")
+        assert _reset_code(client, "kim@g.skku.edu").status_code == 202
+        r = _reset(client, "kim@g.skku.edu", mailer.last_code("kim@g.skku.edu"))
+        assert r.status_code == 200
+        assert _login(client, student_id_for("kim@g.skku.edu"), "newpass456").status_code == 200
+
+    def test_code_required_when_email_verification_is_on(self, client: TestClient) -> None:
+        settings = client.app.state.study_invest.settings  # type: ignore[attr-defined]
+        object.__setattr__(settings, "email_verification", True)
+        assert client.get("/api/event").json()["signup"]["email_verification"] is True
+        r = client.post(
+            "/api/auth/register",
+            json={
+                "email": "kim@g.skku.edu",
+                **profile_for("kim@g.skku.edu"),
+                "nickname": "kim",
+                "password": "password123",
+                "privacy_consent": True,
+            },
+        )
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "CODE_REQUIRED"
+        r = register_with(client, "kim@g.skku.edu", "kim")
+        assert r.status_code == 201 and r.json()["participant"]["verified"] is True
+
+
+class TestVerifiedOnlyTrading:
+    def test_switch_blocks_only_unverified_orders(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        unverified = _register_without_code(client, "kim@g.skku.edu", "kim")
+        verified = register(client, "lee")
+        open_day(client, clock, D1)
+        assert _order(client, unverified).status_code == 201  # 평소에는 누구나
+        _set_verified_only(client, admin, True)
+        assert client.get("/api/event").json()["signup"]["verified_only_trading"] is True
+        r = _order(client, unverified)
+        assert r.status_code == 403 and r.json()["detail"]["code"] == "VERIFICATION_REQUIRED"
+        assert _order(client, verified).status_code == 201
+        # 공부 인증 제출·조회는 막지 않는다(거래만)
+        clock.set(D1, time(12))
+        r = client.post(
+            "/api/me/certifications",
+            headers=unverified,
+            files={"file": ("a.png", PNG, "image/png")},
+        )
+        assert r.status_code == 201, r.text
+        assert client.get("/api/me/portfolio", headers=unverified).status_code == 200
+        _set_verified_only(client, admin, False)
+        clock.set(D1, time(13))
+        assert _order(client, unverified).status_code == 201
+
+    def test_switch_survives_params_form_save(
+        self, client: TestClient, admin: dict[str, str]
+    ) -> None:
+        _set_verified_only(client, admin, True)
+        params = client.get("/api/admin/params", headers=admin).json()
+        assert params["verified_only_trading"] is True
+        del params["verified_only_trading"]  # 파라미터 폼은 이 값을 보내지 않는다
+        params["reward_cash"] = 100_000
+        assert client.put("/api/admin/params", json=params, headers=admin).status_code == 200
+        assert client.get("/api/admin/trading-access", headers=admin).json() == {
+            "verified_only": True
+        }
+        actions = [a["action"] for a in client.get("/api/admin/audit", headers=admin).json()]
+        assert actions.count("params.update") == 2  # 스위치·폼 저장 모두 이력에 남는다
+
+    def test_self_verification_with_registered_email(
+        self, client: TestClient, clock: Clock, admin: dict[str, str], mailer: FakeMailer
+    ) -> None:
+        h = _register_without_code(client, "kim@g.skku.edu", "kim")
+        _set_verified_only(client, admin, True)
+        # 본인 메일(미인증 계정이 쓰는 메일)로 코드를 받을 수 있다
+        code = email_code(client, "kim@skku.edu")
+        r = client.post("/api/me/email", json={"email": "kim@skku.edu", "code": code}, headers=h)
+        assert r.status_code == 200, r.text
+        assert r.json()["verified"] is True and r.json()["email"] == "kim@g.skku.edu"
+        open_day(client, clock, D1)
+        assert _order(client, h).status_code == 201
+        row = client.get("/api/admin/participants", headers=admin).json()[0]
+        assert row["verified_via"] == "email" and row["student_id"] == student_id_for(
+            "kim@g.skku.edu"
+        )
+        # 인증된 메일은 더 이상 다른 가입에 쓸 수 없다
+        clock.now += timedelta(minutes=1)
+        assert request(client, "kim@g.skku.edu").json()["detail"]["code"] == "EMAIL_TAKEN"
+
+    def test_other_person_cannot_take_unverified_email(self, client: TestClient) -> None:
+        _register_without_code(client, "kim@g.skku.edu", "kim")
+        code = email_code(client, "kim@g.skku.edu")  # 미인증 계정의 메일이라 코드는 간다
+        r = register_with(client, "kim@g.skku.edu", "intruder", code)
+        assert r.json()["detail"]["code"] == "EMAIL_TAKEN"
+
+    def test_admin_verify_and_unverify(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        h = _register_without_code(client, "kim@g.skku.edu", "kim")
+        _set_verified_only(client, admin, True)
+        open_day(client, clock, D1)
+        pid = client.get("/api/me", headers=h).json()["id"]
+        r = client.patch(f"/api/admin/participants/{pid}", json={"verified": True}, headers=admin)
+        assert r.status_code == 200
+        assert (r.json()["verified"], r.json()["verified_via"], r.json()["status"]) == (
+            True,
+            "admin",
+            "normal",
+        )
+        assert _order(client, h).status_code == 201
+        r = client.patch(f"/api/admin/participants/{pid}", json={"verified": False}, headers=admin)
+        assert r.json()["verified"] is False and r.json()["verified_via"] is None
+        assert _order(client, h).status_code == 403
+        # 상태만 바꿔도 인증은 그대로
+        r = client.patch(
+            f"/api/admin/participants/{pid}", json={"status": "warning"}, headers=admin
+        )
+        assert (r.json()["status"], r.json()["verified"]) == ("warning", False)
+
+    def test_legacy_account_needs_profile_to_verify(self, client: TestClient) -> None:
+        h = _legacy(client)
+        assert client.get("/api/me", headers=h).json()["needs_profile"] is True
+        code = email_code(client, "lee@g.skku.edu")
+        r = client.post(
+            "/api/me/email",
+            json={"email": "lee@g.skku.edu", "code": code, "privacy_consent": True},
+            headers=h,
+        )
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "PROFILE_REQUIRED"
+        assert _verify(client, h, "lee@g.skku.edu", code).status_code == 200

@@ -26,6 +26,7 @@ from ..models import (
     PriceSource,
     RejectReason,
     Side,
+    VerifyMethod,
 )
 from ..normalize import (
     normalize_identity,
@@ -89,6 +90,15 @@ class ClockInfo(Schema):
     """다음 운영일 18:00(장 마감·정산)이 되는 실제 시각. 남은 운영일이 없으면 null."""
 
 
+class SignupInfo(Schema):
+    """가입·인증 운영 설정(화면이 가입 폼과 안내를 고른다)."""
+
+    email_verification: bool
+    """true면 가입할 때 학교 메일 인증 코드가 필요하다. false면 메일 주소만 받고 미인증으로 가입."""
+    verified_only_trading: bool
+    """true면 인증된 참가자만 주문할 수 있다(관리자가 부정 대응으로 켠다)."""
+
+
 class EventInfo(Schema):
     start: date
     end: date | None
@@ -107,6 +117,7 @@ class EventInfo(Schema):
     daily_buy_limit_ratio: float
     clock: ClockInfo | None = None
     """테스트 시계로 돌 때만 채운다. 실제 시계(운영)면 null."""
+    signup: SignupInfo
 
 
 class Instrument(Schema):
@@ -192,7 +203,9 @@ class EmailCodeResponse(Schema):
 
 class RegisterRequest(BaseModel):
     email: Email
-    code: Code
+    """학교 메일. 메일 인증을 꺼도 받는다(비밀번호 재설정 코드를 받는 주소)."""
+    code: Code | None = None
+    """학교 메일 인증 코드. 메일 인증을 켠 운영(signup.email_verification)에서만 필요하다."""
     name: Name
     student_id: StudentId
     """숫자 10자리. 한 학번에 한 계정."""
@@ -204,14 +217,18 @@ class RegisterRequest(BaseModel):
 
 
 class VerifyEmailRequest(BaseModel):
-    """메일 인증 도입 전에 가입한 참가자의 재인증. 이름·학번·학과도 이때 받는다."""
+    """미인증 참가자의 학교 메일 인증. 보통은 가입 때 낸 메일로 받은 코드만 보낸다.
+
+    이름·학번·학과·동의는 그 정보가 없는 계정(Participant.needs_profile, 메일 인증 도입 전
+    가입)만 함께 보낸다. 다른 메일로 인증하면 등록 메일이 그 주소로 바뀐다.
+    """
 
     email: Email
     code: Code
-    name: Name
-    student_id: StudentId
-    department: Department
-    privacy_consent: bool
+    name: Name | None = None
+    student_id: StudentId | None = None
+    department: Department | None = None
+    privacy_consent: bool = False
 
 
 class PasswordResetRequest(BaseModel):
@@ -233,9 +250,12 @@ class Participant(Schema):
     status: ParticipantStatus
     joined_at: datetime
     email: str | None
-    """인증된 학교 메일(@g.skku.edu로 합쳐 보관). 인증 전이거나 이벤트 후 파기했으면 null."""
-    email_verified: bool
-    """false면 학교 메일 재인증 전이라 거래·공부 인증을 할 수 없다."""
+    """학교 메일(@g.skku.edu로 합쳐 보관). 메일 인증 도입 전 계정·이벤트 후 파기면 null."""
+    verified: bool
+    """인증(학교 메일 코드 또는 관리자 확인)을 마쳤는지. signup.verified_only_trading이면 false인
+    동안 주문할 수 없다."""
+    needs_profile: bool
+    """이름·학번·학과가 없다(메일 인증 도입 전 계정). 인증할 때 함께 받는다."""
 
 
 class AuthResponse(Schema):
@@ -336,6 +356,9 @@ class AdminParticipant(Participant):
     student_id: str | None
     department: str | None
     """이름·학번·학과. 재인증 전 계정이거나 이벤트 후 파기했으면 null."""
+    verified_at: datetime | None
+    verified_via: VerifyMethod | None
+    """email(학교 메일 코드) 또는 admin(관리자 확인). 미인증이면 null."""
     cash: int
     total_assets: int
     principal: int
@@ -347,7 +370,11 @@ class AdminParticipant(Participant):
 
 
 class ParticipantPatch(BaseModel):
-    status: ParticipantStatus
+    """바꿀 항목만 보낸다."""
+
+    status: ParticipantStatus | None = None
+    verified: bool | None = None
+    """true면 관리자 인증 처리, false면 인증 취소."""
 
 
 class AdminCertification(Certification):
@@ -378,12 +405,19 @@ class Params(Schema):
     daily_buy_limit_ratio: float
     reward_cash: int
     certification_cutoff: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    verified_only_trading: bool | None = None
+    """인증된 참가자만 거래. null이면 현재 값 유지(바꾸려면 PUT /api/admin/trading-access)."""
 
     @field_validator("certification_cutoff")
     @classmethod
     def _valid_time(cls, v: str) -> str:
         time.fromisoformat(v)
         return v
+
+
+class TradingAccess(BaseModel):
+    verified_only: bool
+    """true면 인증된 참가자만 주문할 수 있다."""
 
 
 class ManualPriceRequest(BaseModel):

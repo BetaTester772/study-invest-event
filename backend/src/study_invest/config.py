@@ -54,6 +54,18 @@ def _env_float(env: Mapping[str, str], name: str, default: float) -> float:
     return float(value) if value else default
 
 
+def _env_flag(env: Mapping[str, str], name: str, default: bool) -> bool:
+    """1/true/on, 0/false/off 환경 변수. 비어 있거나 없으면 기본값."""
+    value = env.get(name, "").strip().lower()
+    if not value:
+        return default
+    if value in {"1", "true", "on", "yes"}:
+        return True
+    if value in {"0", "false", "off", "no"}:
+        return False
+    raise ValueError(f"{name}은 1 또는 0이어야 합니다: {value!r}")
+
+
 DEFAULT_DATABASE_URL = "postgresql+psycopg://study:study@localhost:5432/study_invest"
 
 
@@ -94,6 +106,10 @@ class Settings:
     """앱 시계 배속. 24면 실제 1시간이 이벤트 하루다. 테스트·QA 서버에서만 바꾼다."""
     time_origin: datetime | None = None
     """앱 시계가 이벤트 첫날 00:00(KST)을 가리키는 실제 시각. time_scale이 1이 아니면 필수."""
+    email_verification: bool = False
+    """켜면 가입할 때 학교 메일 인증 코드를 반드시 확인한다. 끄면(기본) 메일 주소만 받고 미인증으로
+    가입시킨다. 미인증 참가자는 나중에 메일 코드로 스스로 인증하거나 관리자가 인증 처리한다.
+    인증된 참가자만 거래하게 하는 스위치는 관리자 파라미터(verified_only_trading)다."""
     smtp_host: str = ""
     """인증 메일 SMTP 서버(예: smtp.gmail.com). 비우면 메일 대신 로그로 남긴다(로컬 개발용)."""
     smtp_port: int = 587
@@ -140,6 +156,7 @@ class Settings:
             event_end=_env_date(env, "STUDY_INVEST_EVENT_END", cls.event_end),
             time_scale=_env_float(env, "STUDY_INVEST_TIME_SCALE", cls.time_scale),
             time_origin=_env_datetime(env, "STUDY_INVEST_TIME_ORIGIN"),
+            email_verification=_env_flag(env, "STUDY_INVEST_EMAIL_VERIFICATION", False),
             smtp_host=env.get("STUDY_INVEST_SMTP_HOST", "").strip(),
             smtp_port=int(env.get("STUDY_INVEST_SMTP_PORT", "").strip() or cls.smtp_port),
             smtp_security=cast(

@@ -21,6 +21,7 @@ function event(
     initial_cash: 1000000,
     daily_buy_limit_ratio: 0.4,
     clock: null,
+    signup: { email_verification: false, verified_only_trading: false },
     ...rest,
     market: {
       is_open: true,

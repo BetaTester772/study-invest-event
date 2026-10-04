@@ -42,10 +42,20 @@ export interface Participant {
   nickname: string;
   status: ParticipantStatus;
   joined_at: string;
-  /** 인증된 학교 메일(@g.skku.edu로 합쳐 보관). 인증 전이거나 이벤트 후 파기했으면 null. */
+  /** 학교 메일(@g.skku.edu로 합쳐 보관). 비밀번호 재설정 코드를 받는 주소. 없으면 null. */
   email: string | null;
-  /** false면 메일 인증 도입 전에 가입한 계정이라 재인증해야 거래·공부 인증을 할 수 있다. */
-  email_verified: boolean;
+  /** 학교 메일 코드나 관리자 확인으로 인증했는지. `signup.verified_only_trading`이면 false인 동안 주문 불가. */
+  verified: boolean;
+  /** 이름·학번·학과가 없는 계정(메일 인증 도입 전 가입). 인증할 때 함께 받는다. */
+  needs_profile: boolean;
+}
+
+/** 가입·인증 운영 설정. */
+export interface SignupInfo {
+  /** true면 가입할 때 학교 메일 인증 코드가 필요하다. false(기본)면 메일 주소만 받고 미인증으로 가입. */
+  email_verification: boolean;
+  /** true면 인증된 참가자만 주문할 수 있다(관리자가 부정 대응으로 켠다). */
+  verified_only_trading: boolean;
 }
 
 export interface HoldingView {
@@ -147,6 +157,7 @@ export interface EventInfo {
   daily_buy_limit_ratio: number;
   /** Test clock (QA servers only). `null` on the real clock. */
   clock: ClockInfo | null;
+  signup: SignupInfo;
 }
 
 /** BYUNG daily move range (rates are decimals: 2 = +200%). */
@@ -223,17 +234,21 @@ export interface ProfileFields {
 
 export interface RegisterRequest extends ProfileFields {
   email: string;
-  code: string;
+  /** 학교 메일 인증 코드. `signup.email_verification`이 꺼져 있으면 생략(미인증으로 가입). */
+  code?: string;
   nickname: string;
   password: string;
   privacy_consent: boolean;
 }
 
-export interface VerifyEmailRequest extends ProfileFields {
+/** 미인증 계정의 학교 메일 인증. 이름·학번·학과·동의는 `needs_profile`인 계정만 보낸다. */
+export interface VerifyEmailRequest extends Partial<ProfileFields> {
   email: string;
   code: string;
-  privacy_consent: boolean;
+  privacy_consent?: boolean;
 }
+
+export type VerifyMethod = 'email' | 'admin';
 
 export interface PasswordResetRequest {
   email: string;
@@ -263,6 +278,9 @@ export interface AdminParticipant extends Participant {
   name: string | null;
   student_id: string | null;
   department: string | null;
+  verified_at: string | null;
+  /** email(학교 메일 코드) 또는 admin(관리자 확인). 미인증이면 null. */
+  verified_via: VerifyMethod | null;
   cash: number;
   total_assets: number;
   principal: number;
@@ -295,6 +313,12 @@ export interface Params {
   daily_buy_limit_ratio: number;
   reward_cash: number;
   certification_cutoff: string;
+  /** 인증된 참가자만 거래. 파라미터 폼은 보내지 않는다(서버가 현재 값 유지). */
+  verified_only_trading?: boolean | null;
+}
+
+export interface TradingAccess {
+  verified_only: boolean;
 }
 
 export interface SettlementStock {

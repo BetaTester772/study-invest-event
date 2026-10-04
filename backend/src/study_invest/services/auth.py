@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..event_calendar import EventCalendar, to_kst
-from ..models import AuthSession, Participant
+from ..models import AuthSession, Participant, VerifyMethod
 from ..normalize import (
     SchoolEmail,
     SchoolEmailError,
@@ -100,15 +100,27 @@ def _student_id_taken() -> DomainError:
     )
 
 
-def ensure_student_id_free(s: Session, student_id: str) -> None:
-    if s.scalar(select(Participant.id).where(Participant.student_id == student_id)):
+def ensure_student_id_free(s: Session, student_id: str, exclude_id: int | None = None) -> None:
+    query = select(Participant.id).where(Participant.student_id == student_id)
+    if exclude_id is not None:
+        query = query.where(Participant.id != exclude_id)
+    if s.scalar(query):
         raise _student_id_taken()
 
 
-def _ensure_unique(s: Session, email: SchoolEmail, profile: Profile, nickname: str | None) -> None:
-    """유니크 제약 위반 원인을 업무 오류로 알려 준다(동시 요청은 제약이 판정)."""
-    ensure_email_free(s, email)
-    ensure_student_id_free(s, profile.student_id)
+def _ensure_unique(
+    s: Session,
+    email: SchoolEmail,
+    profile: Profile,
+    nickname: str | None,
+    exclude_id: int | None = None,
+) -> None:
+    """유니크 제약 위반 원인을 업무 오류로 알려 준다(동시 요청은 제약이 판정).
+
+    exclude_id: 자기 자신(재인증하는 계정)이 이미 쓰는 메일·학번은 충돌로 보지 않는다.
+    """
+    ensure_email_free(s, email, exclude_id)
+    ensure_student_id_free(s, profile.student_id, exclude_id)
     if nickname is not None and s.scalar(
         select(Participant.id).where(Participant.nickname == nickname)
     ):
@@ -123,14 +135,21 @@ def register(
     password: str,
     now: datetime,
     calendar: EventCalendar,
+    *,
+    verified: bool = True,
 ) -> tuple[Participant, str]:
-    """참가 등록. email은 인증 코드로 확인한 학교 메일. 중도 참가도 시드는 같다(INITIAL_CASH)."""
+    """참가 등록. 중도 참가도 시드는 같다(INITIAL_CASH).
+
+    verified: 인증 코드로 email을 확인했는지. 메일 인증을 끈 운영이면 False(미인증으로 가입하고
+    관리자가 확인한다). email은 어느 쪽이든 비밀번호 재설정 코드를 받는 주소로 저장한다.
+    """
     ensure_registration_open(now, calendar)
     nickname = normalize_nickname(nickname)
     _ensure_unique(s, email, profile, nickname)
     participant = Participant(
         email=email.canonical,
-        email_verified_at=now,
+        verified_at=now if verified else None,
+        verified_via=VerifyMethod.EMAIL if verified else None,
         name=profile.name,
         student_id=profile.student_id,
         department=profile.department,
@@ -153,24 +172,53 @@ def register(
 
 
 def verify_email(
-    s: Session, participant: Participant, email: SchoolEmail, profile: Profile, now: datetime
+    s: Session,
+    participant: Participant,
+    email: SchoolEmail,
+    profile: Profile | None,
+    now: datetime,
 ) -> None:
-    """메일 인증 도입 전에 가입한 참가자의 재인증. 인증하면 학교 메일로도 로그인할 수 있다."""
-    if participant.email_verified_at is not None:
-        raise DomainError("ALREADY_VERIFIED", "이미 학교 메일 인증을 마쳤습니다.")
-    _ensure_unique(s, email, profile, None)
+    """미인증 참가자(메일 인증 도입 전 가입, 또는 메일 인증을 끈 채 가입)의 학교 메일 인증.
+
+    메일을 인증한 주소로 바꾸고, profile이 있으면 이름·학번·학과도 채운다(도입 전 계정).
+    자기 계정이 이미 쓰는 메일·학번은 그대로 써도 된다.
+    """
+    if participant.verified:
+        raise DomainError("ALREADY_VERIFIED", "이미 인증을 마쳤습니다.")
+    ensure_email_free(s, email, participant.id)
+    if profile is not None:
+        ensure_student_id_free(s, profile.student_id, participant.id)
     try:
         with s.begin_nested():
             participant.email = email.canonical
-            participant.email_verified_at = now
-            participant.name = profile.name
-            participant.student_id = profile.student_id
-            participant.department = profile.department
+            participant.verified_at = now
+            participant.verified_via = VerifyMethod.EMAIL
+            if profile is not None:
+                participant.name = profile.name
+                participant.student_id = profile.student_id
+                participant.department = profile.department
     except IntegrityError as exc:  # 다른 참가자가 같은 메일·학번으로 동시에 인증
         if s.scalar(select(Participant.id).where(Participant.email == email.canonical)):
             raise email_taken() from exc
         raise _student_id_taken() from exc
     audit(s, now, f"participant:{participant.id}", "participant.verify_email")
+
+
+def set_verified(s: Session, participant: Participant, verified: bool, now: datetime) -> None:
+    """관리자가 인증 처리하거나 취소한다(메일 인증을 끈 운영에서 학번·이름을 확인한 뒤)."""
+    if participant.verified == verified:
+        return
+    before = participant.verified_via.value if participant.verified_via else None
+    participant.verified_at = now if verified else None
+    participant.verified_via = VerifyMethod.ADMIN if verified else None
+    audit(
+        s,
+        now,
+        "admin",
+        "participant.verify" if verified else "participant.unverify",
+        participant_id=participant.id,
+        before=before,
+    )
 
 
 def login(s: Session, identity: str, password: str, now: datetime) -> tuple[Participant, str]:

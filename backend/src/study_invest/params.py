@@ -90,6 +90,11 @@ class EventParams:
     certification_cutoff: time = field(default=time(23, 59))
     """인증 접수 마감 시각. 해당 분(分)까지 당일로 집계한다."""
 
+    # 부정 대응 (06-abuse-risk §2)
+    verified_only_trading: bool = False
+    """켜면 인증된 참가자(학교 메일 코드 또는 관리자 확인)만 주문할 수 있다. 평소에는 끄고,
+    이벤트 중 부정 행위가 보이면 관리자가 켠다."""
+
     def __post_init__(self) -> None:
         floats = {
             "coin_p_up": self.coin_p_up,

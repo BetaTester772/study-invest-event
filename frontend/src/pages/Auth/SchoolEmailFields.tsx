@@ -51,6 +51,10 @@ interface SchoolEmailFieldsProps {
   codeError?: string;
   onEmailError: (message: string | undefined) => void;
   purpose?: CodePurpose;
+  /** false면 메일 주소만 받는다(메일 인증 없이 가입하는 운영). */
+  withCode?: boolean;
+  /** withCode=false일 때 메일 칸 안내. */
+  hint?: string;
 }
 
 /** 학교 메일 입력 + 인증 코드 받기 + 코드 입력. 참가 신청·재인증·비밀번호 재설정 화면이 함께 쓴다. */
@@ -63,6 +67,8 @@ export function SchoolEmailFields({
   codeError: codeErr,
   onEmailError,
   purpose = 'verify',
+  withCode = true,
+  hint,
 }: SchoolEmailFieldsProps) {
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -102,7 +108,7 @@ export function SchoolEmailFields({
     <Stack gap={3}>
       <TextField
         label="학교 메일"
-        hint={HINTS[purpose]}
+        hint={hint ?? HINTS[purpose]}
         type="email"
         autoComplete="email"
         inputMode="email"
@@ -115,6 +121,8 @@ export function SchoolEmailFields({
         error={emailError}
         required
       />
+      {withCode && (
+        <>
       <Button variant="secondary" onClick={requestCode} loading={sending} disabled={resendLeft > 0}>
         {resendLeft > 0 ? `${resendLeft}초 뒤에 다시 받을 수 있어요` : sentTo ? '코드 다시 받기' : '인증 코드 받기'}
       </Button>
@@ -135,6 +143,8 @@ export function SchoolEmailFields({
         error={codeErr}
         required
       />
+        </>
+      )}
     </Stack>
   );
 }

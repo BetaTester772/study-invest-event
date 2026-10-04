@@ -2,7 +2,7 @@
 
 백엔드(FastAPI)와 프론트엔드(React)가 공유하는 HTTP 계약이다. 모든 경로는 `/api` 접두사를 가진다.
 
-v0.3 (2026-10-04): 1인 1계정을 학교 메일(@skku.edu·@g.skku.edu) 인증으로 확인. `POST /api/auth/email-code`, `POST /api/me/email` 추가, `register` 요청을 `{email, code, nickname, password, privacy_consent}`로 변경, `Participant.email`·`email_verified` 추가, `AdminParticipant.identity`는 nullable. 학교 메일 인증 전 계정은 주문·공부 인증 제출이 403 `EMAIL_VERIFICATION_REQUIRED`.
+v0.3 (2026-10-04): 1인 1계정을 학교 메일(@skku.edu·@g.skku.edu)·학번으로 확인. `register` 요청을 `{email, code?, name, student_id, department, nickname, password, privacy_consent}`로 변경(기본은 코드 없이 미인증 가입), 로그인은 학번으로. `POST /api/auth/email-code`, `POST /api/me/email`(인증), `POST /api/auth/password-reset/code`·`/api/auth/password-reset`(비밀번호 재설정), `GET·PUT /api/admin/trading-access`('인증된 참가자만 거래' 스위치) 추가. `Participant.email`·`verified`·`needs_profile`, `EventInfo.signup`, `AdminParticipant`의 `name`·`student_id`·`department`·`verified_at`·`verified_via` 추가, `identity`는 nullable. `PATCH /api/admin/participants/{id}`가 `verified`도 받는다. 스위치가 켜지면 미인증 참가자의 주문은 403 `VERIFICATION_REQUIRED`.
 
 v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_quantity`·`reward_quantity` → `reward_cash`), 투입 원금 기준 수익률(`Portfolio`·`RankingEntry`·`AdminParticipant`), 코인 초반 안정기(`EventInfo.coin`, `coin_calm_*` 파라미터, 정산 로그 `calm`, 시뮬레이터 `calm_daily`).
 
@@ -18,7 +18,7 @@ v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_qu
 |---|---|---|
 | 401 | `UNAUTHORIZED` | 토큰/관리자 키 없음·불일치 |
 | 400 | `INVALID_CODE`, `CODE_EXPIRED`, `CODE_ATTEMPTS_EXCEEDED` | 메일 인증 코드가 틀림·만료(10분)·5번 틀림 |
-| 403 | `DISQUALIFIED`, `EMAIL_VERIFICATION_REQUIRED` | 실격 참가자 / 학교 메일 인증 전 계정 |
+| 403 | `DISQUALIFIED`, `VERIFICATION_REQUIRED` | 실격 참가자 / '인증된 참가자만 거래'가 켜진 동안 미인증 참가자의 주문 |
 | 404 | `NOT_FOUND` | 리소스 없음 |
 | 409 | `CONFLICT` 계열 | 중복 등록, 중복 인증, 배치 순서 위반, 동시 요청 충돌(`CONFLICT`) |
 | 429 | `CODE_RECENTLY_SENT`, `TOO_MANY_CODES` | 인증 코드 재요청 60초 대기 / 메일 하나에 24시간 5통 초과 |
@@ -63,8 +63,9 @@ interface Participant {
   nickname: string;
   status: ParticipantStatus;
   joined_at: string;
-  email: string | null;      // 인증된 학교 메일(@g.skku.edu로 합쳐 보관). 인증 전·파기 후 null
-  email_verified: boolean;   // false면 재인증 전(메일 인증 도입 전 가입) → 주문·공부 인증 불가
+  email: string | null;      // 학교 메일(@g.skku.edu로 합쳐 보관). 비밀번호 재설정 주소. 도입 전 계정·파기 후 null
+  verified: boolean;         // 학교 메일 코드나 관리자 확인으로 인증했는지
+  needs_profile: boolean;    // 이름·학번·학과가 없음(메일 인증 도입 전 계정) → 인증할 때 함께 받는다
 }
 
 interface HoldingView {
@@ -160,6 +161,10 @@ interface EventInfo {
     next_open_at: string | null;   // 다음 운영일 09:00이 되는 실제 시각. 남은 운영일이 없으면 null
     next_close_at: string | null;  // 다음 운영일 18:00이 되는 실제 시각. 남은 운영일이 없으면 null
   } | null;
+  signup: {
+    email_verification: boolean;     // true면 가입 때 학교 메일 코드 필수(STUDY_INVEST_EMAIL_VERIFICATION). 기본 false
+    verified_only_trading: boolean;  // true면 인증된 참가자만 주문(관리자 스위치). 기본 false
+  };
 }
 
 interface RankingEntry {
@@ -191,14 +196,17 @@ interface RankingEntry {
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | POST | `/api/auth/email-code` | `{email}` | 202 `{email, expires_in, resend_after}` (코드를 보낸 주소, 600, 60) / 422 `INVALID_EMAIL`, `EMAIL_DOMAIN_NOT_ALLOWED`, 409 `EMAIL_TAKEN`, `REGISTRATION_CLOSED`, 429, 503 |
-| POST | `/api/auth/register` | `{email, code, nickname, password, privacy_consent}` | 201 `{token, participant: Participant}` / 400 코드 오류, 409 `EMAIL_TAKEN`, `NICKNAME_TAKEN`, 422 `PRIVACY_CONSENT_REQUIRED` |
+| POST | `/api/auth/register` | `{email, code?, name, student_id, department, nickname, password, privacy_consent}` | 201 `{token, participant: Participant}` / 400 코드 오류, 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN`, `NICKNAME_TAKEN`, 422 `PRIVACY_CONSENT_REQUIRED`, `CODE_REQUIRED` |
 | POST | `/api/auth/login` | `{identity, password}` | `{token, participant}` / 401 `INVALID_CREDENTIALS` |
+| POST | `/api/auth/password-reset/code` | `{email}` | 202 `{email, expires_in, resend_after}` / 404 `EMAIL_NOT_REGISTERED`, 422, 429, 503 |
+| POST | `/api/auth/password-reset` | `{email, code, password}` | `{token, participant}` — 새 비밀번호로 로그인, 다른 기기 로그인은 모두 끊는다 / 400 코드 오류 |
 | POST | `/api/auth/logout` | – | 204 |
 
 - `email`: 학교 메일만(`@skku.edu`, `@g.skku.edu`, 하위 도메인 불가). NFKC·대소문자 무시·앞뒤 공백 제거 뒤 검사한다. ID는 영문 소문자·숫자·`.`·`_`·`-` 1~64자(`+` 별칭 불가). **같은 ID의 두 도메인은 한 사람**으로 보고 `ID@g.skku.edu`로 합쳐 저장·중복 검사한다. 코드 메일은 입력한 주소 그대로 보낸다.
-- `code`: 메일로 받은 6자리 숫자. 10분 유효, 메일마다 가장 최근 코드만 유효, 5번 틀리면 다시 받아야 한다. 가입이 다른 이유(닉네임 중복 등)로 실패하면 코드는 쓰이지 않는다. 재요청은 60초 뒤, 메일 하나에 24시간 5통까지.
-- `privacy_consent`: 개인정보(학교 메일) 수집·이용 동의. `true`가 아니면 422.
-- 로그인 `identity`: 학교 메일(두 도메인 어느 쪽이든) 또는 메일 인증 도입 전 식별자(NFKC·대소문자 무시·공백 제거 후 1~128자).
+- `code`: 메일로 받은 6자리 숫자. 가입 때는 **선택**: 내면 인증된 채로 가입하고, 안 내면 미인증으로 가입한다. `signup.email_verification`이 true면 필수(없으면 422 `CODE_REQUIRED`). 메일이 미인증 계정의 것이면 코드는 보내지만(본인 인증용) 그 메일로 다른 사람이 가입할 수는 없다. 비밀번호 재설정 코드(`password-reset/code`)와 가입·인증 코드는 서로 바꿔 쓸 수 없다. 10분 유효, 메일마다 가장 최근 코드만 유효, 5번 틀리면 다시 받아야 한다. 가입이 다른 이유(닉네임 중복 등)로 실패하면 코드는 쓰이지 않는다. 재요청은 60초 뒤, 메일 하나에 24시간 5통까지.
+- `name` 1~30자, `student_id` 숫자 10자리(전각 숫자 허용, **한 학번에 한 계정**), `department` 1~50자. 관리자만 본다(랭킹·본인 응답에 없음).
+- `privacy_consent`: 개인정보(학교 메일·이름·학번·학과) 수집·이용 동의. `true`가 아니면 422.
+- 로그인 `identity`: **학번**. 학교 메일(두 도메인 어느 쪽이든)이나 메일 인증 도입 전 식별자도 받는다. 맞는 계정을 학번 → 메일 → 예전 식별자 순으로 찾아 비밀번호가 맞는 첫 계정으로 로그인한다.
 - `nickname`: NFC 정규화·앞뒤 공백 제거 **후** 2~20자, 랭킹 공개명(조합형·완성형 한글은 같은 닉네임). `password`: 8자 이상.
 
 ## 참가자 (Bearer)
@@ -206,13 +214,13 @@ interface RankingEntry {
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | GET | `/api/me` | – | `Participant` |
-| POST | `/api/me/email` | `{email, code, privacy_consent}` | `Participant` — 메일 인증 도입 전 계정의 재인증(코드는 `/api/auth/email-code`). 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN` |
+| POST | `/api/me/email` | `{email, code, name?, student_id?, department?, privacy_consent?}` | `Participant` — 미인증 계정의 학교 메일 인증(코드는 `/api/auth/email-code`). 보통 등록한 메일과 코드만 보낸다. `needs_profile`인 계정은 이름·학번·학과·동의도(없으면 422 `PROFILE_REQUIRED`). 다른 메일로 인증하면 등록 메일이 바뀐다. 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN`, `STUDENT_ID_TAKEN` |
 | GET | `/api/me/portfolio` | – | `Portfolio` |
 | GET | `/api/me/orders` | `?limit=100` | `Order[]` (최신순) |
-| POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분). `code`는 1~16자, `quantity`는 정수(64비트 범위 밖이면 422). 학교 메일 인증 전이면 403 `EMAIL_VERIFICATION_REQUIRED` |
+| POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분). `code`는 1~16자, `quantity`는 정수(64비트 범위 밖이면 422). '인증된 참가자만 거래'가 켜져 있고 미인증이면 403 `VERIFICATION_REQUIRED` |
 | GET | `/api/me/certifications` | – | `Certification[]` (최신순) |
 | GET | `/api/me/certification-status` | – | `CertificationStatus` — 지금 올릴 수 있는지(제출 API와 같은 판단). 화면은 이 값만 따른다 |
-| POST | `/api/me/certifications` | multipart `file` (image/jpeg·png·webp·heic, ≤10MB) | 201 `Certification` / 409 `ALREADY_CERTIFIED`, 422 `OUTSIDE_EVENT`, `INVALID_IMAGE`, 403 `EMAIL_VERIFICATION_REQUIRED` |
+| POST | `/api/me/certifications` | multipart `file` (image/jpeg·png·webp·heic, ≤10MB) | 201 `Certification` / 409 `ALREADY_CERTIFIED`, 422 `OUTSIDE_EVENT`, `INVALID_IMAGE` |
 | GET | `/api/me/certifications/{id}/image` | – | 이미지 바이너리 |
 
 ## 관리자 (X-Admin-Key)
@@ -220,6 +228,9 @@ interface RankingEntry {
 ```ts
 interface AdminParticipant extends Participant {
   identity: string | null;   // 메일 인증 도입 전 식별자. 그 뒤 가입한 참가자는 null
+  name: string | null; student_id: string | null; department: string | null;  // 도입 전 계정·파기 후 null
+  verified_at: string | null;
+  verified_via: "email" | "admin" | null;   // 학교 메일 코드 / 관리자 확인. 미인증이면 null
   cash: number; total_assets: number;
   principal: number; return_rate: number;   // 투입 원금, 수익률(RankingEntry와 같은 정의)
   rejected_certifications: number; approved_certifications: number;
@@ -242,6 +253,7 @@ interface Params {
   daily_buy_limit_ratio: number;
   reward_cash: number;                   // 인증 1건당 지급 현금(기본 250,000원 = 시드의 1/4)
   certification_cutoff: string;          // "23:59"
+  verified_only_trading?: boolean | null; // 인증된 참가자만 거래. PUT에서 null·생략이면 현재 값 유지
 }
 interface SettlementLog {
   id: number; round: number; trade_day: string; effective_day: string; created_at: string;
@@ -270,7 +282,9 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | GET | `/api/admin/participants` | – | `AdminParticipant[]` |
-| PATCH | `/api/admin/participants/{id}` | `{status}` | `AdminParticipant` |
+| PATCH | `/api/admin/participants/{id}` | `{status?, verified?}` | `AdminParticipant` — `verified: true`면 관리자 인증 처리, `false`면 인증 취소 |
+| GET | `/api/admin/trading-access` | – | `{verified_only}` |
+| PUT | `/api/admin/trading-access` | `{verified_only}` | `{verified_only}` — '인증된 참가자만 거래' 스위치. 파라미터(`verified_only_trading`)로 저장되어 이력·감사 로그에 남는다 |
 | GET | `/api/admin/certifications` | `?status=pending` | `AdminCertification[]` |
 | GET | `/api/admin/certifications/{id}/image` | – | 이미지 |
 | POST | `/api/admin/certifications/{id}/review` | `{approve: boolean, reason?: string}` | `AdminCertification` / 409 `ALREADY_REVIEWED`, 422 `REASON_REQUIRED` |

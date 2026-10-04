@@ -51,6 +51,11 @@ describe('validateRegister', () => {
     });
   });
 
+  it('does not need a code when the event runs without email verification', () => {
+    expect(validateRegister({ ...ok, code: '' }, false)).toEqual({});
+    expect(Object.keys(validateRegister({ ...ok, code: '' }, true))).toEqual(['code']);
+  });
+
   it('requires a 6-digit code and consent', () => {
     expect(codeError('12345')).toBeDefined();
     const errors = validateRegister({ ...ok, code: '', consent: false });
@@ -122,6 +127,23 @@ describe('SchoolEmailFields', () => {
     expect(reset).toHaveBeenCalledWith({ email: 'kim@g.skku.edu' });
     expect(verify).not.toHaveBeenCalled();
     expect(await screen.findByText(/이 학교 메일로 가입한 계정이 없어요/)).toBeInTheDocument();
+  });
+
+  it('shows only the email field without the code step', () => {
+    render(
+      <SchoolEmailFields
+        email=""
+        onEmailChange={() => {}}
+        code=""
+        onCodeChange={() => {}}
+        onEmailError={() => {}}
+        withCode={false}
+        hint="재설정 코드를 받는 주소예요."
+      />,
+    );
+    expect(screen.getByText('재설정 코드를 받는 주소예요.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '인증 코드 받기' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/인증 코드/)).not.toBeInTheDocument();
   });
 
   it('shows an already-registered address on the email field', async () => {

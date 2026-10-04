@@ -32,7 +32,6 @@ ASYNC_DEPENDENCIES = {
     "get_real_now",
     "bearer_token",
     "current_participant",
-    "verified_participant",
     "require_admin",
 }
 """모두 요청 헤더·앱 상태만 읽는다(DB 없음)."""

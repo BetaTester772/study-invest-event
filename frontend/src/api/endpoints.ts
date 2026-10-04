@@ -30,6 +30,7 @@ import type {
   SimulationReport,
   SimulateOptions,
   SimulationRequest,
+  TradingAccess,
   VerifyEmailRequest,
 } from './types';
 
@@ -78,6 +79,11 @@ export const adminApi = {
   participants: () => request<AdminParticipant[]>('/admin/participants', { auth: 'admin' }),
   setParticipantStatus: (id: number, status: ParticipantStatus) =>
     request<AdminParticipant>(`/admin/participants/${id}`, { method: 'PATCH', auth: 'admin', body: { status } }),
+  setParticipantVerified: (id: number, verified: boolean) =>
+    request<AdminParticipant>(`/admin/participants/${id}`, { method: 'PATCH', auth: 'admin', body: { verified } }),
+  tradingAccess: () => request<TradingAccess>('/admin/trading-access', { auth: 'admin' }),
+  setTradingAccess: (body: TradingAccess) =>
+    request<TradingAccess>('/admin/trading-access', { method: 'PUT', auth: 'admin', body }),
   certifications: (status?: CertStatus) =>
     request<AdminCertification[]>('/admin/certifications', { auth: 'admin', query: { status } }),
   review: (id: number, body: ReviewRequest) =>

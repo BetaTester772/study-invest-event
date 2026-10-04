@@ -68,8 +68,12 @@ def email_taken() -> DomainError:
     )
 
 
-def ensure_email_free(s: Session, email: SchoolEmail) -> None:
-    if s.scalar(select(Participant.id).where(Participant.email == email.canonical)):
+def ensure_email_free(s: Session, email: SchoolEmail, exclude_id: int | None = None) -> None:
+    """다른 계정(exclude_id 제외)이 이 메일을 쓰고 있으면 EMAIL_TAKEN."""
+    query = select(Participant.id).where(Participant.email == email.canonical)
+    if exclude_id is not None:
+        query = query.where(Participant.id != exclude_id)
+    if s.scalar(query):
         raise email_taken()
 
 
@@ -99,7 +103,11 @@ def request_code(
     """
     email = parse(raw_email)
     if purpose is CodePurpose.VERIFY:
-        ensure_email_free(s, email)
+        # 인증된 계정이 쓰는 메일이면 거부. 미인증 계정의 메일이면 보낸다(메일 인증을 끈 채 가입한
+        # 본인이 나중에 인증할 수 있게). 다른 사람은 그 메일로 가입할 수 없다(가입 때 다시 검사).
+        owner = s.scalars(select(Participant).where(Participant.email == email.canonical)).first()
+        if owner is not None and owner.verified:
+            raise email_taken()
     else:
         registered_participant(s, email)
     recent = s.scalars(
@@ -210,7 +218,7 @@ def purge(
 ) -> tuple[int, int]:
     """개인정보: 이벤트 종료 후 참가자의 학교 메일·이름·학번·학과와 인증 코드 기록을 지운다.
 
-    인증 시각(email_verified_at)은 남겨 계속 인증된 계정으로 본다. (참가자 수, 코드 수).
+    인증 시각(verified_at)은 남겨 계속 인증된 계정으로 본다. (참가자 수, 코드 수).
     """
     if not force and not calendar.is_ended(to_kst(now).date()):
         raise DomainError("EVENT_NOT_ENDED", "이벤트 종료 후에 삭제할 수 있습니다.")

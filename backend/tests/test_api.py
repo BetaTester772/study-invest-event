@@ -59,7 +59,7 @@ class TestRegistration:
             assert r.status_code == 200, identity
         h = {"Authorization": f"Bearer {r.json()['token']}"}
         me = client.get("/api/me", headers=h).json()
-        assert me["email"] == "alice@g.skku.edu" and me["email_verified"] is True
+        assert me["email"] == "alice@g.skku.edu" and me["verified"] is True
         assert client.post("/api/auth/logout", headers=h).status_code == 204
         assert client.get("/api/me", headers=h).status_code == 401
 

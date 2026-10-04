@@ -51,6 +51,13 @@ def _enum(cls: type[StrEnum]) -> Enum:
     return Enum(cls, native_enum=False, length=32, values_callable=lambda e: [m.value for m in e])
 
 
+class VerifyMethod(StrEnum):
+    EMAIL = "email"
+    """학교 메일 인증 코드."""
+    ADMIN = "admin"
+    """관리자가 확인(메일 인증을 끈 운영)."""
+
+
 class ParticipantStatus(StrEnum):
     NORMAL = "normal"
     WARNING = "warning"
@@ -110,9 +117,13 @@ class Participant(Base):
     identity: Mapped[str | None] = mapped_column(String(128), unique=True)
     """메일 인증 도입 전에 쓰던 자유 입력 식별자(정규화됨). 그 뒤 가입한 참가자는 None."""
     email: Mapped[str | None] = mapped_column(String(254), unique=True)
-    """인증된 학교 메일의 1인 1계정 키(normalize.SchoolEmail.canonical). 이벤트 후 파기하면 None."""
-    email_verified_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
-    """학교 메일 인증 시각. None이면 인증 전 계정이라 거래·공부 인증을 할 수 없다."""
+    """학교 메일의 1인 1계정 키(normalize.SchoolEmail.canonical). 메일 인증을 끈 운영에서는 확인하지
+    않은 채 저장된다(비밀번호 재설정 코드를 받는 주소). 이벤트 후 파기하면 None."""
+    verified_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
+    """인증 시각(학교 메일 코드 또는 관리자 확인). None이면 미인증이라, 관리자가 '인증된 참가자만
+    거래'(EventParams.verified_only_trading)를 켜면 주문할 수 없다."""
+    verified_via: Mapped[VerifyMethod | None] = mapped_column(_enum(VerifyMethod))
+    """어떻게 인증됐는지(email·admin)."""
     name: Mapped[str | None] = mapped_column(String(30))
     """실명. 메일 인증 도입 전 계정은 재인증할 때 받는다. 이벤트 후 파기하면 None."""
     student_id: Mapped[str | None] = mapped_column(String(16), unique=True)
@@ -132,8 +143,13 @@ class Participant(Base):
     )
 
     @property
-    def email_verified(self) -> bool:
-        return self.email_verified_at is not None
+    def verified(self) -> bool:
+        return self.verified_at is not None
+
+    @property
+    def needs_profile(self) -> bool:
+        """이름·학번·학과가 없다(메일 인증 도입 전 계정, 또는 이벤트 후 파기)."""
+        return self.student_id is None
 
 
 class AuthSession(Base):

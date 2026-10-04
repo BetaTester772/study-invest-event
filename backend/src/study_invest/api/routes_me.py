@@ -36,14 +36,24 @@ def me(participant: MeDep) -> schemas.Participant:
 
 @router.post("/email", response_model=schemas.Participant)
 def verify_email(
-    body: schemas.VerifyEmailRequest, participant: MeDep, s: SessionDep, real_now: RealNowDep
+    body: schemas.VerifyEmailRequest,
+    participant: MeDep,
+    s: SessionDep,
+    real_now: RealNowDep,
 ) -> schemas.Participant:
-    """메일 인증 도입 전에 가입한 참가자의 재인증(코드는 POST /api/auth/email-code로 받는다)."""
-    auth.ensure_privacy_consent(body.privacy_consent)
-    if participant.email_verified:
-        raise DomainError("ALREADY_VERIFIED", "이미 학교 메일 인증을 마쳤습니다.")
+    """미인증 참가자의 학교 메일 인증(코드는 POST /api/auth/email-code로 받는다).
+
+    메일 인증 없이 가입한 참가자, 또는 메일 인증 도입 전에 가입한 참가자(이름·학번·학과도 받는다).
+    """
+    if participant.verified:
+        raise DomainError("ALREADY_VERIFIED", "이미 인증을 마쳤습니다.")
+    profile = None
+    if participant.needs_profile:
+        if body.name is None or body.student_id is None or body.department is None:
+            raise DomainError("PROFILE_REQUIRED", "이름·학번·학과를 함께 입력하세요.", 422)
+        auth.ensure_privacy_consent(body.privacy_consent)
+        profile = auth.Profile(body.name, body.student_id, body.department)
     email = consume_code(s, body.email, body.code, real_now)
-    profile = auth.Profile(body.name, body.student_id, body.department)
     auth.verify_email(s, participant, email, profile, real_now)
     s.commit()
     return schemas.Participant.model_validate(participant)
@@ -110,7 +120,7 @@ def certification_status(
 
 @router.post("/certifications", response_model=schemas.Certification, status_code=201)
 def submit_certification(
-    participant: VerifiedMeDep,
+    participant: MeDep,
     state: StateDep,
     s: SessionDep,
     now: NowDep,

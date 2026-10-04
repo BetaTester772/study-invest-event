@@ -73,7 +73,9 @@ services:
       # 비우면 실제 시계. 테스트·QA 서버에서만 지정한다(24 = 실제 1시간이 이벤트 하루).
       STUDY_INVEST_TIME_SCALE: ${STUDY_INVEST_TIME_SCALE:-}
       STUDY_INVEST_TIME_ORIGIN: ${STUDY_INVEST_TIME_ORIGIN:-}
-      # 학교 메일 인증 코드 SMTP. HOST를 비우면 메일 대신 로그로 남는다(로컬 개발 전용).
+      # 1이면 가입 때 학교 메일 인증 코드 필수. 0(기본)이면 메일 주소만 받고 미인증으로 가입.
+      STUDY_INVEST_EMAIL_VERIFICATION: ${STUDY_INVEST_EMAIL_VERIFICATION:-0}
+      # 학교 메일 인증·비밀번호 재설정 코드 SMTP. HOST를 비우면 메일 대신 로그로 남는다(로컬 개발 전용).
       STUDY_INVEST_SMTP_HOST: ${STUDY_INVEST_SMTP_HOST:-}
       STUDY_INVEST_SMTP_PORT: ${STUDY_INVEST_SMTP_PORT:-587}
       STUDY_INVEST_SMTP_SECURITY: ${STUDY_INVEST_SMTP_SECURITY:-starttls}
