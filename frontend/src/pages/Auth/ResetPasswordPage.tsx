@@ -4,6 +4,7 @@ import { ApiError, authApi } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
 import { CODE_ERRORS, CodeSender, codeError } from './SchoolEmailFields';
+import { PASSWORD_HINT, WEAK_PASSWORD_MESSAGE } from './password';
 
 interface Errors {
   identity?: string;
@@ -51,6 +52,8 @@ export function ResetPasswordPage() {
     } catch (err) {
       if (err instanceof ApiError && CODE_ERRORS.has(err.code)) {
         setErrors({ code: err.message });
+      } else if (err instanceof ApiError && err.code === 'WEAK_PASSWORD') {
+        setErrors({ password: WEAK_PASSWORD_MESSAGE });
       } else if (err instanceof ApiError && err.code === 'ACCOUNT_NOT_FOUND') {
         setErrors({ identity: err.message });
       } else {
@@ -104,7 +107,7 @@ export function ResetPasswordPage() {
             <TextField
               label="새 비밀번호"
               type="password"
-              hint="8자 이상"
+              hint={PASSWORD_HINT}
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

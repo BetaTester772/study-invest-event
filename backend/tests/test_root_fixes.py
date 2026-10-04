@@ -120,7 +120,7 @@ class TestInputNormalization:
         assert r.status_code == 409 and r.json()["detail"]["code"] == "EMAIL_TAKEN"
         login = client.post(
             "/api/auth/login",
-            json={"identity": " ＡＬＩＣＥ＠ＳＫＫＵ.ＥＤＵ ", "password": "password123"},
+            json={"identity": " ＡＬＩＣＥ＠ＳＫＫＵ.ＥＤＵ ", "password": "tiger-moon-river-42"},
         )
         assert login.status_code == 200
 

@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
 import { EMPTY_PROFILE, ProfileFields, profileErrors, trimProfile, type ProfileErrors } from './ProfileFields';
 import { CODE_ERRORS, PrivacyConsent, SchoolEmailFields, codeError, schoolEmailError } from './SchoolEmailFields';
+import { PASSWORD_HINT, WEAK_PASSWORD_MESSAGE } from './password';
 
 interface Errors extends ProfileErrors {
   email?: string;
@@ -87,6 +88,8 @@ export function RegisterPage() {
       } else if (err instanceof ApiError && (CODE_ERRORS.has(err.code) || err.code === 'CODE_REQUIRED')) {
         if (err.code === 'CODE_REQUIRED') event.refetch();
         setErrors({ code: err.message });
+      } else if (err instanceof ApiError && err.code === 'WEAK_PASSWORD') {
+        setErrors({ password: WEAK_PASSWORD_MESSAGE });
       } else if (err instanceof ApiError && err.code === 'STUDENT_ID_TAKEN') {
         setErrors({ student_id: '이미 다른 계정에 등록된 학번이에요. 본인 학번이 맞다면 운영진에게 문의해 주세요.' });
       } else if (err instanceof ApiError && err.code === 'NICKNAME_TAKEN') {
@@ -142,7 +145,7 @@ export function RegisterPage() {
             <TextField
               label="비밀번호"
               type="password"
-              hint="8자 이상"
+              hint={PASSWORD_HINT}
               autoComplete="new-password"
               value={form.password}
               onChange={(e) => set('password', e.target.value)}

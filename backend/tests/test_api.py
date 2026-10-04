@@ -54,7 +54,7 @@ class TestRegistration:
         # 두 도메인 어느 쪽으로도 로그인
         for identity in ("Alice@g.skku.edu", "alice@skku.edu"):
             r = client.post(
-                "/api/auth/login", json={"identity": identity, "password": "password123"}
+                "/api/auth/login", json={"identity": identity, "password": "tiger-moon-river-42"}
             )
             assert r.status_code == 200, identity
         h = {"Authorization": f"Bearer {r.json()['token']}"}

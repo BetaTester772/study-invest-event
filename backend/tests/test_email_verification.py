@@ -209,7 +209,9 @@ class TestCodeCheck:
         with client.app.state.study_invest.session_factory() as s:  # type: ignore[attr-defined]
             email = parse_school_email("kim@skku.edu")
             with pytest.raises(Exception) as exc:
-                auth.register(s, email, PROFILE, "kim2", "password123", kst(D1), EventCalendar())
+                auth.register(
+                    s, email, PROFILE, "kim2", "tiger-moon-river-42", kst(D1), EventCalendar()
+                )
         assert getattr(exc.value, "code", None) == "EMAIL_TAKEN"
 
     def test_privacy_consent_required(self, client: TestClient) -> None:
@@ -227,13 +229,15 @@ def _legacy(client: TestClient, identity: str = "2020123456") -> dict[str, str]:
             Participant(
                 identity=identity,
                 nickname="legacy",
-                password_hash=auth.hash_password("password123"),
+                password_hash=auth.hash_password("tiger-moon-river-42"),
                 cash=1_000_000,
                 joined_at=kst(D1, time(7)),
             )
         )
         s.commit()
-    r = client.post("/api/auth/login", json={"identity": identity, "password": "password123"})
+    r = client.post(
+        "/api/auth/login", json={"identity": identity, "password": "tiger-moon-river-42"}
+    )
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
@@ -266,7 +270,7 @@ class TestLegacyReverification:
         assert r.status_code == 201
         for identity in ("lee@g.skku.edu", "2020123456"):
             r = client.post(
-                "/api/auth/login", json={"identity": identity, "password": "password123"}
+                "/api/auth/login", json={"identity": identity, "password": "tiger-moon-river-42"}
             )
             assert r.status_code == 200
         # 다시 인증할 수 없다
@@ -278,7 +282,9 @@ class TestLegacyReverification:
         # 그 사이 같은 사람이 다른 도메인으로 새 계정을 만들었다
         with client.app.state.study_invest.session_factory() as s:  # type: ignore[attr-defined]
             email = parse_school_email("kim@skku.edu")
-            auth.register(s, email, PROFILE, "kim", "password123", clock.now, EventCalendar())
+            auth.register(
+                s, email, PROFILE, "kim", "tiger-moon-river-42", clock.now, EventCalendar()
+            )
             s.commit()
         r = _verify(client, h, "kim@g.skku.edu", code)
         assert r.json()["detail"]["code"] == "EMAIL_TAKEN"
@@ -485,7 +491,9 @@ def _reset_code(client: TestClient, identity: str) -> Any:
     return client.post("/api/auth/password-reset/code", json={"identity": identity})
 
 
-def _reset(client: TestClient, identity: str, code: str, password: str = "newpass456") -> Any:
+def _reset(
+    client: TestClient, identity: str, code: str, password: str = "amber-lake-sunset-19"
+) -> Any:
     return client.post(
         "/api/auth/password-reset",
         json={"identity": identity, "code": code, "password": password},
@@ -514,8 +522,8 @@ class TestPasswordReset:
         new = {"Authorization": f"Bearer {r.json()['token']}"}
         assert client.get("/api/me", headers=new).status_code == 200
         assert client.get("/api/me", headers=old).status_code == 401
-        assert _login(client, "2021310123", "password123").status_code == 401
-        assert _login(client, "2021310123", "newpass456").status_code == 200
+        assert _login(client, "2021310123", "tiger-moon-river-42").status_code == 401
+        assert _login(client, "2021310123", "amber-lake-sunset-19").status_code == 200
 
     def test_reset_by_email_also_works(
         self, client: TestClient, clock: Clock, mailer: FakeMailer
@@ -582,7 +590,7 @@ class TestLoginByStudentId:
     def test_login_with_student_id_or_email(self, client: TestClient) -> None:
         register_with(client, "kim@g.skku.edu", "kim", student_id="2021310123")
         for identity in ("2021310123", " ２０２１３１０１２３ ", "kim@skku.edu"):
-            r = _login(client, identity, "password123")
+            r = _login(client, identity, "tiger-moon-river-42")
             assert r.status_code == 200 and r.json()["participant"]["nickname"] == "kim", identity
         r = _login(client, "2021310123", "wrong-pass")
         assert r.status_code == 401
@@ -593,15 +601,15 @@ class TestLoginByStudentId:
     ) -> None:
         # 예전 아이디가 다른 사람의 학번과 같은 숫자여도, 비밀번호로 각자 로그인된다
         register_with(client, "kim@g.skku.edu", "kim", student_id="2020123456")
-        _legacy(client, identity="2020123456")  # 비밀번호 password123
+        _legacy(client, identity="2020123456")  # 비밀번호 tiger-moon-river-42
         state = client.app.state.study_invest  # type: ignore[attr-defined]
         with state.session_factory() as s:
             kim = s.scalars(select(Participant).where(Participant.nickname == "kim")).one()
             kim.password_hash = auth.hash_password("kim-secret")
             s.commit()
-        assert _login(client, "2020123456", "password123").json()["participant"]["nickname"] == (
-            "legacy"
-        )
+        assert _login(client, "2020123456", "tiger-moon-river-42").json()["participant"][
+            "nickname"
+        ] == ("legacy")
         assert _login(client, "2020123456", "kim-secret").json()["participant"]["nickname"] == (
             "kim"
         )
@@ -625,7 +633,7 @@ def _register_without_code(client: TestClient, email: str, nickname: str) -> dic
             "email": email,
             **profile_for(email),
             "nickname": nickname,
-            "password": "password123",
+            "password": "tiger-moon-river-42",
             "privacy_consent": True,
         },
     )
@@ -655,7 +663,7 @@ class TestSignupWithoutCode:
                 "email": "kim@g.skku.edu",
                 **profile_for("other"),
                 "nickname": "kim2",
-                "password": "password123",
+                "password": "tiger-moon-river-42",
                 "privacy_consent": True,
             },
         )
@@ -666,7 +674,7 @@ class TestSignupWithoutCode:
                 "email": "x@gmail.com",
                 **profile_for("x"),
                 "nickname": "xx",
-                "password": "password123",
+                "password": "tiger-moon-river-42",
                 "privacy_consent": True,
             },
         )
@@ -679,7 +687,10 @@ class TestSignupWithoutCode:
         assert _reset_code(client, "kim@g.skku.edu").status_code == 202
         r = _reset(client, "kim@g.skku.edu", mailer.last_code("kim@g.skku.edu"))
         assert r.status_code == 200
-        assert _login(client, student_id_for("kim@g.skku.edu"), "newpass456").status_code == 200
+        assert (
+            _login(client, student_id_for("kim@g.skku.edu"), "amber-lake-sunset-19").status_code
+            == 200
+        )
 
     def test_code_required_when_email_verification_is_on(self, client: TestClient) -> None:
         settings = client.app.state.study_invest.settings  # type: ignore[attr-defined]
@@ -691,7 +702,7 @@ class TestSignupWithoutCode:
                 "email": "kim@g.skku.edu",
                 **profile_for("kim@g.skku.edu"),
                 "nickname": "kim",
-                "password": "password123",
+                "password": "tiger-moon-river-42",
                 "privacy_consent": True,
             },
         )
@@ -911,3 +922,59 @@ class TestNoConnectionHeldDuringSend:
             r = c.post("/api/auth/email-code", json={"email": "lee@g.skku.edu"})
             assert r.status_code == 503
         assert seen == [0, 0]
+
+
+class TestWeakPassword:
+    @pytest.mark.parametrize(
+        "password",
+        [
+            "password123",  # 흔한 비밀번호
+            "12345678",  # 연속 숫자
+            "qwerty12",  # 키보드 패턴
+            "aaaaaaaaaa",  # 반복
+            "2021310123",  # 학번 그대로
+            "hong2021310123",  # 이름+학번
+        ],
+    )
+    def test_register_rejects_weak_password(self, client: TestClient, password: str) -> None:
+        r = register_with(
+            client,
+            "hong@g.skku.edu",
+            "honggildong",
+            student_id="2021310123",
+            password=password,
+        )
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "WEAK_PASSWORD"
+
+    def test_rejected_registration_keeps_code(self, client: TestClient) -> None:
+        code = email_code(client, "kim@g.skku.edu")
+        r = register_with(client, "kim@g.skku.edu", "kim", code, password="password123")
+        assert r.json()["detail"]["code"] == "WEAK_PASSWORD"
+        assert register_with(client, "kim@g.skku.edu", "kim", code).status_code == 201
+
+    def test_reset_rejects_weak_password_and_keeps_code(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        register_with(client, "kim@g.skku.edu", "kim", student_id="2021310123")
+        clock.now += timedelta(minutes=1)
+        _reset_code(client, "2021310123")
+        code = mailer.last_code("kim@g.skku.edu")
+        for weak in ("password1234", "kim2021310123"):
+            r = _reset(client, "2021310123", code, weak)
+            assert r.status_code == 422 and r.json()["detail"]["code"] == "WEAK_PASSWORD"
+        assert _reset(client, "2021310123", code).status_code == 200
+
+    def test_login_with_existing_weak_password_still_works(self, client: TestClient) -> None:
+        # 검사 도입 전에 만든 계정의 쉬운 비밀번호로도 로그인은 된다(가입·재설정 때만 검사)
+        with client.app.state.study_invest.session_factory() as s:  # type: ignore[attr-defined]
+            s.add(
+                Participant(
+                    identity="old-user",
+                    nickname="old",
+                    password_hash=auth.hash_password("password123"),
+                    cash=1_000_000,
+                    joined_at=kst(D1, time(7)),
+                )
+            )
+            s.commit()
+        assert _login(client, "old-user", "password123").status_code == 200

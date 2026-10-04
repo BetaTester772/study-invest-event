@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from zxcvbn import zxcvbn  # type: ignore[import-untyped]
 
 from ..event_calendar import EventCalendar, to_kst
 from ..models import AuthSession, Participant, VerifyMethod
@@ -67,6 +68,33 @@ def participant_by_token(s: Session, token: str) -> Participant | None:
 
 def revoke_token(s: Session, token: str) -> None:
     s.execute(delete(AuthSession).where(AuthSession.token_hash == _token_hash(token)))
+
+
+MIN_PASSWORD_SCORE = 2
+"""zxcvbn 점수(0~4) 하한. 2 미만은 흔한 비밀번호·키보드 패턴·연속 숫자처럼 금방 맞힐 수 있다."""
+PASSWORD_CHECK_CHARS = 100
+"""zxcvbn은 긴 입력에서 느려질 수 있어 앞부분만 본다(비밀번호는 최대 128자)."""
+
+
+def ensure_strong_password(password: str, *personal: str | None) -> None:
+    """너무 쉬운 비밀번호를 거부한다(zxcvbn). personal: 학번·이름·닉네임·메일 등 그 사람의 정보.
+
+    그 정보가 들어간 비밀번호(예: 학번 그대로, 이름+학번)도 쉽게 맞힐 수 있는 것으로 본다.
+    """
+    hints = [value for value in personal if value]
+    if zxcvbn(password[:PASSWORD_CHECK_CHARS], user_inputs=hints)["score"] < MIN_PASSWORD_SCORE:
+        raise DomainError(
+            "WEAK_PASSWORD",
+            "너무 쉬운 비밀번호입니다. 흔한 단어·연속된 숫자·학번·이름을 피하고 더 길게 정하세요.",
+            422,
+        )
+
+
+def _personal(
+    email: str | None, name: str | None, student_id: str | None, nickname: str | None
+) -> tuple[str | None, ...]:
+    local = email.partition("@")[0] if email else None
+    return (email, local, name, student_id, nickname)
 
 
 def ensure_registration_open(now: datetime, calendar: EventCalendar) -> None:
@@ -145,6 +173,9 @@ def register(
     """
     ensure_registration_open(now, calendar)
     nickname = normalize_nickname(nickname)
+    ensure_strong_password(
+        password, *_personal(email.address, profile.name, profile.student_id, nickname)
+    )
     _ensure_unique(s, email, profile, nickname)
     participant = Participant(
         email=email.canonical,
@@ -294,6 +325,16 @@ def reset_password(
     s: Session, participant: Participant, password: str, now: datetime
 ) -> tuple[Participant, str]:
     """등록 메일 코드로 확인한 참가자의 비밀번호를 바꾼다. 다른 기기의 로그인은 모두 끊는다."""
+    ensure_strong_password(
+        password,
+        *_personal(
+            participant.email_address,
+            participant.name,
+            participant.student_id,
+            participant.nickname,
+        ),
+        participant.identity,
+    )
     participant.password_hash = hash_password(password)
     # UPDATE를 먼저 보내 행 잠금을 잡는다. 진행 중인 로그인(공유 잠금)이 끝나길 기다린 뒤라
     # 아래 DELETE가 그 로그인의 토큰까지 지운다(login 참고).

@@ -197,10 +197,10 @@ interface RankingEntry {
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | POST | `/api/auth/email-code` | `{email}` | 202 `{email, expires_in, resend_after}` (코드를 보낸 주소, 600, 60) / 422 `INVALID_EMAIL`, `EMAIL_DOMAIN_NOT_ALLOWED`, 409 `EMAIL_TAKEN`, `REGISTRATION_CLOSED`, 429, 503 |
-| POST | `/api/auth/register` | `{email, code?, name, student_id, department, nickname, password, privacy_consent}` | 201 `{token, participant: Participant}` / 400 코드 오류, 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN`, `NICKNAME_TAKEN`, 422 `PRIVACY_CONSENT_REQUIRED`, `CODE_REQUIRED` |
+| POST | `/api/auth/register` | `{email, code?, name, student_id, department, nickname, password, privacy_consent}` | 201 `{token, participant: Participant}` / 400 코드 오류, 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN`, `NICKNAME_TAKEN`, 422 `PRIVACY_CONSENT_REQUIRED`, `CODE_REQUIRED`, `WEAK_PASSWORD` |
 | POST | `/api/auth/login` | `{identity, password}` | `{token, participant}` / 401 `INVALID_CREDENTIALS` |
 | POST | `/api/auth/password-reset/code` | `{identity}` | 202 `{email, expires_in, resend_after}` — `identity`는 학번(학교 메일도 받음). 코드는 그 계정의 **등록 메일로만** 가고 `email`은 가린 주소 / 404 `ACCOUNT_NOT_FOUND`(없는 학번, 메일 없는 예전 계정), 429, 503 |
-| POST | `/api/auth/password-reset` | `{identity, code, password}` | `{token, participant}` — 새 비밀번호로 로그인, 다른 기기 로그인은 모두 끊는다(재설정과 동시에 옛 비밀번호로 한 로그인도) / 400 코드 오류, 404 |
+| POST | `/api/auth/password-reset` | `{identity, code, password}` | `{token, participant}` — 새 비밀번호로 로그인, 다른 기기 로그인은 모두 끊는다(재설정과 동시에 옛 비밀번호로 한 로그인도) / 400 코드 오류, 404, 422 `WEAK_PASSWORD` |
 | POST | `/api/auth/logout` | – | 204 |
 
 - `email`: 학교 메일만(`@skku.edu`, `@g.skku.edu`, 하위 도메인 불가). NFKC·대소문자 무시·앞뒤 공백 제거 뒤 검사한다. ID는 영문 소문자·숫자·`.`·`_`·`-` 1~64자(`+` 별칭 불가). **같은 ID의 두 도메인은 한 사람**으로 보고 `ID@g.skku.edu`로 합쳐 저장·중복 검사한다. 코드 메일은 입력한 주소 그대로 보낸다.
@@ -208,7 +208,7 @@ interface RankingEntry {
 - `name` 1~30자, `student_id` 숫자 10자리(전각 숫자 허용, **한 학번에 한 계정**), `department` 1~50자. 관리자만 본다(랭킹·본인 응답에 없음).
 - `privacy_consent`: 개인정보(학교 메일·이름·학번·학과) 수집·이용 동의. `true`가 아니면 422.
 - 로그인 `identity`: **학번**. 학교 메일(두 도메인 어느 쪽이든)이나 메일 인증 도입 전 식별자도 받는다. 맞는 계정을 학번 → 메일 → 예전 식별자 순으로 찾아 비밀번호가 맞는 첫 계정으로 로그인한다.
-- `nickname`: NFC 정규화·앞뒤 공백 제거 **후** 2~20자, 랭킹 공개명(조합형·완성형 한글은 같은 닉네임). `password`: 8자 이상.
+- `nickname`: NFC 정규화·앞뒤 공백 제거 **후** 2~20자, 랭킹 공개명(조합형·완성형 한글은 같은 닉네임). `password`: 8자 이상, 너무 쉬우면 422 `WEAK_PASSWORD`(zxcvbn 점수 2 미만: 흔한 비밀번호·키보드 패턴·연속 숫자·반복, 그 사람의 학번·이름·닉네임·메일이 들어간 것). 가입·재설정 때만 검사하고 로그인은 검사하지 않는다.
 
 ## 참가자 (Bearer)
 

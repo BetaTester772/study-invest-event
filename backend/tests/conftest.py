@@ -144,7 +144,7 @@ def register_with(
             "code": code if code is not None else email_code(client, email),
             **profile_for(email),
             "nickname": nickname,
-            "password": "password123",
+            "password": "tiger-moon-river-42",
             "privacy_consent": True,
             **overrides,
         },

@@ -74,7 +74,7 @@ def setup_participant(factory: sessionmaker[Session], name: str = "alice") -> in
     with factory() as s:
         email = parse_school_email(f"{name}@g.skku.edu")
         profile = auth.Profile("홍길동", student_id_for(name), "소프트웨어학과")
-        p, _ = auth.register(s, email, profile, name, "password123", at(D1, 8), CAL)
+        p, _ = auth.register(s, email, profile, name, "tiger-moon-river-42", at(D1, 8), CAL)
         if market_day(s, D1) is None:
             market.open_day(s, D1, at(D1, 9), CAL)
         s.commit()
@@ -310,7 +310,7 @@ class TestUniqueConflicts:
 
         def login() -> str:
             with factory() as s:
-                _, token = auth.login(s, sid, "password123", at(D1, 8))
+                _, token = auth.login(s, sid, "tiger-moon-river-42", at(D1, 8))
                 s.commit()
                 return token
 
@@ -319,7 +319,7 @@ class TestUniqueConflicts:
             with factory() as s:
                 me = s.get(Participant, pid)
                 assert me is not None
-                auth.reset_password(s, me, "newpass456", at(D1, 8))
+                auth.reset_password(s, me, "amber-lake-sunset-19", at(D1, 8))
                 s.commit()
                 return "reset"
 
@@ -342,7 +342,9 @@ class TestUniqueConflicts:
                     profile = auth.Profile(
                         "홍길동", f"20260000{len(nickname):02d}", "소프트웨어학과"
                     )
-                    auth.register(s, email, profile, nickname, "password123", at(D1, 8), CAL)
+                    auth.register(
+                        s, email, profile, nickname, "tiger-moon-river-42", at(D1, 8), CAL
+                    )
                     time_mod.sleep(0.2)
                     s.commit()
                     return "ok"
