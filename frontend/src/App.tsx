@@ -88,7 +88,7 @@ function Shell() {
       actions={<AccountActions />}
       footer={
         <Stack direction="row" justify="between" gap={3} wrap>
-          <span>공부장려 모의투자 이벤트. 실제 돈이 오가지 않는 게임이에요.</span>
+          <span>공부장려 모의투자 이벤트</span>
           <Stack direction="row" gap={4}>
             <Link to="/admin">관리자</Link>
             <Link to="/ui">컴포넌트 목록</Link>
