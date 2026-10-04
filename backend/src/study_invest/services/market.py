@@ -337,12 +337,15 @@ def advance_price(
 
     09:00·18:00을 기다리지 않고 가격이 한 회차 움직이는 것을 보려는 용도다. 정산과 공시를
     한 트랜잭션으로 실행하므로 중간에 실패하면 아무것도 기록되지 않는다. 이미 정산된
-    날(정산만 끝나고 공시가 남은 경우)은 공시만 실행한다.
+    날(정산만 끝나고 공시가 남은 경우)은 공시만 실행한다. 공시된 날이 없으면 이벤트 첫날을
+    공시만 한다(이벤트 시작 전이어도 된다).
     """
     batch_lock(s)
     day = latest_opened_day(s)
     if day is None:
-        raise DomainError("NOT_OPENED", "공시된 운영일이 없습니다. 먼저 시작가를 공시하세요.")
+        opened = open_day(s, calendar.start, now, calendar, ignore_clock=True)
+        audit(s, now, "admin", "qa.advance_price", opened_day=calendar.start.isoformat())
+        return BatchResult("advance", calendar.start, {"prices": opened.detail["prices"]})
     md = market_day(s, day)
     assert md is not None
     settled = None

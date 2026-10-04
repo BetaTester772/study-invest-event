@@ -125,9 +125,9 @@ interface CertificationStatus {
 }
 
 interface EventInfo {
-  start: string; end: string;
-  operating_days: string[];
-  total_rounds: number;          // 10
+  start: string; end: string | null;      // QA 무제한 모드(STUDY_INVEST_QA_UNLIMITED)면 end null
+  operating_days: string[];      // 무제한 모드면 시작일부터 오늘·최신 공시일 중 늦은 날까지
+  total_rounds: number | null;   // 10. 무제한 모드면 null
   now: string;                   // 서버 시각(KST). 테스트 시계면 그 시계의 시각
   today: string;
   is_operating_day: boolean;
@@ -268,7 +268,7 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` |
 | POST | `/api/admin/batch/run-due` | – | `BatchResult[]` (현재 시각에 밀린 배치 실행) |
 | GET | `/api/admin/qa` | – | `{enabled: boolean}` — QA 도구 사용 가능 여부(`STUDY_INVEST_QA_TOOLS`). 화면이 QA 버튼을 보일지 정한다 |
-| POST | `/api/admin/qa/advance-price` | – | `BatchResult`(`action: "advance"`, `day`는 새로 공시된 운영일) / 403 `QA_DISABLED`, 409 `NOT_OPENED`·`NO_ROUND` — 최신 공시일을 시각과 무관하게 정산하고 다음 운영일 시작가를 바로 공시한다(이미 정산됐다면 공시만). 한 트랜잭션이며 감사 로그에 `qa.advance_price`가 남는다 |
+| POST | `/api/admin/qa/advance-price` | – | `BatchResult`(`action: "advance"`, `day`는 새로 공시된 운영일) / 403 `QA_DISABLED`, 409 `NO_ROUND`(마지막 운영일. 무제한 모드에는 없음) — 최신 공시일을 시각과 무관하게 정산하고 다음 운영일 시작가를 바로 공시한다(이미 정산됐다면 공시만, 공시된 날이 없으면 이벤트 첫날 공시만). 한 트랜잭션이며 감사 로그에 `qa.advance_price`가 남는다 |
 | GET | `/api/admin/settlements` | – | `SettlementLog[]` |
 | GET | `/api/admin/audit` | `?limit=200` | `AuditEntry[]` |
 | GET | `/api/admin/db-pools` | – | `{api: PoolStatus, batch: PoolStatus}` — 앱 연결 풀 현황(`size` 설정 크기, `opened` 열린 연결, `checked_out` 사용 중, `idle`, `overflow` 초과분, `timeout`) |

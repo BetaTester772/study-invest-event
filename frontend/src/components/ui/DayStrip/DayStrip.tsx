@@ -12,6 +12,10 @@ export interface DayStripProps {
   stamped?: string[];
   /** Accessible name. */
   label?: string;
+  /** Operating days before `days[0]` (when showing a window of a longer run). */
+  dayOffset?: number;
+  /** The run continues past the last cell, so it is not the last day (QA unlimited mode). */
+  openEnded?: boolean;
   className?: string;
 }
 
@@ -30,14 +34,22 @@ function weekday(day: string): string {
  * The event as a study-planner row: one cell per operating day. Past days are inked,
  * today is highlighted, stamped days carry an ink stamp. Cell numbers are real dates.
  */
-export function DayStrip({ days, today, stamped = [], label = '이벤트 일정', className }: DayStripProps) {
+export function DayStrip({
+  days,
+  today,
+  stamped = [],
+  label = '이벤트 일정',
+  dayOffset = 0,
+  openEnded = false,
+  className,
+}: DayStripProps) {
   const stampSet = new Set(stamped);
   return (
     <ol className={cx(styles.strip, className)} aria-label={label} style={{ '--days': days.length } as CSSProperties}>
       {days.map((day, i) => {
         const state = day < today ? 'past' : day === today ? 'today' : 'future';
         const isStamped = stampSet.has(day);
-        const round = i < days.length - 1 ? i + 1 : null;
+        const round = openEnded || i < days.length - 1 ? dayOffset + i + 1 : null;
         const parts = [
           formatDay(day),
           state === 'today' ? '오늘' : state === 'past' ? '지난 날' : null,

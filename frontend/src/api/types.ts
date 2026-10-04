@@ -119,9 +119,12 @@ export interface Certification {
 
 export interface EventInfo {
   start: string;
-  end: string;
+  /** `null` in QA unlimited mode (no end date). */
+  end: string | null;
+  /** In QA unlimited mode: start through the later of today and the latest opened day. */
   operating_days: string[];
-  total_rounds: number;
+  /** `null` in QA unlimited mode. */
+  total_rounds: number | null;
   now: string;
   today: string;
   is_operating_day: boolean;

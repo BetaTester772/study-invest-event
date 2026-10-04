@@ -94,6 +94,9 @@ class Settings:
     """앱 시계 배속. 24면 실제 1시간이 이벤트 하루다. 테스트·QA 서버에서만 바꾼다."""
     time_origin: datetime | None = None
     """앱 시계가 이벤트 첫날 00:00(KST)을 가리키는 실제 시각. time_scale이 1이 아니면 필수."""
+    qa_unlimited: bool = False
+    """켜면 이벤트 종료일(event_end)을 무시하고 시작일 이후 끝없이 운영한다(QA 무제한 모드).
+    공시·정산·회차가 계속 이어져 가격 추세를 길게 볼 수 있다. 테스트·QA 서버에서만 켠다."""
     qa_tools: bool = False
     """켜면 관리자 화면에 시각과 무관하게 가격을 바로 변동시키는 QA 버튼이 생긴다.
     테스트·QA 서버에서만 켠다. 운영에서 켜면 이벤트 진행이 시계를 앞질러 되돌릴 수 없다."""
@@ -127,12 +130,13 @@ class Settings:
             event_end=_env_date(env, "STUDY_INVEST_EVENT_END", cls.event_end),
             time_scale=_env_float(env, "STUDY_INVEST_TIME_SCALE", cls.time_scale),
             time_origin=_env_datetime(env, "STUDY_INVEST_TIME_ORIGIN"),
+            qa_unlimited=env.get("STUDY_INVEST_QA_UNLIMITED", "0").lower() in {"1", "true", "on"},
             qa_tools=env.get("STUDY_INVEST_QA_TOOLS", "0").lower() in {"1", "true", "on"},
         )
 
     @property
     def calendar(self) -> EventCalendar:
-        return EventCalendar(self.event_start, self.event_end)
+        return EventCalendar(self.event_start, None if self.qa_unlimited else self.event_end)
 
     def make_clock(self) -> Callable[[], datetime]:
         """앱 시계. time_origin이 없으면 실제 KST 시각, 있으면 그때부터 time_scale배로 흐른다."""

@@ -23,6 +23,7 @@ import {
   type Column,
 } from '../../components/ui';
 import { formatDateTime, formatDay, formatWon } from '../../lib/format';
+import { dayStripWindow } from '../../lib/market';
 
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic';
 const MAX_SIZE = 10 * 1024 * 1024;
@@ -120,7 +121,7 @@ export function CertificationPage() {
       header: '반려 사유',
       render: (c) => c.reject_reason ?? (c.status === 'rejected' ? '사유 없음' : '—'),
     },
-    { key: 'reward', header: '보상', hideOnMobile: true, render: (c) => rewardText(c, rewardCash, e?.end) },
+    { key: 'reward', header: '보상', hideOnMobile: true, render: (c) => rewardText(c, rewardCash, e?.end ?? undefined) },
     {
       key: 'image',
       header: <span className="sr-only">사진</span>,
@@ -154,7 +155,7 @@ export function CertificationPage() {
               <Skeleton lines={4} />
             ) : st.reason === 'OUTSIDE_EVENT' ? (
               <Alert title="지금은 인증 기간이 아니에요">
-                인증은 {formatDay(e.start)}부터 {formatDay(e.end)}까지 받아요.
+                인증은 {formatDay(e.start)}부터 {e.end ? `${formatDay(e.end)}까지` : '기간 제한 없이'} 받아요.
               </Alert>
             ) : st.reason === 'DISQUALIFIED' ? (
               <Alert tone="danger" title="인증을 올릴 수 없어요">
@@ -169,7 +170,7 @@ export function CertificationPage() {
                   title={`${formatDay(st.existing.target_date)} 인증은 이미 올렸어요`}
                 >
                   {st.existing.status === 'approved'
-                    ? `승인됐어요. ${rewardText(st.existing, rewardCash, e.end)}.`
+                    ? `승인됐어요. ${rewardText(st.existing, rewardCash, e.end ?? undefined)}.`
                     : st.existing.status === 'rejected'
                       ? `반려됐어요(${st.existing.reject_reason ?? '사유 없음'}). 인증은 하루 한 번이라 이 날짜는 다시 올릴 수 없어요.`
                       : '검수를 기다리는 중이에요. 결과는 아래 목록에서 볼 수 있어요.'}
@@ -231,7 +232,7 @@ export function CertificationPage() {
 
         {e && (
           <Card title="나의 인증 도장판" description="승인된 날에 도장이 찍혀요.">
-            <DayStrip days={e.operating_days} today={e.today} stamped={approvedDays} label="나의 인증 도장판" />
+            <DayStrip {...dayStripWindow(e)} today={e.today} stamped={approvedDays} label="나의 인증 도장판" />
           </Card>
         )}
 

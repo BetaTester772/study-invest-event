@@ -279,10 +279,15 @@ class TestQaAdvancePrice:
         self.enable(client)
         assert client.post(self.URL).status_code == 401
 
-    def test_needs_an_opened_day(self, client: TestClient, admin: dict[str, str]) -> None:
+    def test_first_press_opens_first_day_even_before_event(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
         self.enable(client)
+        clock.set(date(2026, 10, 1))  # 이벤트 시작 전
         r = client.post(self.URL, headers=admin)
-        assert r.status_code == 409 and r.json()["detail"]["code"] == "NOT_OPENED"
+        assert r.status_code == 200 and r.json()["day"] == D1.isoformat()
+        assert "round" not in r.json()["detail"] and prices(client)["BYUNG"] == 250_000
+        assert client.post(self.URL, headers=admin).json()["detail"]["round"] == 1
 
     def test_settles_and_opens_next_day_before_the_clock(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
@@ -333,6 +338,74 @@ class TestQaAdvancePrice:
         clock.set(D1, time(17, 0))
         r = client.post("/api/admin/batch/settle", json={"day": D1.isoformat()}, headers=admin)
         assert r.json()["detail"]["code"] == "TOO_EARLY"
+
+
+class TestQaUnlimited:
+    """QA 무제한 모드: 종료일 없이 회차가 끝없이 이어진다."""
+
+    def enable(self, client: TestClient) -> None:
+        state = client.app.state.study_invest  # type: ignore[attr-defined]
+        state.settings = dataclasses.replace(state.settings, qa_tools=True, qa_unlimited=True)
+        state.calendar = state.settings.calendar
+
+    def test_settings_drop_the_end_date(self, client: TestClient) -> None:
+        self.enable(client)
+        cal = client.app.state.study_invest.calendar  # type: ignore[attr-defined]
+        assert cal.start == D1 and cal.end is None and cal.total_rounds is None
+
+    def test_advance_goes_past_the_event_end(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        self.enable(client)
+        open_day(client, clock, D1)
+        for round_no in range(1, 31):
+            r = client.post("/api/admin/qa/advance-price", headers=admin)
+            assert r.status_code == 200, r.text
+            assert r.json()["detail"]["round"] == round_no
+        assert r.json()["day"] == date(2026, 11, 5).isoformat()  # D1 + 30일
+        history = client.get("/api/instruments/BYUNG/history").json()
+        assert (
+            len(history) == 31
+            and len(client.get("/api/admin/settlements", headers=admin).json()) == 30
+        )
+
+    def test_event_info_has_no_end(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        self.enable(client)
+        clock.set(date(2026, 10, 20))
+        info = client.get("/api/event").json()
+        assert info["end"] is None and info["total_rounds"] is None
+        assert info["is_operating_day"] is True and info["market"]["round"] == 15
+        assert info["operating_days"][0] == D1.isoformat()
+        assert info["operating_days"][-1] == "2026-10-20"  # 오늘까지만
+        assert info["coin"]["calm_until"] == "2026-10-09"
+        # 시계보다 앞서 공시된 날까지 늘어난다
+        clock.set(D1, time(9, 0))
+        client.post("/api/admin/batch/open", json={"day": D1.isoformat()}, headers=admin)
+        for _ in range(3):
+            client.post("/api/admin/qa/advance-price", headers=admin)
+        assert (
+            client.get("/api/event").json()["operating_days"][-1] == D1.replace(day=9).isoformat()
+        )
+
+    def test_scheduler_keeps_running_after_the_event_end(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        self.enable(client)
+        day = date(2026, 10, 25)
+        clock.set(day, time(18, 5))
+        out = client.post("/api/admin/batch/run-due", headers=admin).json()
+        assert [(r["action"], r["day"]) for r in out] == [
+            ("open", day.isoformat()),
+            ("settle", day.isoformat()),
+        ]
+        assert out[1]["detail"]["round"] == 20
+
+    def test_registration_stays_open(self, client: TestClient, clock: Clock) -> None:
+        self.enable(client)
+        clock.set(date(2027, 1, 1))
+        register(client)
 
 
 class TestCertification:

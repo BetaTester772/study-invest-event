@@ -20,7 +20,7 @@ export function describeMarket(event: EventInfo): MarketSummary {
   const { market, today, operating_days: days } = event;
   const idx = days.indexOf(today);
   const dayNumber = idx >= 0 ? idx + 1 : null;
-  const isLastDay = idx === days.length - 1;
+  const isLastDay = event.end !== null && idx === days.length - 1;
   const roundText = market.round
     ? `오늘은 ${market.round}회차 정산일이에요.`
     : isLastDay
@@ -36,7 +36,7 @@ export function describeMarket(event: EventInfo): MarketSummary {
       dayNumber: null,
     };
   }
-  if (today > event.end) {
+  if (event.end !== null && today > event.end) {
     return {
       phase: 'after_event',
       headline: '이벤트가 끝났어요',
@@ -90,4 +90,14 @@ export function describeMarket(event: EventInfo): MarketSummary {
     canTrade: false,
     dayNumber,
   };
+}
+
+/** QA unlimited mode has no end, so day strips show only the latest days. */
+export const UNLIMITED_STRIP_DAYS = 14;
+
+/** DayStrip props for the event: every day, or the latest window in QA unlimited mode. */
+export function dayStripWindow(event: EventInfo): { days: string[]; dayOffset: number; openEnded: boolean } {
+  if (event.end !== null) return { days: event.operating_days, dayOffset: 0, openEnded: false };
+  const dayOffset = Math.max(event.operating_days.length - UNLIMITED_STRIP_DAYS, 0);
+  return { days: event.operating_days.slice(dayOffset), dayOffset, openEnded: true };
 }

@@ -39,6 +39,12 @@ describe('TestClockBanner', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('renders the unlimited-mode notice when the event has no end', async () => {
+    vi.spyOn(publicApi, 'event').mockResolvedValue({ clock: null, end: null } as EventInfo);
+    render(<TestClockBanner />);
+    expect(await screen.findByText('QA 무제한 모드예요.')).toBeInTheDocument();
+  });
+
   it('renders the notice under a test clock', async () => {
     vi.spyOn(publicApi, 'event').mockResolvedValue({ clock } as EventInfo);
     render(<TestClockBanner />);

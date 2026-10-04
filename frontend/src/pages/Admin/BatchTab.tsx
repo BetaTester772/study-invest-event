@@ -202,7 +202,7 @@ export function BatchTab() {
         >
           <Stack gap={4}>
             <Alert tone="warning">
-              최신 공시일을 정산하고 다음 운영일 시작가를 바로 공시해요. 누를 때마다 이벤트가 하루씩 앞서가요.
+              최신 공시일을 정산하고 다음 운영일 시작가를 바로 공시해요. 누를 때마다 이벤트가 하루씩 앞서가요. 아직 공시된 날이 없으면 이벤트 첫날 시작가부터 공시해요. 무제한 모드(STUDY_INVEST_QA_UNLIMITED)면 이벤트 종료일 뒤로도 계속 진행돼요.
             </Alert>
             <Stack direction="row" gap={2} wrap>
               <Button onClick={() => setConfirm('advance')}>지금 가격 변동시키기</Button>

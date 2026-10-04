@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from fastapi import APIRouter, Response
 from sqlalchemy import select
@@ -14,7 +14,7 @@ from ..instruments import BY_CODE, INSTRUMENTS
 from ..models import MarketDay, PriceHistory
 from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
 from ..services import auth, market, ranking
-from ..services.common import DomainError, current_prices, get_params
+from ..services.common import DomainError, current_prices, get_params, latest_opened_day
 from . import schemas
 from .deps import NowDep, OptionalMeDep, SessionDep, StateDep, TokenDep
 
@@ -56,11 +56,17 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
     md = s.get(MarketDay, today)
     day_opened = md is not None
     day_settled = md is not None and md.settled_at is not None
-    calm_rounds = min(params.coin_calm_rounds, cal.total_rounds)
+    calm_rounds = params.coin_calm_rounds
+    if cal.total_rounds is not None:
+        calm_rounds = min(calm_rounds, cal.total_rounds)
+    if cal.end is None:  # 무제한: 끝이 없으니 지금까지(시계·공시 중 앞선 쪽)의 운영일만 보낸다
+        days = cal.days_through(max(today, latest_opened_day(s) or cal.start, cal.start))
+    else:
+        days = cal.operating_days
     return schemas.EventInfo(
         start=cal.start,
         end=cal.end,
-        operating_days=list(cal.operating_days),
+        operating_days=list(days),
         total_rounds=cal.total_rounds,
         now=now,
         today=today,
@@ -83,7 +89,7 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
             floor=params.coin_floor,
             calm_rounds=calm_rounds,
             # n회차 정산은 n+1번째 운영일 시작가에 반영된다
-            calm_until=cal.operating_days[calm_rounds] if calm_rounds else None,
+            calm_until=cal.start + timedelta(days=calm_rounds) if calm_rounds else None,
             calm_cap=params.coin_calm_cap,
             calm_floor=params.coin_calm_floor,
         ),

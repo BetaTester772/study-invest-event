@@ -35,26 +35,46 @@ class EventCalendar:
 
     가격 변동 회차 n(1부터)은 n번째 운영일 18:00 정산이며 n+1번째 운영일 시작가에 반영된다.
     마지막 운영일의 정산은 반영일이 없으므로 회차가 없다.
+
+    end가 None이면 끝이 없다(QA 무제한 모드). 시작일 이후 모든 날이 운영일이고 회차도
+    끝없이 이어진다.
     """
 
     start: date = EVENT_START
-    end: date = EVENT_END
+    end: date | None = EVENT_END
 
     def __post_init__(self) -> None:
-        if self.end < self.start:
+        if self.end is not None and self.end < self.start:
             raise ValueError("end must not precede start")
 
     @property
-    def operating_days(self) -> tuple[date, ...]:
-        count = (self.end - self.start).days + 1
-        return tuple(self.start + timedelta(days=i) for i in range(count))
+    def unlimited(self) -> bool:
+        return self.end is None
 
     @property
-    def total_rounds(self) -> int:
-        return len(self.operating_days) - 1
+    def operating_days(self) -> tuple[date, ...]:
+        if self.end is None:
+            raise ValueError("unlimited calendar has no full list of days; use days_through()")
+        return self.days_through(self.end)
+
+    def days_through(self, last: date) -> tuple[date, ...]:
+        """시작일부터 last까지의 운영일(기간 끝을 넘으면 끝에서 자른다)."""
+        if self.end is not None:
+            last = min(last, self.end)
+        count = (last - self.start).days + 1
+        return tuple(self.start + timedelta(days=i) for i in range(max(count, 0)))
+
+    @property
+    def total_rounds(self) -> int | None:
+        """전체 가격 변동 회차 수. 무제한이면 None."""
+        return None if self.end is None else (self.end - self.start).days
+
+    def is_ended(self, day: date) -> bool:
+        """day가 이벤트 종료 뒤인지. 무제한이면 항상 False."""
+        return self.end is not None and day > self.end
 
     def is_operating_day(self, day: date) -> bool:
-        return self.start <= day <= self.end
+        return self.start <= day and not self.is_ended(day)
 
     def next_operating_day(self, day: date) -> date | None:
         nxt = day + timedelta(days=1)
@@ -74,7 +94,7 @@ class EventCalendar:
         """at 뒤에 처음 오는 운영일의 t 시각(KST). 이벤트 기간에 더 없으면 None."""
         local = to_kst(at)
         day = max(local.date() + timedelta(days=0 if local.time() < t else 1), self.start)
-        return datetime.combine(day, t, KST) if day <= self.end else None
+        return None if self.is_ended(day) else datetime.combine(day, t, KST)
 
     def is_market_open(self, at: datetime) -> bool:
         """주문 접수 가능 여부. 접수 시간은 [09:00, 18:00)이며 18:00 정각부터는 마감이다."""
