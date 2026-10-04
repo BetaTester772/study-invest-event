@@ -13,6 +13,7 @@ from conftest import (
     email_code,
     kst,
     open_day,
+    profile_for,
     register,
     register_with,
 )
@@ -27,6 +28,7 @@ from study_invest.normalize import SchoolEmailError, parse_school_email
 from study_invest.services import auth, email_verification
 
 D1 = date(2026, 10, 6)
+PROFILE = auth.Profile("홍길동", "2026999999", "소프트웨어학과")
 
 
 def request(client: TestClient, email: str) -> Any:
@@ -188,21 +190,12 @@ class TestCodeCheck:
         with client.app.state.study_invest.session_factory() as s:  # type: ignore[attr-defined]
             email = parse_school_email("kim@skku.edu")
             with pytest.raises(Exception) as exc:
-                auth.register(s, email, "kim2", "password123", kst(D1), EventCalendar())
+                auth.register(s, email, PROFILE, "kim2", "password123", kst(D1), EventCalendar())
         assert getattr(exc.value, "code", None) == "EMAIL_TAKEN"
 
     def test_privacy_consent_required(self, client: TestClient) -> None:
         code = email_code(client, "kim@g.skku.edu")
-        r = client.post(
-            "/api/auth/register",
-            json={
-                "email": "kim@g.skku.edu",
-                "code": code,
-                "nickname": "kim",
-                "password": "password123",
-                "privacy_consent": False,
-            },
-        )
+        r = register_with(client, "kim@g.skku.edu", "kim", code, privacy_consent=False)
         assert r.status_code == 422 and r.json()["detail"]["code"] == "PRIVACY_CONSENT_REQUIRED"
         assert register_with(client, "kim@g.skku.edu", "kim", code).status_code == 201
 
@@ -226,10 +219,16 @@ def _legacy(client: TestClient, identity: str = "2020123456") -> dict[str, str]:
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
-def _verify(client: TestClient, h: dict[str, str], email: str, code: str) -> Any:
+def _verify(client: TestClient, h: dict[str, str], email: str, code: str, **overrides: Any) -> Any:
     return client.post(
         "/api/me/email",
-        json={"email": email, "code": code, "privacy_consent": True},
+        json={
+            "email": email,
+            "code": code,
+            **profile_for(email),
+            "privacy_consent": True,
+            **overrides,
+        },
         headers=h,
     )
 
@@ -276,7 +275,7 @@ class TestLegacyReverification:
         # 그 사이 같은 사람이 다른 도메인으로 새 계정을 만들었다
         with client.app.state.study_invest.session_factory() as s:  # type: ignore[attr-defined]
             email = parse_school_email("kim@skku.edu")
-            auth.register(s, email, "kim", "password123", clock.now, EventCalendar())
+            auth.register(s, email, PROFILE, "kim", "password123", clock.now, EventCalendar())
             s.commit()
         r = _verify(client, h, "kim@g.skku.edu", code)
         assert r.json()["detail"]["code"] == "EMAIL_TAKEN"
@@ -391,3 +390,199 @@ class TestSmtpMailer:
         monkeypatch.setenv("STUDY_INVEST_SMTP_SECURITY", "tls")
         with pytest.raises(ValueError):
             mail.make_mailer(Settings.from_env())
+
+
+class TestProfile:
+    def test_profile_is_stored_for_admin_only(
+        self, client: TestClient, admin: dict[str, str]
+    ) -> None:
+        r = register_with(
+            client,
+            "kim@g.skku.edu",
+            "kim",
+            name=" 김성균 ",
+            student_id="２０２１３１０１２３",  # 전각 숫자도 같은 학번
+            department="소프트웨어학과",
+        )
+        assert r.status_code == 201, r.text
+        assert "student_id" not in r.json()["participant"]  # 본인 응답·랭킹에는 없다
+        row = next(
+            p for p in client.get("/api/admin/participants", headers=admin).json() if p["id"]
+        )
+        assert (row["name"], row["student_id"], row["department"]) == (
+            "김성균",
+            "2021310123",
+            "소프트웨어학과",
+        )
+        ranking = client.get("/api/ranking").json()["entries"][0]
+        assert "name" not in ranking and "student_id" not in ranking
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"name": "  "},
+            {"name": "가" * 31},
+            {"student_id": "123456789"},
+            {"student_id": "20213101234"},
+            {"student_id": "2021-31012"},
+            {"department": ""},
+            {"department": "가" * 51},
+        ],
+    )
+    def test_invalid_profile_is_422(self, client: TestClient, overrides: dict[str, str]) -> None:
+        code = email_code(client, "kim@g.skku.edu")
+        r = register_with(client, "kim@g.skku.edu", "kim", code, **overrides)
+        assert r.status_code == 422
+        # 형식 오류는 코드를 쓰지 않는다
+        assert register_with(client, "kim@g.skku.edu", "kim", code).status_code == 201
+
+    def test_one_account_per_student_id(self, client: TestClient) -> None:
+        assert (
+            register_with(client, "kim@g.skku.edu", "kim", student_id="2021310123").status_code
+            == 201
+        )
+        code = email_code(client, "lee@g.skku.edu")
+        r = register_with(client, "lee@g.skku.edu", "lee", code, student_id="2021310123")
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "STUDENT_ID_TAKEN"
+        # 실패한 가입은 코드를 쓰지 않는다
+        assert register_with(client, "lee@g.skku.edu", "lee", code).status_code == 201
+
+    def test_legacy_reverification_collects_profile(
+        self, client: TestClient, admin: dict[str, str]
+    ) -> None:
+        register_with(client, "kim@g.skku.edu", "kim", student_id="2021310123")
+        h = _legacy(client)
+        code = email_code(client, "lee@g.skku.edu")
+        r = _verify(client, h, "lee@g.skku.edu", code, student_id="2021310123")
+        assert r.json()["detail"]["code"] == "STUDENT_ID_TAKEN"
+        r = _verify(client, h, "lee@g.skku.edu", code, name="이예전", student_id="2019310001")
+        assert r.status_code == 200, r.text
+        row = next(
+            p
+            for p in client.get("/api/admin/participants", headers=admin).json()
+            if p["nickname"] == "legacy"
+        )
+        assert (row["name"], row["student_id"], row["identity"]) == (
+            "이예전",
+            "2019310001",
+            "2020123456",
+        )
+
+    def test_purge_clears_profile(self, client: TestClient, admin: dict[str, str]) -> None:
+        register(client)
+        state = client.app.state.study_invest  # type: ignore[attr-defined]
+        with state.session_factory() as s:
+            email_verification.purge(s, kst(D1), EventCalendar(), force=True)
+            s.commit()
+        row = client.get("/api/admin/participants", headers=admin).json()[0]
+        assert [row[k] for k in ("email", "name", "student_id", "department")] == [None] * 4
+
+
+def _reset_code(client: TestClient, email: str) -> Any:
+    return client.post("/api/auth/password-reset/code", json={"email": email})
+
+
+def _reset(client: TestClient, email: str, code: str, password: str = "newpass456") -> Any:
+    return client.post(
+        "/api/auth/password-reset", json={"email": email, "code": code, "password": password}
+    )
+
+
+def _login(client: TestClient, identity: str, password: str) -> Any:
+    return client.post("/api/auth/login", json={"identity": identity, "password": password})
+
+
+class TestPasswordReset:
+    def test_reset_flow(self, client: TestClient, clock: Clock, mailer: FakeMailer) -> None:
+        old = register(client, "kim")  # kim@g.skku.edu
+        clock.now += timedelta(minutes=1)
+        r = _reset_code(client, "kim@skku.edu")  # 다른 도메인으로 요청해도 같은 계정
+        assert r.status_code == 202 and r.json()["email"] == "kim@skku.edu"
+        to, subject, body = mailer.sent[-1]
+        assert to == "kim@skku.edu" and "비밀번호 재설정" in subject and "비밀번호" in body
+        r = _reset(client, "kim@g.skku.edu", mailer.last_code(to))
+        assert r.status_code == 200 and r.json()["participant"]["nickname"] == "kim"
+        # 새 토큰은 되고, 이전 로그인은 모두 끊긴다
+        new = {"Authorization": f"Bearer {r.json()['token']}"}
+        assert client.get("/api/me", headers=new).status_code == 200
+        assert client.get("/api/me", headers=old).status_code == 401
+        assert _login(client, "kim@g.skku.edu", "password123").status_code == 401
+        assert _login(client, "kim@g.skku.edu", "newpass456").status_code == 200
+
+    def test_unregistered_email(self, client: TestClient, mailer: FakeMailer) -> None:
+        r = _reset_code(client, "nobody@g.skku.edu")
+        assert r.status_code == 404 and r.json()["detail"]["code"] == "EMAIL_NOT_REGISTERED"
+        assert _reset_code(client, "nobody@gmail.com").status_code == 422
+        assert mailer.sent == []
+
+    def test_signup_code_cannot_reset_and_vice_versa(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        # 가입 코드로는 비밀번호를 바꿀 수 없다
+        signup = email_code(client, "kim@g.skku.edu")
+        r = _reset(client, "kim@g.skku.edu", signup)
+        assert r.json()["detail"]["code"] in {"CODE_EXPIRED", "EMAIL_NOT_REGISTERED"}
+        assert register_with(client, "kim@g.skku.edu", "kim", signup).status_code == 201
+        # 재설정 코드로는 가입·재인증할 수 없다
+        clock.now += timedelta(minutes=1)
+        _reset_code(client, "kim@g.skku.edu")
+        reset = mailer.last_code("kim@g.skku.edu")
+        h = _legacy(client)
+        assert _verify(client, h, "kim@g.skku.edu", reset).json()["detail"]["code"] in {
+            "CODE_EXPIRED",
+            "EMAIL_TAKEN",
+        }
+        assert _reset(client, "kim@g.skku.edu", reset).status_code == 200
+
+    def test_wrong_code_attempts_and_single_use(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        register(client, "kim")
+        clock.now += timedelta(minutes=1)
+        _reset_code(client, "kim@g.skku.edu")
+        code = mailer.last_code("kim@g.skku.edu")
+        wrong = f"{(int(code) + 1) % 10**6:06d}"
+        r = _reset(client, "kim@g.skku.edu", wrong)
+        assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_CODE"
+        assert _reset(client, "kim@g.skku.edu", code).status_code == 200
+        assert _reset(client, "kim@g.skku.edu", code).json()["detail"]["code"] == "CODE_EXPIRED"
+        assert _reset(client, "kim@g.skku.edu", code, "short").status_code == 422
+
+    def test_cooldown_shared_with_signup_code(self, client: TestClient) -> None:
+        register(client, "kim")  # 방금 가입 코드를 받았다
+        r = _reset_code(client, "kim@g.skku.edu")
+        assert r.status_code == 429 and r.json()["detail"]["code"] == "CODE_RECENTLY_SENT"
+
+    def test_reset_works_after_event(self, client: TestClient, clock: Clock) -> None:
+        register(client, "kim")
+        clock.set(date(2026, 10, 20))
+        assert _reset_code(client, "kim@g.skku.edu").status_code == 202
+
+
+class TestLoginByStudentId:
+    def test_login_with_student_id_or_email(self, client: TestClient) -> None:
+        register_with(client, "kim@g.skku.edu", "kim", student_id="2021310123")
+        for identity in ("2021310123", " ２０２１３１０１２３ ", "kim@skku.edu"):
+            r = _login(client, identity, "password123")
+            assert r.status_code == 200 and r.json()["participant"]["nickname"] == "kim", identity
+        r = _login(client, "2021310123", "wrong-pass")
+        assert r.status_code == 401
+        assert r.json()["detail"]["message"].startswith("학번 또는 비밀번호")
+
+    def test_legacy_identity_that_looks_like_someone_elses_student_id(
+        self, client: TestClient
+    ) -> None:
+        # 예전 아이디가 다른 사람의 학번과 같은 숫자여도, 비밀번호로 각자 로그인된다
+        register_with(client, "kim@g.skku.edu", "kim", student_id="2020123456")
+        _legacy(client, identity="2020123456")  # 비밀번호 password123
+        state = client.app.state.study_invest  # type: ignore[attr-defined]
+        with state.session_factory() as s:
+            kim = s.scalars(select(Participant).where(Participant.nickname == "kim")).one()
+            kim.password_hash = auth.hash_password("kim-secret")
+            s.commit()
+        assert _login(client, "2020123456", "password123").json()["participant"]["nickname"] == (
+            "legacy"
+        )
+        assert _login(client, "2020123456", "kim-secret").json()["participant"]["nickname"] == (
+            "kim"
+        )

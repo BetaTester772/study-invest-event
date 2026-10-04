@@ -113,6 +113,12 @@ class Participant(Base):
     """인증된 학교 메일의 1인 1계정 키(normalize.SchoolEmail.canonical). 이벤트 후 파기하면 None."""
     email_verified_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
     """학교 메일 인증 시각. None이면 인증 전 계정이라 거래·공부 인증을 할 수 없다."""
+    name: Mapped[str | None] = mapped_column(String(30))
+    """실명. 메일 인증 도입 전 계정은 재인증할 때 받는다. 이벤트 후 파기하면 None."""
+    student_id: Mapped[str | None] = mapped_column(String(16), unique=True)
+    """학번(숫자 10자리). 한 학번에 한 계정. 이벤트 후 파기하면 None."""
+    department: Mapped[str | None] = mapped_column(String(50))
+    """학과. 이벤트 후 파기하면 None."""
     nickname: Mapped[str] = mapped_column(String(32), unique=True)
     password_hash: Mapped[str] = mapped_column(String(256))
     cash: Mapped[int] = mapped_column(BigInteger)
@@ -138,6 +144,13 @@ class AuthSession(Base):
     created_at: Mapped[datetime] = mapped_column(AwareDateTime())
 
 
+class CodePurpose(StrEnum):
+    VERIFY = "verify"
+    """참가 신청·재인증(아직 아무 계정도 쓰지 않은 학교 메일)."""
+    RESET_PASSWORD = "reset_password"
+    """비밀번호 재설정(이미 가입한 학교 메일)."""
+
+
 class EmailVerification(Base):
     """학교 메일 인증 코드. 코드는 해시로만 저장한다. 메일별로 가장 최근 코드만 유효하다."""
 
@@ -146,6 +159,10 @@ class EmailVerification(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(254), index=True)
     """1인 1계정 키(normalize.SchoolEmail.canonical)."""
+    purpose: Mapped[CodePurpose] = mapped_column(
+        _enum(CodePurpose), default=CodePurpose.VERIFY, server_default=CodePurpose.VERIFY.value
+    )
+    """코드 용도. 다른 용도로 받은 코드는 쓸 수 없다."""
     code_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(AwareDateTime(), index=True)
     expires_at: Mapped[datetime] = mapped_column(AwareDateTime())

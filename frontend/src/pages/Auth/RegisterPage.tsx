@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ApiError } from '../../api';
+import { ApiError, type ProfileFields as ProfileFieldsValue } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
+import { EMPTY_PROFILE, ProfileFields, profileErrors, trimProfile, type ProfileErrors } from './ProfileFields';
 import { CODE_ERRORS, PrivacyConsent, SchoolEmailFields, codeError, schoolEmailError } from './SchoolEmailFields';
 
-interface Errors {
+interface Errors extends ProfileErrors {
   email?: string;
   code?: string;
   nickname?: string;
@@ -15,7 +16,7 @@ interface Errors {
   form?: string;
 }
 
-export interface RegisterForm {
+export interface RegisterForm extends ProfileFieldsValue {
   email: string;
   code: string;
   nickname: string;
@@ -25,7 +26,7 @@ export interface RegisterForm {
 }
 
 export function validateRegister(f: RegisterForm): Errors {
-  const errors: Errors = {};
+  const errors: Errors = profileErrors(f);
   const email = schoolEmailError(f.email);
   if (email) errors.email = email;
   const code = codeError(f.code);
@@ -47,6 +48,7 @@ export function RegisterPage() {
   const [form, setForm] = useState<RegisterForm>({
     email: '',
     code: '',
+    ...EMPTY_PROFILE,
     nickname: '',
     password: '',
     confirm: '',
@@ -68,6 +70,7 @@ export function RegisterPage() {
       await register({
         email: form.email.trim(),
         code: form.code,
+        ...trimProfile(form),
         nickname: form.nickname.trim(),
         password: form.password,
         privacy_consent: form.consent,
@@ -79,6 +82,8 @@ export function RegisterPage() {
         setErrors({ email: '이미 참가한 학교 메일이에요. 로그인해 주세요.' });
       } else if (err instanceof ApiError && CODE_ERRORS.has(err.code)) {
         setErrors({ code: err.message });
+      } else if (err instanceof ApiError && err.code === 'STUDENT_ID_TAKEN') {
+        setErrors({ student_id: '이미 다른 계정에 등록된 학번이에요. 본인 학번이 맞다면 운영진에게 문의해 주세요.' });
       } else if (err instanceof ApiError && err.code === 'NICKNAME_TAKEN') {
         setErrors({ nickname: '다른 참가자가 쓰는 닉네임이에요. 다른 닉네임을 골라 주세요.' });
       } else {
@@ -108,6 +113,11 @@ export function RegisterPage() {
               emailError={errors.email}
               codeError={errors.code}
               onEmailError={(message) => setErrors((prev) => ({ ...prev, email: message }))}
+            />
+            <ProfileFields
+              value={{ name: form.name, student_id: form.student_id, department: form.department }}
+              onChange={(p) => setForm((f) => ({ ...f, ...p }))}
+              errors={errors}
             />
             <TextField
               label="닉네임"

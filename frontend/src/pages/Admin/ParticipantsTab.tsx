@@ -46,6 +46,9 @@ export function ParticipantsTab() {
   const columns: Column<AdminParticipant>[] = [
     { key: 'id', header: 'ID', numeric: true, width: '4rem' },
     { key: 'nickname', header: '닉네임', render: (p) => p.nickname },
+    { key: 'name', header: '이름', hideOnMobile: true, render: (p) => p.name ?? '-' },
+    { key: 'student_id', header: '학번', hideOnMobile: true, render: (p) => p.student_id ?? '-' },
+    { key: 'department', header: '학과', hideOnMobile: true, render: (p) => p.department ?? '-' },
     {
       key: 'email',
       header: '학교 메일',

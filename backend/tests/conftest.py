@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import random
 import re
@@ -124,15 +125,28 @@ def email_code(client: TestClient, email: str) -> str:
     return mailer.last_code(r.json()["email"])
 
 
-def register_with(client: TestClient, email: str, nickname: str, code: str | None = None) -> Any:
+def student_id_for(email: str) -> str:
+    """테스트용 학번(숫자 10자리). 메일마다 다르고 같은 메일이면 같다."""
+    return f"2026{int(hashlib.sha256(email.encode()).hexdigest(), 16) % 10**6:06d}"
+
+
+def profile_for(email: str) -> dict[str, str]:
+    return {"name": "홍길동", "student_id": student_id_for(email), "department": "소프트웨어학과"}
+
+
+def register_with(
+    client: TestClient, email: str, nickname: str, code: str | None = None, **overrides: Any
+) -> Any:
     return client.post(
         "/api/auth/register",
         json={
             "email": email,
             "code": code if code is not None else email_code(client, email),
+            **profile_for(email),
             "nickname": nickname,
             "password": "password123",
             "privacy_consent": True,
+            **overrides,
         },
     )
 

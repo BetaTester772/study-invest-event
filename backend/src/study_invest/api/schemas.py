@@ -27,7 +27,12 @@ from ..models import (
     RejectReason,
     Side,
 )
-from ..normalize import normalize_identity, normalize_nickname
+from ..normalize import (
+    normalize_identity,
+    normalize_nickname,
+    normalize_student_id,
+    normalize_text,
+)
 
 
 class Schema(BaseModel):
@@ -162,6 +167,11 @@ Nickname = Annotated[
 ]
 
 
+# 이름·학번·학과(관리자만 본다). 길이 상한은 DB 컬럼(name 30, student_id 16, department 50) 이내.
+Name = Annotated[str, _before(normalize_text), StringConstraints(min_length=1, max_length=30)]
+StudentId = Annotated[str, _before(normalize_student_id), StringConstraints(pattern=r"^[0-9]{10}$")]
+Department = Annotated[str, _before(normalize_text), StringConstraints(min_length=1, max_length=50)]
+
 # 형식·도메인 검사는 서비스(email_verification.parse)가 업무 오류 코드로 한다.
 Email = Annotated[str, StringConstraints(min_length=1, max_length=254)]
 Code = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9]{6}$")]
@@ -183,23 +193,37 @@ class EmailCodeResponse(Schema):
 class RegisterRequest(BaseModel):
     email: Email
     code: Code
+    name: Name
+    student_id: StudentId
+    """숫자 10자리. 한 학번에 한 계정."""
+    department: Department
     nickname: Nickname
     password: str = Field(min_length=8, max_length=128)
     privacy_consent: bool
-    """개인정보(학교 메일) 수집·이용 동의. true여야 한다."""
+    """개인정보(학교 메일·이름·학번·학과) 수집·이용 동의. true여야 한다."""
 
 
 class VerifyEmailRequest(BaseModel):
-    """메일 인증 도입 전에 가입한 참가자의 재인증."""
+    """메일 인증 도입 전에 가입한 참가자의 재인증. 이름·학번·학과도 이때 받는다."""
 
     email: Email
     code: Code
+    name: Name
+    student_id: StudentId
+    department: Department
     privacy_consent: bool
+
+
+class PasswordResetRequest(BaseModel):
+    email: Email
+    code: Code
+    password: str = Field(min_length=8, max_length=128)
+    """새 비밀번호."""
 
 
 class LoginRequest(BaseModel):
     identity: Identity
-    """학교 메일(@skku.edu·@g.skku.edu) 또는 메일 인증 도입 전 식별자."""
+    """학번(숫자 10자리). 학교 메일(@skku.edu·@g.skku.edu)이나 메일 인증 도입 전 식별자도 받는다."""
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -308,6 +332,10 @@ class CertificationStatus(Schema):
 class AdminParticipant(Participant):
     identity: str | None
     """메일 인증 도입 전 식별자. 그 뒤 가입한 참가자는 null."""
+    name: str | None
+    student_id: str | None
+    department: str | None
+    """이름·학번·학과. 재인증 전 계정이거나 이벤트 후 파기했으면 null."""
     cash: int
     total_assets: int
     principal: int

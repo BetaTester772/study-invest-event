@@ -213,7 +213,15 @@ export interface EmailCodeResponse {
   resend_after: number;
 }
 
-export interface RegisterRequest {
+/** 이름·학번·학과. 관리자만 본다(랭킹에는 닉네임만). */
+export interface ProfileFields {
+  name: string;
+  /** 숫자 10자리. 한 학번에 한 계정. */
+  student_id: string;
+  department: string;
+}
+
+export interface RegisterRequest extends ProfileFields {
   email: string;
   code: string;
   nickname: string;
@@ -221,14 +229,21 @@ export interface RegisterRequest {
   privacy_consent: boolean;
 }
 
-export interface VerifyEmailRequest {
+export interface VerifyEmailRequest extends ProfileFields {
   email: string;
   code: string;
   privacy_consent: boolean;
 }
 
+export interface PasswordResetRequest {
+  email: string;
+  code: string;
+  /** 새 비밀번호(8자 이상). */
+  password: string;
+}
+
 export interface LoginRequest {
-  /** 학교 메일 또는 메일 인증 도입 전 아이디. */
+  /** 학번(숫자 10자리). 학교 메일이나 메일 인증 도입 전 식별자도 받는다. */
   identity: string;
   password: string;
 }
@@ -244,6 +259,10 @@ export interface OrderRequest {
 export interface AdminParticipant extends Participant {
   /** 메일 인증 도입 전 아이디. 그 뒤 가입한 참가자는 null. */
   identity: string | null;
+  /** 이름·학번·학과. 재인증 전 계정이거나 이벤트 후 파기했으면 null. */
+  name: string | null;
+  student_id: string | null;
+  department: string | null;
   cash: number;
   total_assets: number;
   principal: number;

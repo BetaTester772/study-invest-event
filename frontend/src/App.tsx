@@ -17,6 +17,7 @@ import {
 import { AdminPage } from './pages/Admin/AdminPage';
 import { LoginPage } from './pages/Auth/LoginPage';
 import { RegisterPage } from './pages/Auth/RegisterPage';
+import { ResetPasswordPage } from './pages/Auth/ResetPasswordPage';
 import { VerifyEmailPage } from './pages/Auth/VerifyEmailPage';
 import { CertificationPage } from './pages/Certification/CertificationPage';
 import { InstrumentPage } from './pages/Instrument/InstrumentPage';
@@ -119,6 +120,7 @@ function Shell() {
         <Route path="/ranking" element={<RankingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/verify-email"
           element={

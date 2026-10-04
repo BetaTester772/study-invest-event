@@ -15,7 +15,7 @@ from datetime import date, datetime, time
 from typing import Any
 
 import pytest
-from conftest import PNG, TEST_DB_URL
+from conftest import PNG, TEST_DB_URL, student_id_for
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -64,7 +64,8 @@ def factory() -> Iterator[sessionmaker[Session]]:
 def setup_participant(factory: sessionmaker[Session], name: str = "alice") -> int:
     with factory() as s:
         email = parse_school_email(f"{name}@g.skku.edu")
-        p, _ = auth.register(s, email, name, "password123", at(D1, 8), CAL)
+        profile = auth.Profile("홍길동", student_id_for(name), "소프트웨어학과")
+        p, _ = auth.register(s, email, profile, name, "password123", at(D1, 8), CAL)
         if market_day(s, D1) is None:
             market.open_day(s, D1, at(D1, 9), CAL)
         s.commit()
@@ -232,7 +233,10 @@ class TestUniqueConflicts:
             def fn() -> str:
                 with factory() as s:
                     email = parse_school_email(f"same@{domain}")
-                    auth.register(s, email, nickname, "password123", at(D1, 8), CAL)
+                    profile = auth.Profile(
+                        "홍길동", f"20260000{len(nickname):02d}", "소프트웨어학과"
+                    )
+                    auth.register(s, email, profile, nickname, "password123", at(D1, 8), CAL)
                     time_mod.sleep(0.2)
                     s.commit()
                     return "ok"

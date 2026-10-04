@@ -18,6 +18,7 @@ import type {
   Params,
   Participant,
   ParticipantStatus,
+  PasswordResetRequest,
   Portfolio,
   PriceOverrideRequest,
   PricePoint,
@@ -45,6 +46,10 @@ export const publicApi = {
 export const authApi = {
   requestEmailCode: (body: EmailCodeRequest) =>
     request<EmailCodeResponse>('/auth/email-code', { method: 'POST', body }),
+  requestPasswordResetCode: (body: EmailCodeRequest) =>
+    request<EmailCodeResponse>('/auth/password-reset/code', { method: 'POST', body }),
+  resetPassword: (body: PasswordResetRequest) =>
+    request<AuthResponse>('/auth/password-reset', { method: 'POST', body }),
   register: (body: RegisterRequest) => request<AuthResponse>('/auth/register', { method: 'POST', body }),
   login: (body: LoginRequest) => request<AuthResponse>('/auth/login', { method: 'POST', body }),
   logout: () => request<void>('/auth/logout', { method: 'POST', auth: 'participant' }),

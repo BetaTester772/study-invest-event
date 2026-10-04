@@ -43,7 +43,8 @@ def verify_email(
     if participant.email_verified:
         raise DomainError("ALREADY_VERIFIED", "이미 학교 메일 인증을 마쳤습니다.")
     email = consume_code(s, body.email, body.code, real_now)
-    auth.verify_email(s, participant, email, real_now)
+    profile = auth.Profile(body.name, body.student_id, body.department)
+    auth.verify_email(s, participant, email, profile, real_now)
     s.commit()
     return schemas.Participant.model_validate(participant)
 

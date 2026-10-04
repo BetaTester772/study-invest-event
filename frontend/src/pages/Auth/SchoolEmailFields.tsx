@@ -28,6 +28,15 @@ const REQUEST_ERRORS: Record<string, string> = {
   EMAIL_DOMAIN_NOT_ALLOWED: '학교 메일(@skku.edu 또는 @g.skku.edu)만 쓸 수 있어요.',
   INVALID_EMAIL: '메일 주소를 다시 확인해 주세요. +가 들어간 별칭 주소는 쓸 수 없어요.',
   EMAIL_TAKEN: '이미 참가한 학교 메일이에요. @skku.edu와 @g.skku.edu는 같은 계정으로 봐요.',
+  EMAIL_NOT_REGISTERED: '이 학교 메일로 가입한 계정이 없어요. 메일 주소를 확인하거나 참가 신청을 해 주세요.',
+};
+
+/** verify: 참가 신청·재인증(아직 안 쓴 메일). reset: 비밀번호 재설정(가입한 메일). */
+export type CodePurpose = 'verify' | 'reset';
+
+const HINTS: Record<CodePurpose, string> = {
+  verify: '@skku.edu 또는 @g.skku.edu. 같은 ID의 두 주소는 한 사람으로 봐요.',
+  reset: '가입할 때 인증한 학교 메일이에요. @skku.edu와 @g.skku.edu 어느 쪽을 써도 돼요.',
 };
 
 /** 코드 확인 단계(가입·재인증 제출)에서 나오는 오류 중 코드 칸에 보여 줄 것. */
@@ -41,9 +50,10 @@ interface SchoolEmailFieldsProps {
   emailError?: string;
   codeError?: string;
   onEmailError: (message: string | undefined) => void;
+  purpose?: CodePurpose;
 }
 
-/** 학교 메일 입력 + 인증 코드 받기 + 코드 입력. 참가 신청과 재인증 화면이 함께 쓴다. */
+/** 학교 메일 입력 + 인증 코드 받기 + 코드 입력. 참가 신청·재인증·비밀번호 재설정 화면이 함께 쓴다. */
 export function SchoolEmailFields({
   email,
   onEmailChange,
@@ -52,6 +62,7 @@ export function SchoolEmailFields({
   emailError,
   codeError: codeErr,
   onEmailError,
+  purpose = 'verify',
 }: SchoolEmailFieldsProps) {
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -71,7 +82,8 @@ export function SchoolEmailFields({
     setSending(true);
     setNotice(null);
     try {
-      const res = await authApi.requestEmailCode({ email: email.trim() });
+      const send = purpose === 'reset' ? authApi.requestPasswordResetCode : authApi.requestEmailCode;
+      const res = await send({ email: email.trim() });
       setSentTo(res.email);
       setResendLeft(res.resend_after);
       onCodeChange('');
@@ -90,11 +102,11 @@ export function SchoolEmailFields({
     <Stack gap={3}>
       <TextField
         label="학교 메일"
-        hint="@skku.edu 또는 @g.skku.edu. 같은 ID의 두 주소는 한 사람으로 봐요."
+        hint={HINTS[purpose]}
         type="email"
         autoComplete="email"
         inputMode="email"
-        placeholder="아이디@g.skku.edu"
+        placeholder="example@g.skku.edu"
         value={email}
         onChange={(e) => {
           onEmailChange(e.target.value);
@@ -144,15 +156,15 @@ export function PrivacyConsent({
       </Text>
       <Text as="div" size="sm" tone="muted">
         <ul className={styles.consent}>
-          <li>수집 항목: 학교 메일 주소</li>
-          <li>이용 목적: 본인 확인과 1인 1계정(중복 가입 방지)</li>
+          <li>수집 항목: 학교 메일 주소, 이름, 학번, 학과</li>
+          <li>이용 목적: 본인 확인, 1인 1계정(중복 가입 방지), 비밀번호 재설정</li>
           <li>보유 기간: 이벤트가 끝나면 지체 없이 파기해요</li>
-          <li>랭킹에는 닉네임만 보이고, 메일은 운영진만 봐요.</li>
+          <li>랭킹에는 닉네임만 보이고, 메일·이름·학번·학과는 운영진만 봐요.</li>
           <li>동의하지 않을 수 있어요. 다만 동의하지 않으면 이벤트에 참가할 수 없어요.</li>
         </ul>
       </Text>
       <Checkbox
-        label="개인정보(학교 메일) 수집·이용에 동의해요 (필수)"
+        label="개인정보(학교 메일·이름·학번·학과) 수집·이용에 동의해요 (필수)"
         checked={checked}
         onChange={onChange}
         aria-invalid={error ? true : undefined}

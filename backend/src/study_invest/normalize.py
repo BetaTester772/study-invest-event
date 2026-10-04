@@ -20,6 +20,16 @@ def normalize_identity(value: str) -> str:
     return unicodedata.normalize("NFKC", folded).strip()
 
 
+def normalize_text(value: str) -> str:
+    """이름·학과 같은 표시용 문자열: NFC 정규화(조합형 한글 → 완성형) + 앞뒤 공백 제거."""
+    return unicodedata.normalize("NFC", value).strip()
+
+
+def normalize_student_id(value: str) -> str:
+    """학번: NFKC(전각 숫자 → 반각) + 앞뒤 공백 제거. 형식(숫자 10자리)은 스키마가 검사한다."""
+    return unicodedata.normalize("NFKC", value).strip()
+
+
 def normalize_nickname(value: str) -> str:
     """닉네임: NFC 정규화(조합형 한글 → 완성형) + 앞뒤 공백 제거. 대소문자는 보존한다."""
     return unicodedata.normalize("NFC", value).strip()
