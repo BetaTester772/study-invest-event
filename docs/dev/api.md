@@ -200,6 +200,7 @@ interface RankingEntry {
 | POST | `/api/auth/register` | `{email, code?, name, student_id, department, nickname, password, privacy_consent}` | 201 `{token, participant: Participant}` / 400 코드 오류, 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN`, `NICKNAME_TAKEN`, 422 `PRIVACY_CONSENT_REQUIRED`, `CODE_REQUIRED`, `WEAK_PASSWORD` |
 | POST | `/api/auth/login` | `{identity, password}` | `{token, participant}` / 401 `INVALID_CREDENTIALS` |
 | POST | `/api/auth/password-reset/code` | `{identity}` | 202 `{email, expires_in, resend_after}` — `identity`는 학번(학교 메일도 받음). 코드는 그 계정의 **등록 메일로만** 가고 `email`은 가린 주소 / 404 `ACCOUNT_NOT_FOUND`(없는 학번, 메일 없는 예전 계정), 429, 503 |
+| POST | `/api/auth/password-reset/verify` | `{identity, code}` | 204 — 새 비밀번호를 받기 전에 코드만 확인한다. 코드는 **쓰지 않으므로** 같은 코드를 `password-reset`에 다시 보낸다. 틀린 횟수는 `password-reset`과 함께 센다 / 400 코드 오류, 404 |
 | POST | `/api/auth/password-reset` | `{identity, code, password}` | `{token, participant}` — 새 비밀번호로 로그인, 다른 기기 로그인은 모두 끊는다(재설정과 동시에 옛 비밀번호로 한 로그인도) / 400 코드 오류, 404, 422 `WEAK_PASSWORD` |
 | POST | `/api/auth/logout` | – | 204 |
 
