@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ApiError, authApi } from '../../../api';
 import { profileErrors } from '../ProfileFields';
 import { validateRegister } from '../RegisterPage';
-import { validateReset } from '../ResetPasswordPage';
+import { validateNewPassword, validateResetCode } from '../ResetPasswordPage';
 import { CodeSender, SchoolEmailFields, codeError, digitsOnly, schoolEmailError } from '../SchoolEmailFields';
 
 describe('schoolEmailError', () => {
@@ -74,15 +74,15 @@ describe('validateRegister', () => {
   });
 });
 
-describe('validateReset', () => {
-  it('needs a student ID, a code and a matching new password', () => {
-    expect(validateReset('2021310123', '123456', 'newpass456', 'newpass456')).toEqual({});
-    expect(Object.keys(validateReset(' ', '1', 'short', 'other')).sort()).toEqual([
-      'code',
-      'confirm',
-      'identity',
-      'password',
-    ]);
+describe('password reset validation', () => {
+  it('checks the student ID and code first', () => {
+    expect(validateResetCode('2021310123', '123456')).toEqual({});
+    expect(Object.keys(validateResetCode(' ', '1')).sort()).toEqual(['code', 'identity']);
+  });
+
+  it('then needs a matching new password', () => {
+    expect(validateNewPassword('newpass456', 'newpass456')).toEqual({});
+    expect(Object.keys(validateNewPassword('short', 'other')).sort()).toEqual(['confirm', 'password']);
   });
 });
 

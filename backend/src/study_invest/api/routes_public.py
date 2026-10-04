@@ -280,6 +280,22 @@ def request_password_reset_code(
     )
 
 
+@router.post("/auth/password-reset/verify", status_code=204)
+def verify_password_reset_code(
+    body: schemas.PasswordResetVerifyRequest, s: SessionDep, real_now: RealNowDep
+) -> Response:
+    """새 비밀번호를 받기 전에 코드만 확인한다. 코드는 쓰지 않는다(재설정 요청에 다시 보낸다).
+
+    틀린 횟수는 재설정 요청과 함께 센다.
+    """
+    participant = auth.account_for_reset(s, body.identity)
+    assert participant.email_address is not None
+    consume_code(
+        s, participant.email_address, body.code, real_now, CodePurpose.RESET_PASSWORD, consume=False
+    )
+    return Response(status_code=204)
+
+
 @router.post("/auth/password-reset", response_model=schemas.AuthResponse)
 def reset_password(
     body: schemas.PasswordResetRequest, s: SessionDep, real_now: RealNowDep

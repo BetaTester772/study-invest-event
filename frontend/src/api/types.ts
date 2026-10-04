@@ -265,6 +265,12 @@ export interface PasswordResetCodeRequest {
   identity: string;
 }
 
+/** 새 비밀번호를 받기 전에 코드만 확인한다(코드는 쓰지 않는다). */
+export interface PasswordResetVerifyRequest {
+  identity: string;
+  code: string;
+}
+
 export interface PasswordResetRequest {
   identity: string;
   code: string;

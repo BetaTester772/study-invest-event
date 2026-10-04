@@ -192,10 +192,13 @@ def consume_code(
     code: str,
     now: datetime,
     purpose: CodePurpose = CodePurpose.VERIFY,
+    consume: bool = True,
 ) -> SchoolEmail:
     """코드를 확인하고 사용 처리한다. 틀리면 InvalidCode(틀린 횟수는 세션에 반영됨).
 
     메일마다 가장 최근 코드만 본다. 그 코드가 다른 용도로 받은 것이면 만료로 본다.
+    consume=False면 확인만 하고 사용 처리하지 않는다(비밀번호 재설정의 코드 확인 단계).
+    틀린 횟수는 똑같이 센다.
     """
     email = parse(raw_email)
     row = s.scalars(
@@ -224,7 +227,8 @@ def consume_code(
     if not hmac.compare_digest(row.code_hash, _hash(email.canonical, code.strip())):
         row.attempts += 1
         raise InvalidCode(MAX_ATTEMPTS - row.attempts)
-    row.consumed_at = now
+    if consume:
+        row.consumed_at = now
     return email
 
 

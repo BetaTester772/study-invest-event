@@ -242,6 +242,12 @@ class PasswordResetCodeRequest(BaseModel):
     """학번(학교 메일도 받는다). 코드는 그 계정의 등록 메일로만 간다."""
 
 
+class PasswordResetVerifyRequest(BaseModel):
+    identity: Identity
+    """코드를 요청할 때와 같은 학번(또는 학교 메일)."""
+    code: Code
+
+
 class PasswordResetRequest(BaseModel):
     identity: Identity
     """코드를 요청할 때와 같은 학번(또는 학교 메일)."""

@@ -532,6 +532,10 @@ def _reset(
     )
 
 
+def _verify_reset(client: TestClient, identity: str, code: str) -> Any:
+    return client.post("/api/auth/password-reset/verify", json={"identity": identity, "code": code})
+
+
 def _login(client: TestClient, identity: str, password: str) -> Any:
     return client.post("/api/auth/login", json={"identity": identity, "password": password})
 
@@ -606,6 +610,41 @@ class TestPasswordReset:
         assert _reset(client, sid, code).status_code == 200
         assert _reset(client, sid, code).json()["detail"]["code"] == "CODE_EXPIRED"
         assert _reset(client, sid, code, "short").status_code == 422
+
+    def test_verify_checks_code_without_using_it(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        register(client, "kim")
+        sid = student_id_for("kim@g.skku.edu")
+        clock.now += timedelta(minutes=1)
+        _reset_code(client, sid)
+        code = mailer.last_code("kim@g.skku.edu")
+        wrong = f"{(int(code) + 1) % 10**6:06d}"
+        r = _verify_reset(client, sid, wrong)
+        assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_CODE"
+        # 확인만 하고 쓰지 않으므로 같은 코드로 다시 확인하고 비밀번호를 바꿀 수 있다
+        assert _verify_reset(client, sid, code).status_code == 204
+        assert _verify_reset(client, sid, code).status_code == 204
+        assert _login(client, sid, "tiger-moon-river-42").status_code == 200
+        assert _reset(client, sid, code).status_code == 200
+        assert _verify_reset(client, sid, code).json()["detail"]["code"] == "CODE_EXPIRED"
+
+    def test_verify_counts_wrong_attempts_with_reset(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        register(client, "kim")
+        sid = student_id_for("kim@g.skku.edu")
+        clock.now += timedelta(minutes=1)
+        _reset_code(client, sid)
+        code = mailer.last_code("kim@g.skku.edu")
+        wrong = f"{(int(code) + 1) % 10**6:06d}"
+        codes = set()
+        for _ in range(10):
+            codes.add(_verify_reset(client, sid, wrong).json()["detail"]["code"])
+            codes.add(_reset(client, sid, wrong).json()["detail"]["code"])
+        assert "CODE_ATTEMPTS_EXCEEDED" in codes
+        assert _verify_reset(client, sid, code).json()["detail"]["code"] == "CODE_ATTEMPTS_EXCEEDED"
+        assert _reset(client, sid, code).json()["detail"]["code"] == "CODE_ATTEMPTS_EXCEEDED"
 
     def test_cooldown_shared_with_signup_code(self, client: TestClient) -> None:
         register(client, "kim")  # 방금 가입 코드를 받았다

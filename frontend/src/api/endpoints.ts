@@ -21,6 +21,7 @@ import type {
   MyEmailCodeRequest,
   PasswordResetCodeRequest,
   PasswordResetRequest,
+  PasswordResetVerifyRequest,
   Portfolio,
   PriceOverrideRequest,
   PricePoint,
@@ -51,6 +52,8 @@ export const authApi = {
     request<EmailCodeResponse>('/auth/email-code', { method: 'POST', body }),
   requestPasswordResetCode: (body: PasswordResetCodeRequest) =>
     request<EmailCodeResponse>('/auth/password-reset/code', { method: 'POST', body }),
+  verifyPasswordResetCode: (body: PasswordResetVerifyRequest) =>
+    request<void>('/auth/password-reset/verify', { method: 'POST', body }),
   resetPassword: (body: PasswordResetRequest) =>
     request<AuthResponse>('/auth/password-reset', { method: 'POST', body }),
   register: (body: RegisterRequest) => request<AuthResponse>('/auth/register', { method: 'POST', body }),
