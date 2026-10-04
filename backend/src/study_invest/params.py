@@ -42,6 +42,8 @@ CALM_ROUNDS_MAX = 100
 """코인 초반 안정기 회차 수 파라미터의 최대값."""
 STOCK_NOISE_MAX = 2.0
 """주식 매수지분 잡음 세기 τ 파라미터의 최대값."""
+NEWS_RATE_MAX = 1.0
+"""호재·악재 효과 크기의 최대값(±100%)."""
 
 STOCK_DAILY_LIMIT = Fraction(3, 10)
 """주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 감도 계수와 별개로 고정."""
@@ -85,6 +87,15 @@ class EventParams:
     """매수지분 잡음 세기 τ: Bᵢ″ = Bᵢ′ × exp(τ·(Gᵢ − γ)), Gᵢ ~ Gumbel(0, 1). 0이면 잡음 없음
     (변동률이 당일 매수만으로 결정된다). 0.1이면 매수가 전혀 없을 때 종목당 대략 ±5%(5~95%)."""
 
+    # 호재·악재 (03-pricing §3)
+    news_probability: float = 0.50
+    """정산 때 다음 운영일(반영일이 있는 날)에 무작위 뉴스 1건이 생길 확률. 0이면 무작위 뉴스 없음
+    (관리자가 쓴 뉴스만). 호재·악재는 반반, 종목은 주식 4종목 중 균등."""
+    news_rate_min: float = 0.10
+    """무작위 뉴스 효과 크기의 하한(+10% / -10%)."""
+    news_rate_max: float = 0.20
+    """무작위 뉴스 효과 크기의 상한(+20% / -20%). 하한보다 작게 저장돼 있으면 둘을 바꿔 쓴다."""
+
     # 거래 (04-trading §2)
     daily_buy_limit_ratio: float = 0.40
     """1일 1종목 매수 상한(총자산 대비 비율)."""
@@ -111,6 +122,9 @@ class EventParams:
             "coin_calm_floor": self.coin_calm_floor,
             "stock_sensitivity": self.stock_sensitivity,
             "stock_noise_scale": self.stock_noise_scale,
+            "news_probability": self.news_probability,
+            "news_rate_min": self.news_rate_min,
+            "news_rate_max": self.news_rate_max,
             "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
         }
         for name, value in floats.items():  # NaN·Infinity는 모든 계산을 깨뜨린다
@@ -153,6 +167,16 @@ class EventParams:
             (
                 0 <= self.virtual_liquidity <= AMOUNT_MAX,
                 f"virtual_liquidity must be in [0, {AMOUNT_MAX:,}]",
+            ),
+            (0 <= self.news_probability <= 1, "news_probability must be in [0, 1]"),
+            # 하한·상한은 따로 검사한다(엇갈려 저장돼도 배치가 멈추지 않게. 추출 때 정렬해 쓴다).
+            (
+                0 < self.news_rate_min <= NEWS_RATE_MAX,
+                f"news_rate_min must be in (0, {NEWS_RATE_MAX:g}]",
+            ),
+            (
+                0 < self.news_rate_max <= NEWS_RATE_MAX,
+                f"news_rate_max must be in (0, {NEWS_RATE_MAX:g}]",
             ),
             (0 < self.daily_buy_limit_ratio <= 1, "daily_buy_limit_ratio must be in (0, 1]"),
             (

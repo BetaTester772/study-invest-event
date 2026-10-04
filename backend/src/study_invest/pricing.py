@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Literal
@@ -92,8 +92,39 @@ class StockMove:
     concentration: Fraction | None
     """쏠림 지수 rᵢ = n·Bᵢ″ / B_total (Bᵢ″ = Bᵢ′ × 잡음 배수). B_total = 0이면 None."""
     rate: Fraction
+    """쏠림 변동률(±30% 클램프 뒤). 뉴스 효과는 포함하지 않는다."""
+    news_rate: Fraction | None
+    """그날 호재·악재 효과(부호 포함). 뉴스가 없으면 None."""
+    total_rate: Fraction
+    """실제 적용 변동률 = (1 + rate)(1 + news_rate) − 1."""
     old_price: int
     new_price: int
+
+
+@dataclass(frozen=True)
+class NewsDraw:
+    """무작위 뉴스 추출 결과(03-pricing §3). 제목은 서비스가 headline_pick으로 고른다."""
+
+    code: str
+    kind: Literal["good", "bad"]
+    rate: float
+    """효과 크기(양수, 0.01 단위)."""
+    headline_pick: float
+    """제목 선택용 균등난수 U(0, 1)."""
+
+
+def draw_news(codes: Sequence[str], params: EventParams, rng: random.Random) -> NewsDraw | None:
+    """균등난수로 다음 운영일 뉴스를 뽑는다. u ≥ news_probability면 None(뉴스 없음).
+
+    순서: 발생 여부 → 종목(균등) → 호재·악재(반반) → 크기 U(min, max)를 0.01 단위로 → 제목.
+    """
+    if not codes or rng.random() >= params.news_probability:
+        return None
+    code = codes[min(int(rng.random() * len(codes)), len(codes) - 1)]
+    kind: Literal["good", "bad"] = "good" if rng.random() < 0.5 else "bad"
+    lo, hi = sorted((params.news_rate_min, params.news_rate_max))
+    rate = min(hi, max(lo, round(lo + (hi - lo) * rng.random(), 2)))
+    return NewsDraw(code, kind, rate, rng.random())
 
 
 def gumbel(rng: random.Random) -> float:
@@ -130,22 +161,37 @@ def next_stock_price(price: int, rate: Fraction, min_price: int) -> int:
     return max(min_price, min(round_half_up(Fraction(price) * (1 + rate)), PRICE_MAX))
 
 
+def combined_rate(rate: Fraction, news_rate: Fraction | None) -> Fraction:
+    """쏠림 변동률에 뉴스 효과를 곱으로 얹는다: (1 + rate)(1 + news) − 1. ±30%는 쏠림에만."""
+    if news_rate is None:
+        return rate
+    return (1 + rate) * (1 + news_rate) - 1
+
+
 def settle_stocks(
     prices: Mapping[str, int],
     buy_amounts: Mapping[str, int],
     params: EventParams,
     noise: Mapping[str, float] | None = None,
+    news: Mapping[str, Fraction] | None = None,
 ) -> dict[str, StockMove]:
     """주식 전 종목의 다음 시작가를 산출한다. 기준선은 종목 수(4)로 나눈 평균이다.
 
     noise는 draw_stock_noise()가 뽑은 종목별 잡음 배수다. None이면 잡음 없이(τ = 0과 같게)
     당일 매수만으로 결정한다. 호출자가 뽑아 넘기므로 정산 로그에 그대로 남길 수 있다.
+    news는 그날 호재·악재의 부호 있는 효과(종목 → 변동률)다. 쏠림 변동률(클램프 뒤)에 곱으로 얹는다.
     """
     if not prices:
         return {}
     unknown = set(buy_amounts) - set(prices)
     if unknown:
         raise ValueError(f"buy amounts for unknown stocks: {sorted(unknown)}")
+    if news:
+        unknown = set(news) - set(prices)
+        if unknown:
+            raise ValueError(f"news for unknown stocks: {sorted(unknown)}")
+        if any(not (-1 < r <= 1) for r in news.values()):
+            raise ValueError("news rates must be in (-1, 1]")
     if noise is not None:
         missing = set(prices) - set(noise)
         if missing:
@@ -169,6 +215,8 @@ def settle_stocks(
         else:
             concentration = n * weights[code] / total
             rate = stock_rate(concentration, params.stock_sensitivity)
+        news_rate = news.get(code) if news else None
+        total_rate = combined_rate(rate, news_rate)
         moves[code] = StockMove(
             code=code,
             buy_amount=buy_amounts.get(code, 0),
@@ -176,7 +224,9 @@ def settle_stocks(
             noise_factor=None if noise is None else noise[code],
             concentration=concentration,
             rate=rate,
+            news_rate=news_rate,
+            total_rate=total_rate,
             old_price=price,
-            new_price=next_stock_price(price, rate, params.stock_min_price),
+            new_price=next_stock_price(price, total_rate, params.stock_min_price),
         )
     return moves

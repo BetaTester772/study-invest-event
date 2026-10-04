@@ -19,6 +19,33 @@ export type RejectReason =
 export type CertStatus = 'pending' | 'approved' | 'rejected';
 export type PriceSource = 'initial' | 'settlement' | 'carry_over' | 'manual';
 
+export type NewsKind = 'good' | 'bad';
+
+/** 호재·악재. 발표 운영일 09:00 공시와 함께 보이고 그날 18:00 정산에 반영된다. */
+export interface NewsItem {
+  id: number;
+  day: string;
+  code: string;
+  name: string;
+  kind: NewsKind;
+  /** 효과 크기(양수). 호재면 +rate, 악재면 -rate가 그날 변동률에 곱으로 얹힌다. */
+  rate: number;
+  headline: string;
+}
+
+export interface AdminNewsItem extends NewsItem {
+  source: 'random' | 'manual';
+  created_at: string;
+  /** 발표일 정산이 끝났으면 바꾸거나 지울 수 없다. */
+  settled: boolean;
+}
+
+export interface ManualNewsRequest {
+  kind: NewsKind;
+  rate: number;
+  headline: string;
+}
+
 export interface Instrument {
   code: string;
   name: string;
@@ -28,6 +55,8 @@ export interface Instrument {
   previous_price: number | null;
   change_rate: number | null;
   day: string | null;
+  /** 최신 공시일의 호재·악재. 없으면 null. */
+  news: NewsItem | null;
 }
 
 export interface PricePoint {
@@ -335,6 +364,11 @@ export interface Params {
   virtual_liquidity: number;
   /** 매수지분 잡음 세기 τ (0~2). 0이면 잡음 없음. */
   stock_noise_scale: number;
+  /** 정산 때 다음 운영일 무작위 뉴스가 생길 확률(0~1). */
+  news_probability: number;
+  /** 무작위 뉴스 효과 크기 범위(0~1]. */
+  news_rate_min: number;
+  news_rate_max: number;
   daily_buy_limit_ratio: number;
   reward_cash: number;
   certification_cutoff: string;
@@ -353,7 +387,12 @@ export interface SettlementStock {
   /** Gumbel noise multiplier on the buy share; null when noise is off or for older logs. */
   noise_factor: number | null;
   concentration: number | null;
+  /** Crowding rate after the ±30% clamp, before news. */
   rate: number;
+  /** Signed news effect that day; null when there was none. */
+  news_rate: number | null;
+  /** Applied rate (1 + rate)(1 + news_rate) − 1; null for logs older than the news feature. */
+  total_rate: number | null;
   old_price: number;
   new_price: number;
 }

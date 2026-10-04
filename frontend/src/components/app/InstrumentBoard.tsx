@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Instrument } from '../../api';
 import { Money, PriceChange, Skeleton } from '../ui';
-import { KindBadge } from './badges';
+import { KindBadge, NewsBadge } from './badges';
 import styles from './InstrumentBoard.module.css';
 
 function Row({ ins }: { ins: Instrument }) {
@@ -11,9 +11,11 @@ function Row({ ins }: { ins: Instrument }) {
         <span className={styles.name}>
           <span className={styles.title}>{ins.name}</span>
           <span className={styles.alias}>{ins.alias}</span>
+          {ins.news && <span className={styles.headline}>{ins.news.headline}</span>}
         </span>
         <span className={styles.kind}>
           <KindBadge kind={ins.kind} />
+          {ins.news && <NewsBadge kind={ins.news.kind} rate={ins.news.rate} />}
         </span>
         <span className={styles.price}>
           <Money value={ins.price} display="md" />

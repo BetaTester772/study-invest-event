@@ -25,7 +25,9 @@ from study_invest.params import (
 from study_invest.pricing import (
     EULER_GAMMA,
     coin_rate,
+    combined_rate,
     draw_coin,
+    draw_news,
     draw_stock_noise,
     gumbel,
     is_calm_round,
@@ -266,14 +268,6 @@ class TestStockNoise:
                 settle_stocks(PRICES, {}, P, noise=dict.fromkeys(PRICES, bad))
 
     def test_gumbel_draw(self) -> None:
-        class Seq(random.Random):
-            def __init__(self, values: list[float]) -> None:
-                super().__init__(0)
-                self.values = values
-
-            def random(self) -> float:
-                return self.values.pop(0)
-
         assert gumbel(Seq([0.0, 0.5])) == pytest.approx(0.36651292)  # U=0은 버린다
         assert gumbel(Seq([math.exp(-1)])) == pytest.approx(0.0)  # 최빈값
         # 균등난수 0.5 고정이면 모든 종목이 같은 배수 → 지분 불변
@@ -305,6 +299,83 @@ class StubHalf(random.Random):
 
     def random(self) -> float:
         return 0.5
+
+
+class Seq(random.Random):
+    """정해진 균등난수를 순서대로 돌려준다."""
+
+    def __init__(self, values: list[float]) -> None:
+        super().__init__(0)
+        self.values = values
+
+    def random(self) -> float:
+        return self.values.pop(0)
+
+
+class TestNews:
+    """03-pricing §3: 호재·악재는 쏠림 변동률에 곱으로 얹힌다."""
+
+    buys: ClassVar[dict[str, int]] = {
+        "SAMSU": 2000 * MAN,
+        "SKLOW": 1200 * MAN,
+        "MIRAE": 600 * MAN,
+        "LB": 200 * MAN,
+    }
+
+    def test_combined_rate(self) -> None:
+        assert combined_rate(Fraction(1, 10), None) == Fraction(1, 10)
+        assert combined_rate(Fraction(1, 10), Fraction(-1, 5)) == Fraction(-12, 100)
+
+    def test_news_multiplies_after_clamp(self) -> None:
+        """SAMSU는 쏠림으로 -30%(클램프)인데 호재 +15%가 그 위에 곱해져 -19.5%가 된다."""
+        moves = settle_stocks(PRICES, self.buys, P0, news={"SAMSU": Fraction(15, 100)})
+        samsu = moves["SAMSU"]
+        assert samsu.rate == Fraction(-3, 10)
+        assert samsu.news_rate == Fraction(15, 100)
+        assert samsu.total_rate == Fraction(-195, 1000)
+        assert samsu.new_price == 60_380  # 75,000 × 0.805 = 60,375 → 10원 사사오입
+        lb = moves["LB"]
+        assert lb.news_rate is None and lb.total_rate == lb.rate == Fraction(24, 100)
+        assert lb.new_price == 17_360  # §2.4 표와 같다
+
+    def test_bad_news_can_exceed_daily_limit(self) -> None:
+        """뉴스는 ±30% 클램프에 묶이지 않는다: 악재 -20% × 쏠림 -30% → -44%."""
+        moves = settle_stocks(PRICES, self.buys, P0, news={"SAMSU": Fraction(-1, 5)})
+        assert moves["SAMSU"].total_rate == Fraction(-44, 100)
+        assert moves["SAMSU"].new_price == 42_000
+
+    def test_news_validation(self) -> None:
+        with pytest.raises(ValueError):
+            settle_stocks(PRICES, {}, P, news={"BYUNG": Fraction(1, 10)})
+        with pytest.raises(ValueError):
+            settle_stocks(PRICES, {}, P, news={"LB": Fraction(-1)})
+
+    def test_draw_news_sequence(self) -> None:
+        """발생 여부 → 종목 → 호재·악재 → 크기 → 제목 순으로 균등난수를 쓴다."""
+        codes = [i.code for i in STOCKS]
+        assert draw_news(codes, P, Seq([0.5])) is None  # u ≥ 0.5 → 뉴스 없음
+        draw = draw_news(codes, P, Seq([0.1, 0.3, 0.2, 0.5, 0.9]))
+        assert draw is not None
+        assert (draw.code, draw.kind, draw.rate, draw.headline_pick) == ("SKLOW", "good", 0.15, 0.9)
+        bad = draw_news(codes, P, Seq([0.0, 0.99, 0.5, 0.333, 0.0]))
+        assert bad is not None and (bad.code, bad.kind, bad.rate) == ("LB", "bad", 0.13)
+        # 하한·상한이 엇갈려 저장돼 있어도 정렬해 쓴다
+        swapped = replace(P, news_rate_min=0.2, news_rate_max=0.1)
+        d = draw_news(codes, swapped, Seq([0.0, 0.0, 0.0, 0.0, 0.0]))
+        assert d is not None and d.rate == 0.1
+        assert draw_news([], P, Seq([])) is None
+
+    def test_params_range(self) -> None:
+        assert (P.news_probability, P.news_rate_min, P.news_rate_max) == (0.5, 0.1, 0.2)
+        EventParams(news_probability=0, news_rate_min=1, news_rate_max=1)
+        for bad in (
+            {"news_probability": -0.1},
+            {"news_probability": 1.1},
+            {"news_rate_min": 0},
+            {"news_rate_max": 1.5},
+        ):
+            with pytest.raises(ValueError):
+                EventParams(**bad)
 
 
 class TestCalendar:

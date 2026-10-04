@@ -297,6 +297,121 @@ class TestSettlement:
         assert event["market"]["day_settled"] is True and event["market"]["is_open"] is False
 
 
+class TestNews:
+    """호재·악재: 전날 정산에서 생성 → 09:00 공시와 함께 발표 → 18:00 정산에 곱으로 반영."""
+
+    def test_random_news_is_drawn_at_settlement_and_applied_next_day(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        open_day(client, clock, D1)
+        assert client.get("/api/news").json() == []
+        # 코인(p, X) → 주식 잡음 4개 → 뉴스(발생, 종목, 종류, 크기, 제목) 순서로 난수를 쓴다
+        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+        result = settle_day(client, clock, D1)
+        nxt = result["detail"]["news"]["next"]
+        assert (nxt["day"], nxt["code"], nxt["kind"], nxt["rate"]) == (
+            D2.isoformat(),
+            "SKLOW",
+            "good",
+            0.15,
+        )
+        assert "SK로우닉스" in nxt["headline"]
+        assert result["detail"]["news"]["applied"] == []
+        # 공시 전에는 참가자에게 보이지 않는다(관리자 목록에는 보인다)
+        assert client.get("/api/news").json() == []
+        assert all(i["news"] is None for i in client.get("/api/instruments").json())
+        listed = client.get("/api/admin/news", headers=admin).json()
+        assert [(n["code"], n["source"], n["settled"]) for n in listed] == [
+            ("SKLOW", "random", False)
+        ]
+        open_day(client, clock, D2)
+        items = client.get("/api/news").json()
+        assert [(n["day"], n["code"], n["kind"], n["rate"], n["name"]) for n in items] == [
+            (D2.isoformat(), "SKLOW", "good", 0.15, "SK로우닉스")
+        ]
+        ins = {i["code"]: i for i in client.get("/api/instruments").json()}
+        assert ins["SKLOW"]["news"]["headline"] == nxt["headline"]
+        assert ins["SAMSU"]["news"] is None and ins["SKLOW"]["price"] == 170_000
+        # D2 정산: 아무도 안 사면 쏠림 0% → SKLOW만 +15%
+        rng.queue = [0.9, 0.0]
+        result = settle_day(client, clock, D2)
+        assert [n["code"] for n in result["detail"]["news"]["applied"]] == ["SKLOW"]
+        new = result["detail"]["new_prices"]
+        assert new["SKLOW"] == 195_500 and new["SAMSU"] == 75_000
+        logs = client.get("/api/admin/settlements", headers=admin).json()
+        row = next(x for x in logs[1]["stocks"] if x["code"] == "SKLOW")
+        assert (row["rate"], row["news_rate"], row["total_rate"]) == (0, 0.15, 0.15)
+        other = next(x for x in logs[1]["stocks"] if x["code"] == "SAMSU")
+        assert other["news_rate"] is None and other["total_rate"] == 0
+
+    def test_manual_news_overrides_random_and_locks_after_settlement(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        open_day(client, clock, D1)
+        r = client.put(
+            f"/api/admin/news/{D2}/LB",
+            json={"kind": "bad", "rate": 0.2, "headline": "  LB,  공장 화재 "},
+            headers=admin,
+        )
+        assert r.status_code == 200, r.text
+        assert (r.json()["source"], r.json()["settled"], r.json()["headline"]) == (
+            "manual",
+            False,
+            "LB, 공장 화재",
+        )
+        # 무작위 뉴스가 나올 난수를 넣어도 D2에 이미 뉴스가 있으므로 만들지 않는다
+        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+        result = settle_day(client, clock, D1)
+        assert result["detail"]["news"]["next"] is None
+        assert [n["code"] for n in client.get("/api/admin/news", headers=admin).json()] == ["LB"]
+        open_day(client, clock, D2)
+        assert client.get("/api/news").json()[0]["kind"] == "bad"
+        # 공시된 날이라도 정산 전이면 덮어쓸 수 있다
+        r = client.put(
+            f"/api/admin/news/{D2}/LB",
+            json={"kind": "good", "rate": 0.1, "headline": "정정: 화재 아님"},
+            headers=admin,
+        )
+        assert r.status_code == 200 and r.json()["kind"] == "good"
+        rng.queue = [0.9, 0.0]
+        assert settle_day(client, clock, D2)["detail"]["new_prices"]["LB"] == 15_400  # ×1.1
+        r = client.put(
+            f"/api/admin/news/{D2}/LB",
+            json={"kind": "good", "rate": 0.1, "headline": "x"},
+            headers=admin,
+        )
+        assert r.json()["detail"]["code"] == "DAY_ALREADY_SETTLED"
+        r = client.delete(f"/api/admin/news/{D2}/LB", headers=admin)
+        assert r.json()["detail"]["code"] == "DAY_ALREADY_SETTLED"
+        assert client.get("/api/admin/news", headers=admin).json()[0]["settled"] is True
+        audit = client.get("/api/admin/audit", headers=admin).json()
+        assert {a["action"] for a in audit} >= {"news.manual", "market.settle"}
+
+    def test_manual_news_validation_and_delete(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        def put(day: date, code: str, **body: Any) -> Any:
+            return client.put(
+                f"/api/admin/news/{day}/{code}",
+                json={"kind": "good", "rate": 0.1, "headline": "x", **body},
+                headers=admin,
+            )
+
+        assert put(D1, "BYUNG").json()["detail"]["code"] == "NOT_A_STOCK"
+        assert put(D1, "NOPE").status_code == 404
+        assert put(LAST, "LB").json()["detail"]["code"] == "NO_ROUND"
+        assert put(date(2026, 10, 5), "LB").json()["detail"]["code"] == "NOT_OPERATING_DAY"
+        assert put(D1, "LB", rate=0).json()["detail"]["code"] == "INVALID_RATE"
+        assert put(D1, "LB", rate=1.5).json()["detail"]["code"] == "INVALID_RATE"
+        assert put(D1, "LB", headline="   ").json()["detail"]["code"] == "HEADLINE_REQUIRED"
+        assert put(D1, "LB", headline="x" * 121).status_code == 422
+        assert put(D1, "LB", kind="meh").status_code == 422
+        assert put(D1, "LB").status_code == 200
+        assert client.delete(f"/api/admin/news/{D1}/LB", headers=admin).status_code == 204
+        assert client.delete(f"/api/admin/news/{D1}/LB", headers=admin).status_code == 404
+        assert client.get("/api/admin/news", headers=admin).json() == []
+
+
 class TestQaAdvancePrice:
     URL = "/api/admin/qa/advance-price"
 

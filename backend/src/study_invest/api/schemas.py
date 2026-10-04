@@ -120,6 +120,19 @@ class EventInfo(Schema):
     signup: SignupInfo
 
 
+class NewsItem(Schema):
+    """호재·악재. 발표 운영일 09:00 공시와 함께 보이고 그날 18:00 정산에 반영된다."""
+
+    id: int
+    day: date
+    code: str
+    name: str
+    kind: Literal["good", "bad"]
+    rate: float
+    """효과 크기(양수). 호재면 +rate, 악재면 −rate가 그날 변동률에 곱으로 얹힌다."""
+    headline: str
+
+
 class Instrument(Schema):
     code: str
     name: str
@@ -129,6 +142,8 @@ class Instrument(Schema):
     previous_price: int | None
     change_rate: float | None
     day: date | None
+    news: NewsItem | None = None
+    """최신 공시일(day)의 호재·악재. 없으면 null."""
 
 
 class PricePoint(Schema):
@@ -427,6 +442,11 @@ class Params(Schema):
     virtual_liquidity: int
     stock_noise_scale: float
     """매수지분 잡음 세기 τ(0~2). 0이면 잡음 없이 당일 매수만으로 변동률을 정한다."""
+    news_probability: float
+    """정산 때 다음 운영일 무작위 뉴스가 생길 확률(0~1). 0이면 관리자 작성 뉴스만."""
+    news_rate_min: float
+    news_rate_max: float
+    """무작위 뉴스 효과 크기 범위(0~1]."""
     daily_buy_limit_ratio: float
     reward_cash: int
     certification_cutoff: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -448,6 +468,20 @@ class TradingAccess(BaseModel):
 class ManualPriceRequest(BaseModel):
     price: int = Field(strict=True)
     reason: str = Field(max_length=500)
+
+
+class ManualNewsRequest(BaseModel):
+    kind: Literal["good", "bad"]
+    rate: float
+    """효과 크기(양수, ≤ 1). 0.15 = ±15%."""
+    headline: str = Field(max_length=120)
+
+
+class AdminNewsItem(NewsItem):
+    source: Literal["random", "manual"]
+    created_at: datetime
+    settled: bool
+    """발표일 정산이 끝났는지(끝났으면 바꾸거나 지울 수 없다)."""
 
 
 class BatchRequest(BaseModel):
@@ -472,6 +506,11 @@ class StockSettlement(Schema):
     """매수지분 잡음 배수 exp(τ·(G − γ)). 잡음 없음(τ = 0)이거나 도입 전 기록이면 None."""
     concentration: float | None
     rate: float
+    """쏠림 변동률(클램프 뒤, 뉴스 제외)."""
+    news_rate: float | None = None
+    """그날 호재·악재 효과(부호 포함). 없으면 None."""
+    total_rate: float | None = None
+    """실제 적용 변동률 (1 + rate)(1 + news_rate) − 1. 뉴스 도입 전 기록은 None(= rate)."""
     old_price: int
     new_price: int
 

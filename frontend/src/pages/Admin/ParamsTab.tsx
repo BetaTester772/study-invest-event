@@ -75,6 +75,27 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
     group: 'stock',
   },
   {
+    key: 'news_probability',
+    label: '무작위 뉴스 확률',
+    hint: '0~1. 정산 때 다음 운영일에 뉴스 1건이 생길 확률. 0이면 관리자가 쓴 뉴스만. 기본 0.5',
+    kind: 'float',
+    group: 'news',
+  },
+  {
+    key: 'news_rate_min',
+    label: '뉴스 효과 하한',
+    hint: '소수. 0.1 = ±10%',
+    kind: 'float',
+    group: 'news',
+  },
+  {
+    key: 'news_rate_max',
+    label: '뉴스 효과 상한',
+    hint: '소수. 0.2 = ±20%',
+    kind: 'float',
+    group: 'news',
+  },
+  {
     key: 'daily_buy_limit_ratio',
     label: '1일 1종목 매수 상한',
     hint: '소수. 0.4 = 총자산의 40%',
@@ -103,6 +124,12 @@ const GROUPS: { id: string; title: string; description: string }[] = [
     title: '주식 가격',
     description:
       '종목별 매수 쏠림을 변동률로 바꾸는 방식이에요. 잡음 세기는 매수지분에 작은 무작위 배수를 곱해 주문이 없어도 가격이 조금씩 움직이게 해요.',
+  },
+  {
+    id: 'news',
+    title: '호재·악재',
+    description:
+      '전날 18:00 정산 때 다음 운영일 뉴스를 무작위로 뽑는 방식이에요. 호재·악재는 반반, 종목은 주식 4종목 중 균등이고, 효과 크기는 하한~상한 사이에서 1% 단위로 뽑아요. 직접 쓰는 뉴스는 호재·악재 탭에서요.',
   },
   { id: 'trade', title: '거래와 인증', description: '주문 한도, 인증 보상과 마감이에요.' },
 ];

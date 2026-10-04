@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..models import REJECT_MESSAGES, Order, StudyCertification
+from ..instruments import BY_CODE
+from ..models import REJECT_MESSAGES, NewsItem, Order, StudyCertification
 from ..services.trading import PortfolioView
 from . import schemas
 
@@ -64,4 +65,26 @@ def portfolio(p: PortfolioView) -> schemas.Portfolio:
         buy_limit=schemas.BuyLimit(
             ratio=p.limit_ratio, limit_amount=p.limit_amount, remaining=p.remaining
         ),
+    )
+
+
+def news_item(n: NewsItem) -> schemas.NewsItem:
+    return schemas.NewsItem(
+        id=n.id,
+        day=n.day,
+        code=n.code,
+        name=BY_CODE[n.code].name if n.code in BY_CODE else n.code,
+        kind=n.kind.value,
+        rate=n.rate,
+        headline=n.headline,
+    )
+
+
+def admin_news_item(n: NewsItem, settled: bool) -> schemas.AdminNewsItem:
+    base = news_item(n)
+    return schemas.AdminNewsItem(
+        **base.model_dump(),
+        source=n.source.value,
+        created_at=n.created_at,
+        settled=settled,
     )

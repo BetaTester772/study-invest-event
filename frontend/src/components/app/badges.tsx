@@ -1,4 +1,5 @@
-import type { CertStatus, OrderStatus, ParticipantStatus, Side } from '../../api';
+import type { CertStatus, NewsKind, OrderStatus, ParticipantStatus, Side } from '../../api';
+import { formatPercent } from '../../lib/format';
 import { Badge } from '../ui';
 
 export const CERT_STATUS_LABEL: Record<CertStatus, string> = {
@@ -45,4 +46,16 @@ export function ParticipantStatusBadge({ status }: { status: ParticipantStatus }
 
 export function KindBadge({ kind }: { kind: 'stock' | 'coin' }) {
   return <Badge tone={kind === 'coin' ? 'info' : 'neutral'}>{kind === 'coin' ? '코인' : '주식'}</Badge>;
+}
+
+export const NEWS_KIND_LABEL: Record<NewsKind, string> = { good: '호재', bad: '악재' };
+
+/** "호재 +15%" / "악재 -15%". The sign follows the kind; `rate` is the magnitude. */
+export function NewsBadge({ kind, rate, size }: { kind: NewsKind; rate: number; size?: 'sm' | 'md' }) {
+  const signed = kind === 'good' ? rate : -rate;
+  return (
+    <Badge tone={kind === 'good' ? 'up' : 'down'} size={size}>
+      {NEWS_KIND_LABEL[kind]} {formatPercent(signed, { digits: 0, sign: true })}
+    </Badge>
+  );
 }

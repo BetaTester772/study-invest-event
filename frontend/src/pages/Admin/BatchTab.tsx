@@ -76,7 +76,19 @@ const STOCK_COLUMNS: Column<SettlementStock>[] = [
     numeric: true,
     render: (s) => (s.concentration == null ? '—' : formatNumber(s.concentration, 3)),
   },
-  { key: 'rate', header: '변동률', numeric: true, render: (s) => <PriceChange rate={s.rate} /> },
+  { key: 'rate', header: '쏠림 변동률', numeric: true, render: (s) => <PriceChange rate={s.rate} /> },
+  {
+    key: 'news',
+    header: '뉴스',
+    numeric: true,
+    render: (s) => (s.news_rate == null ? '—' : <PriceChange rate={s.news_rate} />),
+  },
+  {
+    key: 'total',
+    header: '적용 변동률',
+    numeric: true,
+    render: (s) => <PriceChange rate={s.total_rate ?? s.rate} />,
+  },
   { key: 'old', header: '이전가', numeric: true, hideOnMobile: true, render: (s) => <Money value={s.old_price} /> },
   { key: 'new', header: '새 시작가', numeric: true, render: (s) => <Money value={s.new_price} /> },
 ];

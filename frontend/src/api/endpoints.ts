@@ -1,6 +1,7 @@
 import { request } from './client';
 import type {
   AdminCertification,
+  AdminNewsItem,
   AdminParticipant,
   AuditEntry,
   AuthResponse,
@@ -13,6 +14,8 @@ import type {
   EventInfo,
   Instrument,
   LoginRequest,
+  ManualNewsRequest,
+  NewsItem,
   Order,
   OrderRequest,
   Params,
@@ -43,6 +46,8 @@ export const publicApi = {
   event: () => request<EventInfo>('/event'),
   instruments: () => request<Instrument[]>('/instruments'),
   history: (code: string) => request<PricePoint[]>(`/instruments/${encodeURIComponent(code)}/history`),
+  /** 공시된 운영일까지의 호재·악재, 최신 날짜부터. */
+  news: () => request<NewsItem[]>('/news'),
   /** Sends the Bearer token when logged in so the server can mark `is_me`. */
   ranking: () => request<Ranking>('/ranking', { auth: 'optional' }),
 };
@@ -97,6 +102,11 @@ export const adminApi = {
     request<AdminCertification>(`/admin/certifications/${id}/review`, { method: 'POST', auth: 'admin', body }),
   params: () => request<Params>('/admin/params', { auth: 'admin' }),
   updateParams: (body: Params) => request<Params>('/admin/params', { method: 'PUT', auth: 'admin', body }),
+  news: () => request<AdminNewsItem[]>('/admin/news', { auth: 'admin' }),
+  setNews: (day: string, code: string, body: ManualNewsRequest) =>
+    request<AdminNewsItem>(`/admin/news/${day}/${encodeURIComponent(code)}`, { method: 'PUT', auth: 'admin', body }),
+  deleteNews: (day: string, code: string) =>
+    request<void>(`/admin/news/${day}/${encodeURIComponent(code)}`, { method: 'DELETE', auth: 'admin' }),
   overridePrice: (day: string, code: string, body: PriceOverrideRequest) =>
     request<PricePoint>(`/admin/prices/${day}/${encodeURIComponent(code)}`, { method: 'PUT', auth: 'admin', body }),
   batchOpen: (day?: string) =>

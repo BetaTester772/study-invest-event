@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { meApi, publicApi, useApi, useRefetchOnOpen, type PricePoint } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { KindBadge } from '../../components/app/badges';
+import { KindBadge, NewsBadge } from '../../components/app/badges';
 import { LoadError } from '../../components/app/LoadError';
 import {
   Badge,
@@ -97,7 +97,17 @@ export function InstrumentPage() {
                   {instrument.alias}
                 </Text>
                 <KindBadge kind={instrument.kind} />
+                {instrument.news && <NewsBadge kind={instrument.news.kind} rate={instrument.news.rate} />}
               </Stack>
+              {instrument.news && (
+                <Text as="p" tone="ink">
+                  {instrument.news.headline}
+                  <Text as="span" size="sm" tone="muted">
+                    {' '}
+                    · 오늘 18:00 정산 때 변동률에 곱해져요.
+                  </Text>
+                </Text>
+              )}
               <Stack direction="row" gap={3} align="center" wrap>
                 <Money value={instrument.price} display="xl" />
                 <PriceChange rate={instrument.change_rate} pill />
