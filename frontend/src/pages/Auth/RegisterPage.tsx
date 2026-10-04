@@ -142,7 +142,7 @@ export function RegisterPage() {
             <TextField
               label="비밀번호"
               type="password"
-              hint="8자 이상. 학교 메일 비밀번호와 다르게 정해 주세요."
+              hint="8자 이상"
               autoComplete="new-password"
               value={form.password}
               onChange={(e) => set('password', e.target.value)}

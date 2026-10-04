@@ -104,7 +104,7 @@ export function ResetPasswordPage() {
             <TextField
               label="새 비밀번호"
               type="password"
-              hint="8자 이상. 학교 메일 비밀번호와 다르게 정해 주세요."
+              hint="8자 이상"
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
