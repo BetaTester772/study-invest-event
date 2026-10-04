@@ -8,12 +8,14 @@ import { ParamsTab } from './ParamsTab';
 import { ParticipantsTab } from './ParticipantsTab';
 import { PriceTab } from './PriceTab';
 import { SimulatorTab } from './SimulatorTab';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 type AdminTab = 'certs' | 'participants' | 'params' | 'batch' | 'price' | 'sim' | 'audit';
 
 function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string | null }) {
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const formRef = useScrollToFormError(error);
   const [checking, setChecking] = useState(false);
 
   const submit = async (e: FormEvent) => {
@@ -46,7 +48,7 @@ function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string |
     <Container size="sm">
       <PageHeader title="관리자" description="관리자 키를 입력하면 이 탭을 닫을 때까지 기억해요." />
       <Card>
-        <form onSubmit={submit} noValidate>
+        <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
             {notice && <Alert tone="warning">{notice}</Alert>}
             <TextField

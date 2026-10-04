@@ -26,6 +26,7 @@ import {
   type Column,
 } from '../../components/ui';
 import { formatNumber, formatPercent } from '../../lib/format';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 const q = (v: number) =>
   v === 0.5
@@ -140,6 +141,7 @@ function SimulatorForm({ options }: { options: SimulateOptions }) {
   const [useCap, setUseCap] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formRef = useScrollToFormError(error);
   const [report, setReport] = useState<SimulationReport | null>(null);
 
   const submit = async (e: FormEvent) => {
@@ -172,7 +174,7 @@ function SimulatorForm({ options }: { options: SimulateOptions }) {
         title="코인 가격 경로 시뮬레이션"
         description="지금 저장된 파라미터로 병더리움 가격 경로를 여러 번 만들어 분포를 확인해요. 초반 안정기 회차도 실제 정산처럼 반영해요."
       >
-        <form onSubmit={submit} noValidate>
+        <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
             {error && <Alert tone="danger">{error}</Alert>}
             <Grid min="12rem" gap={4}>

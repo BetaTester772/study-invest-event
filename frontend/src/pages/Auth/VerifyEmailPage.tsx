@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, useToast } from '../../components/ui';
 import { EMPTY_PROFILE, ProfileFields, profileErrors, trimProfile, type ProfileErrors } from './ProfileFields';
 import { CODE_ERRORS, CodeSender, PrivacyConsent, SchoolEmailFields, codeError, schoolEmailError } from './SchoolEmailFields';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 interface Errors extends ProfileErrors {
   email?: string;
@@ -32,6 +33,7 @@ export function VerifyEmailPage() {
   const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
+  const formRef = useScrollToFormError(errors);
   const [submitting, setSubmitting] = useState(false);
 
   if (participant?.email_verified && !submitting) return <Navigate to={from} replace />;
@@ -78,7 +80,7 @@ export function VerifyEmailPage() {
         description="등록한 학교 메일로 코드를 받아 입력하면 인증돼요. 운영진이 부정 대응으로 '인증된 참가자만 거래'를 켜도 계속 거래할 수 있어요."
       />
       <Card>
-        <form onSubmit={onSubmit} noValidate>
+        <form ref={formRef} onSubmit={onSubmit} noValidate>
           <Stack gap={4}>
             {errors.form && <Alert tone="danger">{errors.form}</Alert>}
             {otherEmail ? (

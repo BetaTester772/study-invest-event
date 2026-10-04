@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
 import { CODE_ERRORS, CodeSender, codeError } from './SchoolEmailFields';
 import { PASSWORD_HINT, WEAK_PASSWORD_MESSAGE } from './password';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 interface Errors {
   identity?: string;
@@ -46,6 +47,7 @@ export function ResetPasswordPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [errors, setErrors] = useState<Errors>({});
+  const formRef = useScrollToFormError(errors);
   const [submitting, setSubmitting] = useState(false);
 
   /** 코드·학번 오류면 칸 옆에 보여 주고 true. */
@@ -129,7 +131,7 @@ export function ResetPasswordPage() {
       />
       <Card>
         {step === 'code' ? (
-          <form onSubmit={onVerify} noValidate>
+          <form ref={formRef} onSubmit={onVerify} noValidate>
             <Stack gap={4}>
               {errors.form && <Alert tone="danger">{errors.form}</Alert>}
               <TextField
@@ -171,7 +173,7 @@ export function ResetPasswordPage() {
             </Stack>
           </form>
         ) : (
-          <form onSubmit={onReset} noValidate>
+          <form ref={formRef} onSubmit={onReset} noValidate>
             <Stack gap={4}>
               {errors.form && <Alert tone="danger">{errors.form}</Alert>}
               <Alert tone="info">인증 코드를 확인했어요. 학번 {identity.trim()}의 새 비밀번호를 입력해 주세요.</Alert>
