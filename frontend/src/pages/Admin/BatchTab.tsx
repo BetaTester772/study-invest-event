@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { adminApi, ApiError, useApi, type BatchResult, type SettlementLog, type SettlementStock } from '../../api';
 import { LoadError } from '../../components/app/LoadError';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -22,7 +23,7 @@ import {
 } from '../../components/ui';
 import { formatDateTime, formatDay, formatNumber } from '../../lib/format';
 
-type Action = 'open' | 'settle' | 'run-due';
+type Action = 'open' | 'settle' | 'run-due' | 'advance';
 
 const ACTION_COPY: Record<Action, { title: string; button: string; description: string; done: string }> = {
   open: {
@@ -42,6 +43,13 @@ const ACTION_COPY: Record<Action, { title: string; button: string; description: 
     button: '밀린 배치 실행하기',
     description: '지금 시각까지 실행됐어야 할 공시·정산을 순서대로 실행해요.',
     done: '밀린 배치를 실행했어요',
+  },
+  advance: {
+    title: '가격을 지금 바로 변동시킬까요?',
+    button: '지금 변동시키기',
+    description:
+      '최신 공시일을 18:00 전이어도 정산하고, 다음 운영일 시작가를 바로 공시해요. 시계를 앞질러 이벤트가 한 회차 진행되고 되돌릴 수 없어요.',
+    done: '가격을 변동시켰어요',
   },
 };
 
@@ -114,6 +122,7 @@ function SettlementCard({ log }: { log: SettlementLog }) {
 export function BatchTab() {
   const toast = useToast();
   const settlements = useApi(() => adminApi.settlements(), []);
+  const qa = useApi(() => adminApi.qaStatus(), []);
   const [day, setDay] = useState('');
   const [confirm, setConfirm] = useState<Action | null>(null);
   const [running, setRunning] = useState(false);
@@ -127,7 +136,9 @@ export function BatchTab() {
           ? [await adminApi.batchOpen(day || undefined)]
           : action === 'settle'
             ? [await adminApi.batchSettle(day || undefined)]
-            : await adminApi.batchRunDue();
+            : action === 'advance'
+              ? [await adminApi.qaAdvancePrice()]
+              : await adminApi.batchRunDue();
       setResults(res);
       toast.success(ACTION_COPY[action].done, res.length === 0 ? '실행할 배치가 없었어요.' : `${res.length}건 실행`);
       void settlements.refetch();
@@ -183,6 +194,23 @@ export function BatchTab() {
         </Stack>
       </Card>
 
+      {qa.data?.enabled && (
+        <Card
+          title="QA 도구"
+          description="09:00·18:00을 기다리지 않고 가격이 한 회차 움직이는 걸 바로 확인해요. QA 서버에서만 보여요."
+          tone="sunken"
+        >
+          <Stack gap={4}>
+            <Alert tone="warning">
+              최신 공시일을 정산하고 다음 운영일 시작가를 바로 공시해요. 누를 때마다 이벤트가 하루씩 앞서가요. 아직 공시된 날이 없으면 이벤트 첫날 시작가부터 공시해요. 무제한 모드(STUDY_INVEST_QA_UNLIMITED)면 이벤트 종료일 뒤로도 계속 진행돼요.
+            </Alert>
+            <Stack direction="row" gap={2} wrap>
+              <Button onClick={() => setConfirm('advance')}>지금 가격 변동시키기</Button>
+            </Stack>
+          </Stack>
+        </Card>
+      )}
+
       <Stack gap={4}>
         <Text as="p" display size="xl" tone="ink">
           정산 기록
@@ -209,7 +237,7 @@ export function BatchTab() {
         title={confirm ? ACTION_COPY[confirm].title : ''}
         description={
           confirm
-            ? `${confirm !== 'run-due' ? `${day ? formatDay(day) : '오늘'} 기준. ` : ''}${ACTION_COPY[confirm].description}`
+            ? `${confirm === 'open' || confirm === 'settle' ? `${day ? formatDay(day) : '오늘'} 기준. ` : ''}${ACTION_COPY[confirm].description}`
             : undefined
         }
         footer={

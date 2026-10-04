@@ -303,11 +303,13 @@ class TestPurge:
         email_code(client, "pending@g.skku.edu")
         state = client.app.state.study_invest  # type: ignore[attr-defined]
         cal = EventCalendar()
+        end = date(2026, 10, 16)
+        assert cal.end == end
         with state.session_factory() as s:
             with pytest.raises(Exception) as exc:
-                email_verification.purge(s, kst(cal.end, time(23)), cal)
+                email_verification.purge(s, kst(end, time(23)), cal)
             assert getattr(exc.value, "code", None) == "EVENT_NOT_ENDED"
-            after = kst(cal.end + timedelta(days=1))
+            after = kst(end + timedelta(days=1))
             assert email_verification.purge(s, after, cal) == (1, 2)
             s.commit()
         me = client.get("/api/me", headers=h).json()

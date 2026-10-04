@@ -238,7 +238,7 @@ def purge_images(
     DB가 가리키는 파일만이 아니라 업로드 디렉터리의 인증 사진 파일 전부를 지운다. 커밋 전에
     프로세스가 죽어 DB에 기록되지 않은 파일도 남지 않는다. 해시는 감사용으로 보존한다.
     """
-    if not force and to_kst(now).date() <= calendar.end:
+    if not force and not calendar.is_ended(to_kst(now).date()):
         raise DomainError("EVENT_NOT_ENDED", "이벤트 종료 후에 삭제할 수 있습니다.")
     certs = s.scalars(
         select(StudyCertification).where(StudyCertification.image_path.is_not(None))

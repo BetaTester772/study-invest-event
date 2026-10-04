@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EventInfo } from '../../api/types';
-import { describeMarket } from '../market';
+import { dayStripWindow, describeMarket, UNLIMITED_STRIP_DAYS } from '../market';
 
 const days = Array.from({ length: 11 }, (_, i) => `2026-10-${String(6 + i).padStart(2, '0')}`);
 
@@ -59,5 +59,38 @@ describe('describeMarket', () => {
     const s = describeMarket(event({ today: '2026-10-16', market: { round: null } }));
     expect(s.dayNumber).toBe(11);
     expect(s.detail).toContain('마지막 운영일');
+  });
+});
+
+describe('QA unlimited mode', () => {
+  const longDays = Array.from({ length: 40 }, (_, i) => {
+    const d = new Date(Date.UTC(2026, 9, 6 + i));
+    return d.toISOString().slice(0, 10);
+  });
+  const unlimited = event({
+    end: null,
+    total_rounds: null,
+    operating_days: longDays,
+    today: '2026-11-14',
+    market: { round: 40 },
+  });
+
+  it('never reaches the end or the last day', () => {
+    const s = describeMarket(unlimited);
+    expect(s.phase).toBe('open');
+    expect(s.dayNumber).toBe(40);
+    expect(s.detail).not.toContain('마지막');
+  });
+
+  it('day strip shows only the latest days, numbered from the start', () => {
+    const w = dayStripWindow(unlimited);
+    expect(w.days).toHaveLength(UNLIMITED_STRIP_DAYS);
+    expect(w.days.at(-1)).toBe('2026-11-14');
+    expect(w.dayOffset).toBe(40 - UNLIMITED_STRIP_DAYS);
+    expect(w.openEnded).toBe(true);
+  });
+
+  it('bounded events keep every day', () => {
+    expect(dayStripWindow(event())).toEqual({ days, dayOffset: 0, openEnded: false });
   });
 });

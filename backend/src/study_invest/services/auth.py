@@ -64,7 +64,7 @@ def revoke_token(s: Session, token: str) -> None:
 
 
 def ensure_registration_open(now: datetime, calendar: EventCalendar) -> None:
-    if to_kst(now).date() > calendar.end:
+    if calendar.is_ended(to_kst(now).date()):
         raise DomainError("REGISTRATION_CLOSED", "이벤트가 종료되어 참가 신청을 받지 않습니다.")
 
 

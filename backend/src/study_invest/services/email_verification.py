@@ -167,7 +167,7 @@ def purge(
 
     인증 시각(email_verified_at)은 남겨 계속 인증된 계정으로 본다. (참가자 수, 코드 수).
     """
-    if not force and to_kst(now).date() <= calendar.end:
+    if not force and not calendar.is_ended(to_kst(now).date()):
         raise DomainError("EVENT_NOT_ENDED", "이벤트 종료 후에 삭제할 수 있습니다.")
     participants = s.scalar(
         select(func.count()).select_from(Participant).where(Participant.email.is_not(None))

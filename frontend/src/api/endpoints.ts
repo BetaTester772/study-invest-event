@@ -21,6 +21,7 @@ import type {
   Portfolio,
   PriceOverrideRequest,
   PricePoint,
+  QaStatus,
   Ranking,
   RegisterRequest,
   ReviewRequest,
@@ -85,6 +86,8 @@ export const adminApi = {
   batchSettle: (day?: string) =>
     request<BatchResult>('/admin/batch/settle', { method: 'POST', auth: 'admin', body: day ? { day } : {} }),
   batchRunDue: () => request<BatchResult[]>('/admin/batch/run-due', { method: 'POST', auth: 'admin' }),
+  qaStatus: () => request<QaStatus>('/admin/qa', { auth: 'admin' }),
+  qaAdvancePrice: () => request<BatchResult>('/admin/qa/advance-price', { method: 'POST', auth: 'admin' }),
   settlements: () => request<SettlementLog[]>('/admin/settlements', { auth: 'admin' }),
   audit: (limit = 200) => request<AuditEntry[]>('/admin/audit', { auth: 'admin', query: { limit } }),
   simulateOptions: () => request<SimulateOptions>('/admin/simulate/options', { auth: 'admin' }),

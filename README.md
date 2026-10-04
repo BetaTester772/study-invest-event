@@ -104,6 +104,8 @@ study-invest purge-emails                    # 이벤트 종료 후 학교 메�
 | `STUDY_INVEST_LOOP_GUARD` | `warn` | 이벤트 루프에서 SQL 실행 시 `warn`/`raise`/`off` |
 | `STUDY_INVEST_EVENT_START` / `_EVENT_END` | `2026-10-06` / `2026-10-16` | 이벤트 기간(YYYY-MM-DD, 양 끝 포함). 테스트·QA 서버에서만 바꾼다 |
 | `STUDY_INVEST_TIME_SCALE` / `_TIME_ORIGIN` | `1` / (없음) | 앱 시계 배속과, 이벤트 첫날 00:00이 시작되는 실제 시각(ISO 8601, 시간대 없으면 KST). `24`면 실제 1시간이 하루. 테스트·QA 서버에서만 바꾼다 |
+| `STUDY_INVEST_QA_TOOLS` | `0` | `1`이면 관리자 > 배치·정산에 "지금 가격 변동시키기" 버튼이 생긴다. 18:00·다음 날을 기다리지 않고 최신 공시일을 정산하고 다음 운영일 시작가를 바로 공시한다. 테스트·QA 서버에서만 켠다 |
+| `STUDY_INVEST_QA_UNLIMITED` | `0` | `1`이면 QA 무제한 모드. 종료일(`STUDY_INVEST_EVENT_END`)을 무시하고 시작일 이후 매일 공시·정산·회차가 끝없이 이어진다. 참가 신청도 닫히지 않는다. `STUDY_INVEST_QA_TOOLS`의 가격 변동 버튼(첫 클릭은 이벤트 첫날 공시)이나 `STUDY_INVEST_TIME_SCALE`과 함께 써서 실제 이벤트 기간과 상관없이 긴 가격 추세를 본다. 테스트·QA 서버에서만 켠다 |
 | `STUDY_INVEST_FRONTEND_DIST` | (없음) | 빌드된 프론트엔드를 백엔드가 직접 제공할 때 경로 |
 | `STUDY_INVEST_SMTP_HOST` | (없음) | 학교 메일 인증 코드 SMTP 서버(예: `smtp.gmail.com`). 비우면 메일 대신 로그로 남김(로컬 개발 전용) |
 | `STUDY_INVEST_SMTP_PORT` / `_SMTP_SECURITY` | `587` / `starttls` | `starttls`·`ssl`(보통 465)·`none` |

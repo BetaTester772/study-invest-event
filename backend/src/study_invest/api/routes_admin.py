@@ -214,6 +214,22 @@ def batch_run_due(state: StateDep, now: NowDep) -> list[schemas.BatchResult]:
     return out
 
 
+@router.get("/qa", response_model=schemas.QaStatus)
+async def qa_status(state: StateDep) -> schemas.QaStatus:  # I/O 없음 → async
+    """QA 도구 사용 가능 여부. 화면이 버튼을 보일지 정한다."""
+    return schemas.QaStatus(enabled=state.settings.qa_tools)
+
+
+@router.post("/qa/advance-price", response_model=schemas.BatchResult)
+def qa_advance_price(state: StateDep, s: BatchSessionDep, now: NowDep) -> schemas.BatchResult:
+    """최신 공시일을 지금 정산하고 다음 운영일 시작가를 바로 공시한다. QA 서버에서만 켠다."""
+    if not state.settings.qa_tools:
+        raise DomainError("QA_DISABLED", "이 서버는 QA 도구가 꺼져 있습니다.", 403)
+    result = market.advance_price(s, now, state.calendar, state.rng)
+    s.commit()
+    return _batch(result)
+
+
 @router.get("/settlements", response_model=list[schemas.SettlementLog])
 def settlements(s: SessionDep) -> list[schemas.SettlementLog]:
     rows = s.scalars(select(SettlementLog).order_by(SettlementLog.round_no))

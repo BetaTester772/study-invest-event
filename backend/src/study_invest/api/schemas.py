@@ -86,9 +86,12 @@ class ClockInfo(Schema):
 
 class EventInfo(Schema):
     start: date
-    end: date
+    end: date | None
+    """무제한 모드(QA)면 null."""
     operating_days: list[date]
-    total_rounds: int
+    """운영일 목록. 무제한 모드면 시작일부터 오늘·최신 공시일 중 늦은 날까지만."""
+    total_rounds: int | None
+    """무제한 모드면 null."""
     now: datetime
     today: date
     is_operating_day: bool
@@ -368,6 +371,10 @@ class BatchResult(Schema):
     action: str
     day: date
     detail: dict[str, Any]
+
+
+class QaStatus(Schema):
+    enabled: bool
 
 
 class StockSettlement(Schema):
