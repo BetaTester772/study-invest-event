@@ -47,7 +47,7 @@ export function ResetPasswordPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [errors, setErrors] = useState<Errors>({});
-  const formRef = useScrollToFormError(errors);
+  const [formRef] = useScrollToFormError(errors);
   const [submitting, setSubmitting] = useState(false);
 
   /** 코드·학번 오류면 칸 옆에 보여 주고 true. */

@@ -14,7 +14,7 @@ export function LoginPage() {
   const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const formRef = useScrollToFormError(error);
+  const [formRef, scrollToError] = useScrollToFormError(error);
   const [submitting, setSubmitting] = useState(false);
 
   if (status === 'authenticated' && !submitting) return <Navigate to={from} replace />;
@@ -23,6 +23,7 @@ export function LoginPage() {
     e.preventDefault();
     if (!identity.trim() || !password) {
       setError('학번과 비밀번호를 모두 입력해 주세요.');
+      scrollToError();
       return;
     }
     setSubmitting(true);

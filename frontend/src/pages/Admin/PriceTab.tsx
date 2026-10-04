@@ -28,7 +28,7 @@ export function PriceTab() {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ code: string; point: PricePoint } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const formRef = useScrollToFormError(errors, formError);
+  const [formRef] = useScrollToFormError(errors, formError);
 
   const selected = instruments.data?.find((i) => i.code === code);
 

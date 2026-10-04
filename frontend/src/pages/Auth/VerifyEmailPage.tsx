@@ -33,7 +33,7 @@ export function VerifyEmailPage() {
   const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
-  const formRef = useScrollToFormError(errors);
+  const [formRef] = useScrollToFormError(errors);
   const [submitting, setSubmitting] = useState(false);
 
   if (participant?.email_verified && !submitting) return <Navigate to={from} replace />;

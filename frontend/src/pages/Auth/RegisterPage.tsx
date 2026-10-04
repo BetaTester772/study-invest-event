@@ -61,7 +61,7 @@ export function RegisterPage() {
     consent: false,
   });
   const [errors, setErrors] = useState<Errors>({});
-  const formRef = useScrollToFormError(errors);
+  const [formRef] = useScrollToFormError(errors);
   const [submitting, setSubmitting] = useState(false);
   const set = <K extends keyof RegisterForm>(key: K, value: RegisterForm[K]) => setForm((f) => ({ ...f, [key]: value }));
 

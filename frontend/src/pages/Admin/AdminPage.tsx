@@ -15,13 +15,14 @@ type AdminTab = 'certs' | 'participants' | 'params' | 'batch' | 'price' | 'sim' 
 function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string | null }) {
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const formRef = useScrollToFormError(error);
+  const [formRef, scrollToError] = useScrollToFormError(error);
   const [checking, setChecking] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!key.trim()) {
       setError('관리자 키를 입력해 주세요.');
+      scrollToError();
       return;
     }
     setChecking(true);

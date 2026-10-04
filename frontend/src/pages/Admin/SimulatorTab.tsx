@@ -141,13 +141,14 @@ function SimulatorForm({ options }: { options: SimulateOptions }) {
   const [useCap, setUseCap] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const formRef = useScrollToFormError(error);
+  const [formRef, scrollToError] = useScrollToFormError(error);
   const [report, setReport] = useState<SimulationReport | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (seed && !/^-?\d+$/.test(seed.trim())) {
       setError('시드는 정수로 입력하세요. 비우면 매번 다른 결과가 나와요.');
+      scrollToError();
       return;
     }
     setRunning(true);

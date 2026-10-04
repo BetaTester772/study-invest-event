@@ -130,7 +130,7 @@ export function ParamsTab() {
   const [errors, setErrors] = useState<Partial<Record<keyof Params, string>>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const formRef = useScrollToFormError(errors, saveError);
+  const [formRef] = useScrollToFormError(errors, saveError);
 
   useEffect(() => {
     if (params.data) setDraft(toDraft(params.data));
