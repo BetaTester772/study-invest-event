@@ -513,7 +513,7 @@ class TestNewsPool:
 
         from study_invest.news_pool import BYLINES, COMMON_POOLS, STOCK_POOLS
 
-        banned = ("삼성", "하이닉스", "LG전자", "미래에셋")
+        banned = ("삼성", "하이닉스", "LG전자", "미래에셋", "현대")
         seen: set[str] = set()
         every = [a for kinds in STOCK_POOLS.values() for pool in kinds.values() for a in pool]
         every += [a for pool in COMMON_POOLS.values() for a in pool]
