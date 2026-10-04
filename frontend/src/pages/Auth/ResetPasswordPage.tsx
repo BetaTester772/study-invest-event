@@ -103,7 +103,7 @@ export function ResetPasswordPage() {
               비밀번호 바꾸기
             </Button>
             <Text size="sm" tone="muted">
-              학교 메일 인증을 마치지 않은 계정은 재설정할 수 없어요. 운영진에게 문의해 주세요.
+              가입할 때 학교 메일을 등록하지 않은 예전 계정은 재설정할 수 없어요. 운영진에게 문의해 주세요.
               {' '}
               <Link to="/login">로그인으로 돌아가기</Link>
             </Text>

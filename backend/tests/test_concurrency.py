@@ -25,6 +25,7 @@ from study_invest.event_calendar import EventCalendar
 from study_invest.models import (
     AuditLog,
     CertStatus,
+    EmailVerification,
     Holding,
     Order,
     OrderStatus,
@@ -35,7 +36,7 @@ from study_invest.models import (
 )
 from study_invest.normalize import parse_school_email
 from study_invest.params import KST, EventParams
-from study_invest.services import auth, certification, market, trading
+from study_invest.services import auth, certification, email_verification, market, trading
 from study_invest.services.common import DomainError, market_day
 
 pytestmark = pytest.mark.skipif(
@@ -227,6 +228,34 @@ class TestUniqueConflicts:
         assert codes == ["ALREADY_CERTIFIED", "ok"]
         with factory() as s:
             assert s.scalar(select(func.count()).select_from(StudyCertification)) == 1
+
+    def test_concurrent_code_requests_respect_cooldown_and_quota(
+        self, factory: sessionmaker[Session]
+    ) -> None:
+        def request(raw: str, limit: int = 400) -> Callable[[], str]:
+            def fn() -> str:
+                with factory() as s:
+                    email_verification.request_code(s, raw, at(D1, 8), limit)
+                    time_mod.sleep(0.2)  # 커밋 전에 다른 요청이 같은 검사를 지나가려 한다
+                    s.commit()
+                    return "ok"
+
+            return fn
+
+        # 같은 사람(두 도메인)이 동시에 요청해도 코드는 하나만 나간다(재요청 60초)
+        results = run_together(request("same@g.skku.edu"), request("same@skku.edu"))
+        assert sorted(r if isinstance(r, str) else r.code for r in results) == [
+            "CODE_RECENTLY_SENT",
+            "ok",
+        ]
+        # 전체 하루 한도도 동시 요청으로 넘지 않는다(한도 2, 이미 1통)
+        results = run_together(request("a@g.skku.edu", 2), request("b@g.skku.edu", 2))
+        assert sorted(r if isinstance(r, str) else r.code for r in results) == [
+            "MAIL_QUOTA_EXCEEDED",
+            "ok",
+        ]
+        with factory() as s:
+            assert s.scalar(select(func.count()).select_from(EmailVerification)) == 2
 
     def test_duplicate_registration_is_domain_error(self, factory: sessionmaker[Session]) -> None:
         def register(nickname: str, domain: str) -> Callable[[], str]:

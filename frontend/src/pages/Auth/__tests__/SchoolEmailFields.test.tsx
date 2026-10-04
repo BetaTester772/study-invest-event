@@ -8,9 +8,12 @@ import { validateReset } from '../ResetPasswordPage';
 import { SchoolEmailFields, codeError, schoolEmailError } from '../SchoolEmailFields';
 
 describe('schoolEmailError', () => {
-  it.each(['abc@g.skku.edu', 'abc@skku.edu', ' ABC@G.SKKU.EDU ', 'a.b_c-1@g.skku.edu'])('accepts %s', (email) => {
-    expect(schoolEmailError(email)).toBeUndefined();
-  });
+  it.each(['abc@g.skku.edu', 'abc@skku.edu', ' ABC@G.SKKU.EDU ', 'a.b_c-1@g.skku.edu', 'ＡＢＣ＠Ｇ.ＳＫＫＵ.ＥＤＵ'])(
+    'accepts %s',
+    (email) => {
+      expect(schoolEmailError(email)).toBeUndefined();
+    },
+  );
 
   it.each([
     ['', '입력'],

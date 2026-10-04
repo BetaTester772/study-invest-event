@@ -8,7 +8,8 @@ const SCHOOL_EMAIL = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?@(?:g\.)?skku\.edu$
 
 /** 학교 메일 형식 오류 문구. 괜찮으면 undefined. 최종 판단은 서버가 한다. */
 export function schoolEmailError(email: string): string | undefined {
-  const value = email.trim().toLowerCase();
+  // 서버(normalize.py)처럼 NFKC로 먼저 정규화한다: 전각 'ＡＢＣ＠Ｇ.ＳＫＫＵ.ＥＤＵ'도 같은 주소다.
+  const value = email.normalize('NFKC').toLowerCase().trim();
   if (!value) return '학교 메일을 입력해 주세요.';
   const domain = value.slice(value.lastIndexOf('@') + 1);
   if (!value.includes('@') || (domain !== 'skku.edu' && domain !== 'g.skku.edu')) {

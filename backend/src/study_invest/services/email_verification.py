@@ -15,7 +15,7 @@ import math
 import secrets
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from ..event_calendar import EventCalendar, to_kst
@@ -29,6 +29,9 @@ MAX_ATTEMPTS = 5
 MAX_CODES_PER_EMAIL = 5
 """메일 하나에 24시간 동안 보낼 수 있는 코드 수."""
 WINDOW = timedelta(hours=24)
+
+CODE_LOCK_KEY = 7_720_261_007
+"""인증 코드 발급 직렬화용 PostgreSQL advisory lock 키(common.BATCH_LOCK_KEY와 다르게)."""
 
 _EMAIL_ERRORS = {
     "INVALID_EMAIL": "메일 주소 형식이 올바르지 않습니다.",
@@ -102,6 +105,11 @@ def request_code(
     재요청 대기·하루 한도는 용도와 상관없이 메일마다 센다(메일함 폭탄 방지).
     """
     email = parse(raw_email)
+    # 재요청 대기·하루 한도 검사와 발급을 직렬화한다. 그러지 않으면 동시 요청이 둘 다 "최근 코드
+    # 없음"을 보고 코드를 여러 통 보내거나 전체 한도를 넘는다. 트랜잭션 잠금이라 호출자가 커밋
+    # (메일 발송 전)하면 풀린다. 발급은 드물고 잠금 구간이 짧아 전체를 한 줄로 세워도 충분하다.
+    if s.get_bind().dialect.name == "postgresql":
+        s.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": CODE_LOCK_KEY})
     if purpose is CodePurpose.VERIFY:
         # 인증된 계정이 쓰는 메일이면 거부. 미인증 계정의 메일이면 보낸다(메일 인증을 끈 채 가입한
         # 본인이 나중에 인증할 수 있게). 다른 사람은 그 메일로 가입할 수 없다(가입 때 다시 검사).
