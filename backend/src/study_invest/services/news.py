@@ -1,8 +1,8 @@
 """호재·악재 (03-pricing §3, F-14).
 
-운영일 09:00 공시와 함께 발표되고 그날 18:00 정산에서 주식 변동률에 곱으로 얹힌다. 무작위 뉴스는
-전날 정산 끝에 다음 운영일 몫으로 1건 이하 생성되고, 관리자는 아직 정산되지 않은 운영일에 직접
-쓰거나 지울 수 있다. 서비스 함수는 커밋하지 않는다.
+전날 18:00 정산에서 다음 운영일 몫으로 뽑혀 같은 정산에서 주식 변동률에 곱으로 얹히고, 반영된
+시작가와 함께 09:00에 발표된다. 관리자는 그날 시작가가 아직 정해지지 않은 운영일(전날 정산 전)에
+직접 쓰거나 지울 수 있다. 서비스 함수는 커밋하지 않는다.
 """
 
 from __future__ import annotations
@@ -108,6 +108,17 @@ def create_random_news(
     return item
 
 
+def is_priced(s: Session, day: date, calendar: EventCalendar) -> bool:
+    """day의 시작가가 이미 정해졌는지. 전날이 정산됐거나(뉴스가 반영된 뒤) day가 공시됐으면 참."""
+    if market_day(s, day) is not None:
+        return True
+    prev = calendar.previous_operating_day(day)
+    if prev is None:
+        return False
+    md = market_day(s, prev)
+    return md is not None and md.settled_at is not None
+
+
 def _check_day(s: Session, day: date, calendar: EventCalendar) -> None:
     if not calendar.is_operating_day(day):
         raise DomainError("NOT_OPERATING_DAY", f"{day}는 운영일이 아닙니다.", 422)
@@ -115,9 +126,16 @@ def _check_day(s: Session, day: date, calendar: EventCalendar) -> None:
         raise DomainError(
             "NO_ROUND", f"{day}는 정산(반영일)이 없어 뉴스를 반영할 수 없습니다.", 422
         )
-    md = market_day(s, day)
-    if md is not None and md.settled_at is not None:
-        raise DomainError("DAY_ALREADY_SETTLED", "이미 정산된 운영일의 뉴스는 바꿀 수 없습니다.")
+    if calendar.previous_operating_day(day) is None:
+        raise DomainError(
+            "NO_PREVIOUS_SETTLEMENT",
+            f"{day}는 첫 운영일이라 뉴스를 반영할 정산이 없습니다.",
+            422,
+        )
+    if is_priced(s, day, calendar):
+        raise DomainError(
+            "PRICE_ALREADY_FIXED", "그날 시작가가 이미 정해져 뉴스를 바꿀 수 없습니다."
+        )
 
 
 def set_manual_news(
@@ -134,9 +152,10 @@ def set_manual_news(
     body: str | None = None,
     byline: str | None = None,
 ) -> NewsItem:
-    """아직 정산되지 않은 운영일의 뉴스를 쓴다(같은 날·종목이 있으면 덮어쓴다).
+    """시작가가 아직 정해지지 않은 운영일의 뉴스를 쓴다(같은 날·종목이 있으면 덮어쓴다).
 
-    부제·본문·바이라인은 선택이다. 비우면 참가자 화면에 제목만 보인다.
+    전날 18:00 정산에서 그 종목 변동률에 곱해져 그날 시작가에 반영된다. 부제·본문·바이라인은
+    선택이다. 비우면 참가자 화면에 제목만 보인다.
     """
     batch_lock(s)  # 정산·무작위 생성과 겹치지 않게
     inst = BY_CODE.get(code)
@@ -195,7 +214,7 @@ def set_manual_news(
 
 
 def delete_news(s: Session, day: date, code: str, now: datetime, calendar: EventCalendar) -> None:
-    """아직 정산되지 않은 운영일의 뉴스를 지운다(무작위 생성분도)."""
+    """시작가가 아직 정해지지 않은 운영일의 뉴스를 지운다(무작위 생성분도)."""
     batch_lock(s)
     item = s.scalar(select(NewsItem).where(NewsItem.day == day, NewsItem.code == code))
     if item is None:

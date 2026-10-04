@@ -105,7 +105,7 @@ export function InstrumentPage() {
                     {instrument.news.headline}
                     <Text as="span" size="sm" tone="muted">
                       {' '}
-                      · 오늘 18:00 정산 때 변동률에 곱해져요.
+                      · 오늘 시작가에 반영됐어요.
                     </Text>
                   </Text>
                   {instrument.news.subtitle && (
