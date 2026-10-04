@@ -64,8 +64,8 @@ class TestInstruments:
 
 class TestCoin:
     def test_up_day_below_p_up(self) -> None:
-        assert coin_rate(0.29, 1.0, P) == ("up", 2.0)
-        assert coin_rate(0.0, 0.5, P) == ("up", 2.0 * 0.125)
+        assert coin_rate(0.29, 1.0, P) == ("up", 0.8)
+        assert coin_rate(0.0, 0.5, P) == ("up", 0.8 * 0.25)
 
     def test_down_day_at_or_above_p_up(self) -> None:
         assert coin_rate(0.30, 1.0, P) == ("down", -0.4)
@@ -79,7 +79,7 @@ class TestCoin:
         rng = random.Random(1)
         for _ in range(10_000):
             _, r = coin_rate(rng.random(), rng.random(), P)
-            assert -0.4 <= r <= 2.0
+            assert -0.4 <= r <= 0.8
 
     def test_invalid_draw(self) -> None:
         with pytest.raises(ValueError):
@@ -106,7 +106,7 @@ class TestCoin:
                 return self.values.pop(0)
 
         move = draw_coin(250_000, P, Seq())
-        assert (move.p, move.x, move.direction, move.new_price) == (0.1, 1.0, "up", 750_000)
+        assert (move.p, move.x, move.direction, move.new_price) == (0.1, 1.0, "up", 450_000)
         assert move.calm is False
 
 
@@ -121,7 +121,7 @@ class TestCoinCalmPeriod:
     def test_calm_bounds(self) -> None:
         assert coin_rate(0.29, 1.0, P, calm=True) == ("up", 0.3)
         assert coin_rate(0.30, 1.0, P, calm=True) == ("down", -0.1)
-        assert coin_rate(0.0, 0.5, P, calm=True) == ("up", 0.3 * 0.125)  # X³ 모양 유지
+        assert coin_rate(0.0, 0.5, P, calm=True) == ("up", 0.3 * 0.25)  # X² 모양 유지
         assert coin_rate(0.99, 0.5, P, calm=True) == ("down", -0.1 * 0.25)  # X² 모양 유지
 
     def test_calm_range(self) -> None:
@@ -269,9 +269,9 @@ class TestParams:
     def test_defaults_match_spec(self) -> None:
         assert (P.coin_p_up, P.coin_up_exp, P.coin_down_exp, P.coin_cap, P.coin_floor) == (
             0.30,
-            3,
             2,
-            2.0,
+            2,
+            0.8,
             -0.4,
         )
         assert P.stock_sensitivity == 0.30 and P.daily_buy_limit_ratio == 0.40

@@ -163,7 +163,7 @@ class TestSettlement:
         assert client.get("/api/instruments").json()[0]["day"] == D1.isoformat()
         order(client, h, "SAMSU", "buy", 5)  # 375,000원
         order(client, h, "SAMSU", "sell", 5)  # 매도는 집계하지 않는다
-        rng.queue = [0.1, 1.0]  # 코인 상승일, X=1 → 1회차는 안정기라 +30%(평소면 +200%)
+        rng.queue = [0.1, 1.0]  # 코인 상승일, X=1 → 1회차는 안정기라 +30%(평소면 +80%)
         result = settle_day(client, clock, D1)
         # B′ = 5,375,000 / 5,000,000 ×3, 총 20,375,000 → r_SAMSU ≈ 1.055
         assert result["detail"]["round"] == 1
@@ -188,7 +188,7 @@ class TestSettlement:
     def test_coin_is_calm_for_first_three_rounds(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
-        """초반 3회차(10/7~10/9 시작가)는 -10%~+30%, 4회차부터 평소 -40%~+200%."""
+        """초반 3회차(10/7~10/9 시작가)는 -10%~+30%, 4회차부터 평소 -40%~+80%."""
         days = [D1, D2, D3, date(2026, 10, 9)]
         for d in days:
             open_day(client, clock, d)
@@ -201,9 +201,9 @@ class TestSettlement:
             (1, True, 0.3),
             (2, True, 0.3),
             (3, True, 0.3),
-            (4, False, 2.0),
+            (4, False, 0.8),
         ]
-        assert logs[3]["coin"]["new_price"] == 549_250 * 3  # 10/10 시작가, +200%
+        assert logs[3]["coin"]["new_price"] == int(549_250 * 1.8)  # 10/10 시작가, +80%
 
     def test_calm_rounds_follow_params(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
@@ -692,7 +692,7 @@ class TestRankingAndAdmin:
         assert info["market"]["round"] == 1 and info["market"]["day_opened"] is False
         assert info["certification"]["reward_cash"] == 250_000
         assert info["coin"] == {
-            "cap": 2.0,
+            "cap": 0.8,
             "floor": -0.4,
             "calm_rounds": 3,
             "calm_until": "2026-10-09",  # 3회차(10/8 정산)가 반영되는 날
