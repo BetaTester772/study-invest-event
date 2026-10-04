@@ -4,11 +4,7 @@ import { Money, PriceChange, Skeleton } from '../ui';
 import { KindBadge } from './badges';
 import styles from './InstrumentBoard.module.css';
 
-const DEFAULT_NOTES: Record<string, string> = {
-  BYUNG: '매일 확률로 크게 오르거나 내려요.',
-};
-
-function Row({ ins, note }: { ins: Instrument; note?: string }) {
+function Row({ ins }: { ins: Instrument }) {
   return (
     <li>
       <Link to={`/instruments/${ins.code}`} className={styles.row}>
@@ -18,7 +14,6 @@ function Row({ ins, note }: { ins: Instrument; note?: string }) {
         </span>
         <span className={styles.kind}>
           <KindBadge kind={ins.kind} />
-          {note && <span className={styles.note}>{note}</span>}
         </span>
         <span className={styles.price}>
           <Money value={ins.price} display="md" />
@@ -33,16 +28,14 @@ function Row({ ins, note }: { ins: Instrument; note?: string }) {
 
 /**
  * The quote board: stocks as one list, the coin set apart below.
- * Each whole row is a link to the instrument page. `notes` maps code → short note.
+ * Each whole row is a link to the instrument page.
  */
 export function InstrumentBoard({
   instruments,
   loading,
-  notes = DEFAULT_NOTES,
 }: {
   instruments?: Instrument[];
   loading?: boolean;
-  notes?: Record<string, string>;
 }) {
   if (loading && !instruments) {
     return (
@@ -71,13 +64,13 @@ export function InstrumentBoard({
       </div>
       <ul className={styles.list} aria-label="주식">
         {stocks.map((ins) => (
-          <Row key={ins.code} ins={ins} note={notes[ins.code]} />
+          <Row key={ins.code} ins={ins} />
         ))}
       </ul>
       {coins.length > 0 && (
         <ul className={`${styles.list} ${styles.coins}`} aria-label="코인">
           {coins.map((ins) => (
-            <Row key={ins.code} ins={ins} note={notes[ins.code]} />
+            <Row key={ins.code} ins={ins} />
           ))}
         </ul>
       )}

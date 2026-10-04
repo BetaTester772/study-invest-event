@@ -4,7 +4,6 @@ import { InstrumentBoard } from '../../components/app/InstrumentBoard';
 import { LoadError } from '../../components/app/LoadError';
 import { MarketStatus } from '../../components/app/MarketStatus';
 import { Card, Container, LinkButton, Skeleton, Stack, Text } from '../../components/ui';
-import { coinBoardNote, describeCoinRange } from '../../lib/coin';
 import { formatDay } from '../../lib/format';
 
 export function MarketPage() {
@@ -15,8 +14,6 @@ export function MarketPage() {
 
   const stamped = certs.data?.filter((c) => c.status === 'approved').map((c) => c.target_date);
   const priceDay = instruments.data?.find((i) => i.day)?.day;
-  const e = event.data;
-  const notes = e ? { BYUNG: coinBoardNote(e.coin, e.today) } : undefined;
 
   return (
     <Container padTop>
@@ -38,7 +35,7 @@ export function MarketPage() {
                 시세판
               </Text>
               <Text size="sm" tone="muted">
-                {priceDay ? `${formatDay(priceDay)} 시작가예요. 장중에는 가격이 바뀌지 않아요.` : '1일차 시작가예요.'}
+                {priceDay ? `${formatDay(priceDay)} 시작가예요.` : '1일차 시작가예요.'}
               </Text>
             </Stack>
             {status === 'anonymous' && (
@@ -50,11 +47,10 @@ export function MarketPage() {
           {instruments.error ? (
             <LoadError error={instruments.error} onRetry={instruments.refetch} what="시세" />
           ) : (
-            <InstrumentBoard instruments={instruments.data} loading={instruments.loading} notes={notes} />
+            <InstrumentBoard instruments={instruments.data} loading={instruments.loading} />
           )}
           <Text size="sm" tone="muted">
-            주식은 그날 참가자들이 많이 산 종목일수록 다음 날 값이 내리고, 덜 산 종목은 올라요(하루 최대 ±30%).
-            {e && ` ${describeCoinRange(e.coin, e.today)}`} 종목을 눌러 가격 이력을 보고 주문하세요.
+            종목을 눌러 가격 이력을 보고 주문하세요.
           </Text>
         </Stack>
       </Stack>

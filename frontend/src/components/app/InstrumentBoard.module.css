@@ -82,11 +82,6 @@
   min-width: 0;
 }
 
-.note {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
 .price,
 .change {
   text-align: right;
@@ -126,9 +121,5 @@
 
   .change {
     grid-area: change;
-  }
-
-  .note {
-    display: none;
   }
 }
