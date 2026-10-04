@@ -5,6 +5,7 @@ study-invest open --day 2026-10-06
 study-invest settle --day 2026-10-06
 study-invest simulate --paths 100000 --seed 42 [--use-price-cap]
 study-invest purge-images [--force]
+study-invest purge-personal-info [--force]
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from datetime import date
 from .config import Settings
 from .db import make_engine, make_session_factory
 from .event_calendar import to_kst
-from .services import certification, market
+from .services import certification, email_verification, market
 from .services.common import DomainError, get_params
 from .simulator import format_report
 from .simulator import run as run_simulation
@@ -44,6 +45,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     sim.add_argument("--defaults", action="store_true", help="DB 대신 기본 파라미터 사용")
     purge = sub.add_parser("purge-images", help="이벤트 종료 후 인증 사진 삭제")
     purge.add_argument("--force", action="store_true")
+    purge_info = sub.add_parser(
+        "purge-personal-info", help="이벤트 종료 후 학교 메일·이름·학번·학과·인증 코드 삭제"
+    )
+    purge_info.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
     settings = Settings.from_env()
@@ -79,6 +84,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 s.commit()
                 print(f"삭제한 인증 사진: {count}건")
+                return 0
+            if args.command == "purge-personal-info":
+                participants, codes = email_verification.purge(s, now, calendar, force=args.force)
+                s.commit()
+                print(f"개인정보를 지운 참가자: {participants}명, 인증 코드 기록: {codes}건")
                 return 0
             day = args.day or to_kst(now).date()
             if args.command == "open":

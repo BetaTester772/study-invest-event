@@ -60,6 +60,19 @@ BATCH_LOCK_KEY = 7_720_261_006
 """배치(공시·정산·수동 가격) 직렬화용 PostgreSQL advisory lock 키."""
 
 
+PARAMS_LOCK_KEY = 7_720_261_008
+"""파라미터 읽고-고쳐-쓰기 직렬화용 advisory lock 키."""
+
+
+def params_lock(s: Session) -> None:
+    """파라미터를 읽기 전에 잡는다(트랜잭션 범위). 파라미터 폼 저장과 '인증된 참가자만 거래'
+    스위치가 동시에 저장되면 서로 읽은 옛 값으로 상대 변경을 덮어쓴다(마지막 기록이 이김).
+    최신 ParamsRecord 행을 FOR UPDATE로 잠그면 기다린 뒤에도 새로 들어온 행 대신 옛 행을 보므로
+    advisory lock을 쓴다. PostgreSQL 외(테스트용 SQLite)에서는 아무것도 하지 않는다."""
+    if s.get_bind().dialect.name == "postgresql":
+        s.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": PARAMS_LOCK_KEY})
+
+
 def batch_lock(s: Session, *, wait: bool = True) -> bool:
     """트랜잭션 범위 advisory lock. 여러 워커·레플리카의 배치가 겹치지 않게 한다.
 

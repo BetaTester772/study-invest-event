@@ -10,7 +10,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import PNG, Clock, StubRandom, open_day, order, register, settle_day
+from conftest import (
+    PNG,
+    Clock,
+    StubRandom,
+    open_day,
+    order,
+    register,
+    register_with,
+    settle_day,
+)
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -31,11 +40,8 @@ from study_invest.services import certification
 D1, D2, D3 = date(2026, 10, 6), date(2026, 10, 7), date(2026, 10, 8)
 
 
-def reg(client: TestClient, identity: str, nickname: str) -> Any:
-    return client.post(
-        "/api/auth/register",
-        json={"identity": identity, "nickname": nickname, "password": "password123"},
-    )
+def reg(client: TestClient, email: str, nickname: str) -> Any:
+    return register_with(client, email, nickname)
 
 
 class TestOrderQuantityBounds:
@@ -90,29 +96,31 @@ class TestManualPricePreviousPrice:
 
 class TestInputNormalization:
     def test_nickname_is_stripped_before_length_check(self, client: TestClient) -> None:
-        assert reg(client, "a@corp", " a ").status_code == 422
-        r = reg(client, "b@corp", "  ab  ")
+        assert reg(client, "a@g.skku.edu", " a ").status_code == 422
+        r = reg(client, "b@g.skku.edu", "  ab  ")
         assert r.status_code == 201 and r.json()["participant"]["nickname"] == "ab"
 
     def test_decomposed_hangul_nickname_is_same_nickname(self, client: TestClient) -> None:
-        assert reg(client, "a@corp", "공부왕").status_code == 201
+        assert reg(client, "a@g.skku.edu", "공부왕").status_code == 201
         nfd = unicodedata.normalize("NFD", "공부왕")
         assert nfd != "공부왕"
-        r = reg(client, "b@corp", nfd)
+        r = reg(client, "b@g.skku.edu", nfd)
         assert r.status_code == 409 and r.json()["detail"]["code"] == "NICKNAME_TAKEN"
 
-    def test_identity_normalized_before_length_check(self, client: TestClient) -> None:
-        # "ß" 100자는 casefold 후 200자 → 컬럼(128) 초과. 500이 아니라 422.
-        assert reg(client, "ß" * 100, "long").status_code == 422
-        assert reg(client, "ß" * 64, "okay").status_code == 201  # 128자
+    def test_overlong_email_is_422(self, client: TestClient) -> None:
+        r = client.post("/api/auth/email-code", json={"email": "a" * 65 + "@g.skku.edu"})
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "INVALID_EMAIL"
+        r = client.post("/api/auth/email-code", json={"email": "a" * 300})
+        assert r.status_code == 422
+        assert reg(client, "a" * 64 + "@g.skku.edu", "okay").status_code == 201
 
-    def test_fullwidth_identity_is_same_identity(self, client: TestClient) -> None:
-        assert reg(client, "alice@corp", "alice").status_code == 201
-        r = reg(client, "ＡＬＩＣＥ＠ｃｏｒｐ", "alice2")
-        assert r.status_code == 409 and r.json()["detail"]["code"] == "IDENTITY_TAKEN"
+    def test_fullwidth_email_is_same_email(self, client: TestClient) -> None:
+        assert reg(client, "alice@g.skku.edu", "alice").status_code == 201
+        r = client.post("/api/auth/email-code", json={"email": "ＡＬＩＣＥ＠ｇ.ｓｋｋｕ.ｅｄｕ"})
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "EMAIL_TAKEN"
         login = client.post(
             "/api/auth/login",
-            json={"identity": " ＡＬＩＣＥ＠ｃｏｒｐ ", "password": "password123"},
+            json={"identity": " ＡＬＩＣＥ＠ＳＫＫＵ.ＥＤＵ ", "password": "tiger-moon-river-42"},
         )
         assert login.status_code == 200
 

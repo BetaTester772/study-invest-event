@@ -239,8 +239,10 @@ jobs:
             -e 's/^PGADMIN_DB_PASSWORD=.*/PGADMIN_DB_PASSWORD=ci-pgadmin-password/' \
             -e 's/^PGADMIN_PASSWORD=.*/PGADMIN_PASSWORD=ci-pgadmin-web/' \
             -e 's/^STUDY_INVEST_ADMIN_KEY=.*/STUDY_INVEST_ADMIN_KEY=ci-admin-key/' \
+            -e 's/^STUDY_INVEST_MAIL_LOG_ONLY=.*/STUDY_INVEST_MAIL_LOG_ONLY=1/' \
             .env.example > .env
           grep -q '^STUDY_INVEST_ADMIN_KEY=ci-admin-key$' .env
+          grep -q '^STUDY_INVEST_MAIL_LOG_ONLY=1$' .env
       - name: Validate compose file
         run: docker compose config --quiet
       - name: Build images
@@ -253,10 +255,26 @@ jobs:
           curl -fsS http://localhost:8080/ -o /dev/null
           curl -fsS http://localhost:8080/api/health
           curl -fsS http://localhost:8080/api/instruments > /dev/null
-          token=$(curl -fsS -X POST http://localhost:8080/api/auth/register \
-            -H 'content-type: application/json' \
-            -d '{"identity":"ci@example.com","nickname":"ci-bot","password":"password123"}' \
+          # 가입: 기본은 메일 인증 코드 없이(미인증으로) 가입한다
+          curl -fsS -X POST http://localhost:8080/api/auth/register -H 'content-type: application/json' \
+            -d '{"email":"ci-plain@g.skku.edu","name":"CI","student_id":"2026000001","department":"CI","nickname":"ci-plain","password":"tiger-moon-river-42","privacy_consent":true}' \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["participant"]["verified"] is False'
+          # 코드를 함께 내면 인증된 채로 가입한다. CI는 MAIL_LOG_ONLY=1이라 코드가 백엔드 로그에 남는다
+          curl -fsS -X POST http://localhost:8080/api/auth/email-code \
+            -H 'content-type: application/json' -d '{"email":"ci-bot@g.skku.edu"}' > /dev/null
+          mail_code=$(docker compose logs backend | sed -n 's/.*인증 코드: \([0-9]\{6\}\).*/\1/p' | tail -n 1)
+          test -n "$mail_code"
+          curl -fsS -X POST http://localhost:8080/api/auth/register -H 'content-type: application/json' \
+            -d "{\"email\":\"ci-bot@g.skku.edu\",\"code\":\"${mail_code}\",\"name\":\"CI\",\"student_id\":\"2026000002\",\"department\":\"CI\",\"nickname\":\"ci-bot\",\"password\":\"tiger-moon-river-42\",\"privacy_consent\":true}" \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["participant"]["verified"] is True'
+          # 학번으로 로그인
+          token=$(curl -fsS -X POST http://localhost:8080/api/auth/login -H 'content-type: application/json' \
+            -d '{"identity":"2026000002","password":"tiger-moon-river-42"}' \
             | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+          # 학교 메일이 아니면 거부
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/api/auth/email-code \
+            -H 'content-type: application/json' -d '{"email":"ci@example.com"}')
+          test "$code" = "422"
           curl -fsS http://localhost:8080/api/me/portfolio -H "Authorization: Bearer ${token}" > /dev/null
           pools=$(curl -fsS http://localhost:8080/api/admin/db-pools -H 'X-Admin-Key: ci-admin-key')
           echo "$pools"

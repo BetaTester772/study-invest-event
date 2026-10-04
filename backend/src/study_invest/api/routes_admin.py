@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+from dataclasses import replace
 from datetime import date
 from typing import Annotated
 
@@ -21,12 +22,13 @@ from ..models import (
     StudyCertification,
 )
 from ..params import EventParams
-from ..services import certification, market
+from ..services import auth, certification, market
 from ..services.common import (
     DomainError,
     audit,
     current_prices,
     get_params,
+    params_lock,
     rewards_received,
     set_params,
     valuate,
@@ -52,6 +54,16 @@ def _admin_participant(
         status=p.status,
         joined_at=p.joined_at,
         identity=p.identity,
+        email=p.email_address or p.email,
+        masked_email=p.masked_email,
+        verified=p.verified,
+        email_verified=p.email_verified,
+        needs_profile=p.needs_profile,
+        name=p.name,
+        student_id=p.student_id,
+        department=p.department,
+        verified_at=p.verified_at,
+        verified_via=p.verified_via,
         cash=p.cash,
         total_assets=valuation.total_assets,
         principal=valuation.principal,
@@ -88,17 +100,20 @@ def patch_participant(
     p = s.get(Participant, participant_id)
     if p is None:
         raise DomainError("NOT_FOUND", "참가자를 찾을 수 없습니다.", 404)
-    before = p.status
-    p.status = body.status
-    audit(
-        s,
-        now,
-        "admin",
-        "participant.status",
-        participant_id=p.id,
-        before=before.value,
-        after=body.status.value,
-    )
+    if body.status is not None and body.status != p.status:
+        before = p.status
+        p.status = body.status
+        audit(
+            s,
+            now,
+            "admin",
+            "participant.status",
+            participant_id=p.id,
+            before=before.value,
+            after=body.status.value,
+        )
+    if body.verified is not None:
+        auth.set_verified(s, p, body.verified, now)
     s.commit()
     _, prices = current_prices(s)
     return _admin_participant(p, prices, _cert_counts(s), rewards_received(s, p.id))
@@ -142,13 +157,33 @@ def read_params(s: SessionDep) -> schemas.Params:
 
 @router.put("/params", response_model=schemas.Params)
 def update_params(body: schemas.Params, s: SessionDep, now: NowDep) -> schemas.Params:
+    params_lock(s)
+    values = body.model_dump()
+    if values["verified_only_trading"] is None:  # 파라미터 폼은 이 스위치를 보내지 않는다
+        values["verified_only_trading"] = get_params(s).verified_only_trading
     try:
-        params = EventParams.from_dict(body.model_dump())
+        params = EventParams.from_dict(values)
     except ValueError as exc:
         raise DomainError("INVALID_PARAMS", str(exc), 422) from exc
     set_params(s, params, now)
     s.commit()
     return schemas.Params.model_validate(params.to_dict())
+
+
+@router.get("/trading-access", response_model=schemas.TradingAccess)
+def trading_access(s: SessionDep) -> schemas.TradingAccess:
+    return schemas.TradingAccess(verified_only=get_params(s).verified_only_trading)
+
+
+@router.put("/trading-access", response_model=schemas.TradingAccess)
+def set_trading_access(
+    body: schemas.TradingAccess, s: SessionDep, now: NowDep
+) -> schemas.TradingAccess:
+    """'인증된 참가자만 거래' 스위치. 부정 행위가 보이면 켠다(파라미터 이력·감사 로그에 남음)."""
+    params_lock(s)
+    set_params(s, replace(get_params(s), verified_only_trading=body.verified_only), now)
+    s.commit()
+    return body
 
 
 @router.put("/prices/{day}/{code}", response_model=schemas.PricePoint)

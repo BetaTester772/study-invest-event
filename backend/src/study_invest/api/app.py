@@ -22,6 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from ..config import Settings
 from ..db import DatabasePools, create_schema, make_session_factory
 from ..event_calendar import EventCalendar, seconds_until_next_batch
+from ..mail import Mailer, make_mailer
 from ..services.common import DomainError
 from ..services.market import run_due
 from . import routes_admin, routes_me, routes_public
@@ -71,6 +72,7 @@ def create_app(
     clock: Callable[[], datetime] | None = None,
     rng: random.Random | None = None,
     calendar: EventCalendar | None = None,
+    mailer: Mailer | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     pools = DatabasePools.create(settings)
@@ -84,6 +86,7 @@ def create_app(
         calendar=calendar or settings.calendar,
         clock=clock or settings.make_clock(),
         rng=rng or random.SystemRandom(),
+        mailer=mailer or make_mailer(settings),
         time_scale=settings.time_scale,
     )
 

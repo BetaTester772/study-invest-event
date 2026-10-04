@@ -8,6 +8,8 @@ import type {
   CertStatus,
   Certification,
   CertificationStatus,
+  EmailCodeRequest,
+  EmailCodeResponse,
   EventInfo,
   Instrument,
   LoginRequest,
@@ -16,6 +18,9 @@ import type {
   Params,
   Participant,
   ParticipantStatus,
+  MyEmailCodeRequest,
+  PasswordResetCodeRequest,
+  PasswordResetRequest,
   Portfolio,
   PriceOverrideRequest,
   PricePoint,
@@ -27,6 +32,8 @@ import type {
   SimulationReport,
   SimulateOptions,
   SimulationRequest,
+  TradingAccess,
+  VerifyEmailRequest,
 } from './types';
 
 /** Public endpoints. */
@@ -40,6 +47,12 @@ export const publicApi = {
 };
 
 export const authApi = {
+  requestEmailCode: (body: EmailCodeRequest) =>
+    request<EmailCodeResponse>('/auth/email-code', { method: 'POST', body }),
+  requestPasswordResetCode: (body: PasswordResetCodeRequest) =>
+    request<EmailCodeResponse>('/auth/password-reset/code', { method: 'POST', body }),
+  resetPassword: (body: PasswordResetRequest) =>
+    request<AuthResponse>('/auth/password-reset', { method: 'POST', body }),
   register: (body: RegisterRequest) => request<AuthResponse>('/auth/register', { method: 'POST', body }),
   login: (body: LoginRequest) => request<AuthResponse>('/auth/login', { method: 'POST', body }),
   logout: () => request<void>('/auth/logout', { method: 'POST', auth: 'participant' }),
@@ -48,6 +61,10 @@ export const authApi = {
 /** Participant endpoints (Bearer). */
 export const meApi = {
   me: () => request<Participant>('/me', { auth: 'participant' }),
+  requestEmailCode: (body: MyEmailCodeRequest = {}) =>
+    request<EmailCodeResponse>('/me/email/code', { method: 'POST', auth: 'participant', body }),
+  verifyEmail: (body: VerifyEmailRequest) =>
+    request<Participant>('/me/email', { method: 'POST', auth: 'participant', body }),
   portfolio: () => request<Portfolio>('/me/portfolio', { auth: 'participant' }),
   orders: (limit = 100) => request<Order[]>('/me/orders', { auth: 'participant', query: { limit } }),
   placeOrder: (body: OrderRequest) => request<Order>('/me/orders', { method: 'POST', auth: 'participant', body }),
@@ -66,6 +83,11 @@ export const adminApi = {
   participants: () => request<AdminParticipant[]>('/admin/participants', { auth: 'admin' }),
   setParticipantStatus: (id: number, status: ParticipantStatus) =>
     request<AdminParticipant>(`/admin/participants/${id}`, { method: 'PATCH', auth: 'admin', body: { status } }),
+  setParticipantVerified: (id: number, verified: boolean) =>
+    request<AdminParticipant>(`/admin/participants/${id}`, { method: 'PATCH', auth: 'admin', body: { verified } }),
+  tradingAccess: () => request<TradingAccess>('/admin/trading-access', { auth: 'admin' }),
+  setTradingAccess: (body: TradingAccess) =>
+    request<TradingAccess>('/admin/trading-access', { method: 'PUT', auth: 'admin', body }),
   certifications: (status?: CertStatus) =>
     request<AdminCertification[]>('/admin/certifications', { auth: 'admin', query: { status } }),
   review: (id: number, body: ReviewRequest) =>

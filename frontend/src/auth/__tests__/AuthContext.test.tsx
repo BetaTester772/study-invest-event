@@ -4,7 +4,16 @@ import { ApiError, meApi, tokenStore, type Participant } from '../../api';
 import { AuthProvider, useAuth } from '../AuthContext';
 import { RequireAuth } from '../RequireAuth';
 
-const ME: Participant = { id: 1, nickname: 'alice', status: 'normal', joined_at: '2026-10-06T09:00:00+09:00' };
+const ME: Participant = {
+  id: 1,
+  nickname: 'alice',
+  status: 'normal',
+  joined_at: '2026-10-06T09:00:00+09:00',
+  masked_email: 'a***@g.skku.edu',
+  verified: true,
+  email_verified: true,
+  needs_profile: false,
+};
 
 function Probe() {
   const { status, participant } = useAuth();
@@ -29,6 +38,7 @@ function renderApp() {
             }
           />
           <Route path="/login" element={<p>login page</p>} />
+          <Route path="/verify-email" element={<p>verify email page</p>} />
         </Routes>
         <Probe />
       </MemoryRouter>
@@ -74,5 +84,12 @@ describe('AuthProvider', () => {
     renderApp();
     await waitFor(() => expect(screen.getByText('login page')).toBeInTheDocument());
     expect(tokenStore.get()).toBeNull();
+  });
+
+  it('lets unverified accounts use protected pages (verification is optional by default)', async () => {
+    vi.spyOn(meApi, 'me').mockResolvedValue({ ...ME, verified: false });
+    renderApp();
+    await waitFor(() => expect(screen.getByText('authenticated:alice')).toBeInTheDocument());
+    expect(screen.getByText('protected page')).toBeInTheDocument();
   });
 });

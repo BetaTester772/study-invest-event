@@ -1,5 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ApiError, authApi, meApi, onUnauthorized, tokenStore, type Participant } from '../api';
+import {
+  ApiError,
+  authApi,
+  meApi,
+  onUnauthorized,
+  tokenStore,
+  type Participant,
+  type PasswordResetRequest,
+  type RegisterRequest,
+  type VerifyEmailRequest,
+} from '../api';
 
 /**
  * 세션 상태는 **토큰**이 정한다. 프로필(/me)은 세션에 딸린 데이터일 뿐이다.
@@ -18,7 +28,11 @@ export interface AuthContextValue {
   /** 서버에서 받은 프로필. 세션은 있지만 아직 못 받았으면 null. */
   participant: Participant | null;
   login: (identity: string, password: string) => Promise<Participant>;
-  register: (identity: string, nickname: string, password: string) => Promise<Participant>;
+  register: (body: RegisterRequest) => Promise<Participant>;
+  /** 학교 메일 코드로 비밀번호를 바꾸고 로그인한다. */
+  resetPassword: (body: PasswordResetRequest) => Promise<Participant>;
+  /** 메일 인증 도입 전에 가입한 계정의 학교 메일 재인증. */
+  verifyEmail: (body: VerifyEmailRequest) => Promise<Participant>;
   logout: () => Promise<void>;
   /** Re-fetch /me (e.g. after status changes). */
   refresh: () => Promise<void>;
@@ -107,11 +121,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res.participant;
   }, [startSession]);
 
-  const register = useCallback(async (identity: string, nickname: string, password: string) => {
-    const res = await authApi.register({ identity, nickname, password });
+  const register = useCallback(async (body: RegisterRequest) => {
+    const res = await authApi.register(body);
     startSession(res.token, res.participant);
     return res.participant;
   }, [startSession]);
+
+  const resetPassword = useCallback(async (body: PasswordResetRequest) => {
+    const res = await authApi.resetPassword(body);
+    startSession(res.token, res.participant);
+    return res.participant;
+  }, [startSession]);
+
+  const verifyEmail = useCallback(async (body: VerifyEmailRequest) => {
+    const mySession = session.current;
+    const me = await meApi.verifyEmail(body);
+    if (mySession === session.current) setParticipant(me);
+    return me;
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -123,8 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clear]);
 
   const value = useMemo(
-    () => ({ status, participant, login, register, logout, refresh }),
-    [status, participant, login, register, logout, refresh],
+    () => ({ status, participant, login, register, resetPassword, verifyEmail, logout, refresh }),
+    [status, participant, login, register, resetPassword, verifyEmail, logout, refresh],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

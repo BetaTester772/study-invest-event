@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import random
+import re
 from collections.abc import Iterator
 from datetime import date, datetime, time
 from pathlib import Path
@@ -42,6 +44,25 @@ class Clock:
         self.now = kst(d, t)
 
 
+class FakeMailer:
+    """보낸 메일을 모아 둔다. fail=True면 발송 실패."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+        self.fail = False
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        if self.fail:
+            raise OSError("smtp down")
+        self.sent.append((to, subject, body))
+
+    def last_code(self, to: str) -> str:
+        body = next(b for t, _, b in reversed(self.sent) if t == to)
+        match = re.search(r"인증 코드: (\d{6})", body)
+        assert match, body
+        return match.group(1)
+
+
 class StubRandom(random.Random):
     """정산 코인 추출용 난수를 순서대로 돌려준다. 비면 0.5."""
 
@@ -64,7 +85,14 @@ def rng() -> StubRandom:
 
 
 @pytest.fixture
-def client(tmp_path: Path, clock: Clock, rng: StubRandom) -> Iterator[TestClient]:
+def mailer() -> FakeMailer:
+    return FakeMailer()
+
+
+@pytest.fixture
+def client(
+    tmp_path: Path, clock: Clock, rng: StubRandom, mailer: FakeMailer
+) -> Iterator[TestClient]:
     settings = Settings(
         database_url=TEST_DB_URL,
         admin_key=ADMIN_KEY,
@@ -72,7 +100,7 @@ def client(tmp_path: Path, clock: Clock, rng: StubRandom) -> Iterator[TestClient
         auto_create_schema=True,
         loop_guard="raise",  # 이벤트 루프에서 DB를 부르면 테스트 실패
     )
-    app = create_app(settings, clock=clock, rng=rng)
+    app = create_app(settings, clock=clock, rng=rng, mailer=mailer)
     engine = app.state.study_invest.session_factory.kw["bind"]
     if TEST_DB_URL != "sqlite://":
         Base.metadata.drop_all(engine)
@@ -89,11 +117,42 @@ def admin() -> dict[str, str]:
     return {"X-Admin-Key": ADMIN_KEY}
 
 
-def register(client: TestClient, name: str = "alice") -> dict[str, str]:
-    r = client.post(
+def email_code(client: TestClient, email: str) -> str:
+    """인증 코드를 요청하고 FakeMailer가 받은 코드를 돌려준다."""
+    r = client.post("/api/auth/email-code", json={"email": email})
+    assert r.status_code == 202, r.text
+    mailer: FakeMailer = client.app.state.study_invest.mailer  # type: ignore[attr-defined]
+    return mailer.last_code(r.json()["email"])
+
+
+def student_id_for(email: str) -> str:
+    """테스트용 학번(숫자 10자리). 메일마다 다르고 같은 메일이면 같다."""
+    return f"2026{int(hashlib.sha256(email.encode()).hexdigest(), 16) % 10**6:06d}"
+
+
+def profile_for(email: str) -> dict[str, str]:
+    return {"name": "홍길동", "student_id": student_id_for(email), "department": "소프트웨어학과"}
+
+
+def register_with(
+    client: TestClient, email: str, nickname: str, code: str | None = None, **overrides: Any
+) -> Any:
+    return client.post(
         "/api/auth/register",
-        json={"identity": f"{name}@corp", "nickname": name, "password": "password123"},
+        json={
+            "email": email,
+            "code": code if code is not None else email_code(client, email),
+            **profile_for(email),
+            "nickname": nickname,
+            "password": "tiger-moon-river-42",
+            "privacy_consent": True,
+            **overrides,
+        },
     )
+
+
+def register(client: TestClient, name: str = "alice") -> dict[str, str]:
+    r = register_with(client, f"{name}@g.skku.edu", name)
     assert r.status_code == 201, r.text
     return {"Authorization": f"Bearer {r.json()['token']}"}
 

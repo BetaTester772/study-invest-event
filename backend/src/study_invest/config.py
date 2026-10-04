@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Literal, cast
@@ -54,6 +54,18 @@ def _env_float(env: Mapping[str, str], name: str, default: float) -> float:
     return float(value) if value else default
 
 
+def _env_flag(env: Mapping[str, str], name: str, default: bool) -> bool:
+    """1/true/on, 0/false/off 환경 변수. 비어 있거나 없으면 기본값."""
+    value = env.get(name, "").strip().lower()
+    if not value:
+        return default
+    if value in {"1", "true", "on", "yes"}:
+        return True
+    if value in {"0", "false", "off", "no"}:
+        return False
+    raise ValueError(f"{name}은 1 또는 0이어야 합니다: {value!r}")
+
+
 DEFAULT_DATABASE_URL = "postgresql+psycopg://study:study@localhost:5432/study_invest"
 
 
@@ -94,6 +106,23 @@ class Settings:
     """앱 시계 배속. 24면 실제 1시간이 이벤트 하루다. 테스트·QA 서버에서만 바꾼다."""
     time_origin: datetime | None = None
     """앱 시계가 이벤트 첫날 00:00(KST)을 가리키는 실제 시각. time_scale이 1이 아니면 필수."""
+    email_verification: bool = False
+    """켜면 가입할 때 학교 메일 인증 코드를 반드시 확인한다. 끄면(기본) 메일 주소만 받고 미인증으로
+    가입시킨다. 미인증 참가자는 나중에 메일 코드로 스스로 인증하거나 관리자가 인증 처리한다.
+    인증된 참가자만 거래하게 하는 스위치는 관리자 파라미터(verified_only_trading)다."""
+    smtp_host: str = ""
+    """인증 메일 SMTP 서버(예: smtp.gmail.com). 비우면 메일을 보낼 수 없다(코드 요청은 503).
+    mail_log_only를 켜면 대신 로그로 남긴다."""
+    mail_log_only: bool = False
+    """SMTP 없이 메일 내용(코드 포함)을 로그로 남긴다. 로컬 개발·CI 전용, 운영 금지."""
+    smtp_port: int = 587
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    smtp_username: str = ""
+    smtp_password: str = field(default="", repr=False)
+    mail_from: str = ""
+    """보내는 주소. 비우면 smtp_username. Gmail SMTP는 로그인한 계정 주소여야 한다."""
+    mail_daily_limit: int = 400
+    """최근 24시간 동안 보낼 인증 메일 상한. 넘으면 503. 발송 계정의 하루 한도보다 낮게 둔다."""
     qa_unlimited: bool = False
     """켜면 이벤트 종료일(event_end)을 무시하고 시작일 이후 끝없이 운영한다(QA 무제한 모드).
     공시·정산·회차가 계속 이어져 가격 추세를 길게 볼 수 있다. 테스트·QA 서버에서만 켠다."""
@@ -130,6 +159,20 @@ class Settings:
             event_end=_env_date(env, "STUDY_INVEST_EVENT_END", cls.event_end),
             time_scale=_env_float(env, "STUDY_INVEST_TIME_SCALE", cls.time_scale),
             time_origin=_env_datetime(env, "STUDY_INVEST_TIME_ORIGIN"),
+            email_verification=_env_flag(env, "STUDY_INVEST_EMAIL_VERIFICATION", False),
+            smtp_host=env.get("STUDY_INVEST_SMTP_HOST", "").strip(),
+            mail_log_only=_env_flag(env, "STUDY_INVEST_MAIL_LOG_ONLY", False),
+            smtp_port=int(env.get("STUDY_INVEST_SMTP_PORT", "").strip() or cls.smtp_port),
+            smtp_security=cast(
+                Literal["starttls", "ssl", "none"],
+                env.get("STUDY_INVEST_SMTP_SECURITY", "").strip() or cls.smtp_security,
+            ),
+            smtp_username=env.get("STUDY_INVEST_SMTP_USERNAME", "").strip(),
+            smtp_password=env.get("STUDY_INVEST_SMTP_PASSWORD", ""),
+            mail_from=env.get("STUDY_INVEST_MAIL_FROM", "").strip(),
+            mail_daily_limit=int(
+                env.get("STUDY_INVEST_MAIL_DAILY_LIMIT", "").strip() or cls.mail_daily_limit
+            ),
             qa_unlimited=env.get("STUDY_INVEST_QA_UNLIMITED", "0").lower() in {"1", "true", "on"},
             qa_tools=env.get("STUDY_INVEST_QA_TOOLS", "0").lower() in {"1", "true", "on"},
         )

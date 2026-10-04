@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+from .normalize import mask_email
 
 
 class AwareDateTime(TypeDecorator[datetime]):
@@ -49,6 +50,13 @@ BIGINT_MAX = 2**63 - 1
 
 def _enum(cls: type[StrEnum]) -> Enum:
     return Enum(cls, native_enum=False, length=32, values_callable=lambda e: [m.value for m in e])
+
+
+class VerifyMethod(StrEnum):
+    EMAIL = "email"
+    """학교 메일 인증 코드."""
+    ADMIN = "admin"
+    """관리자가 확인(메일 인증을 끈 운영)."""
 
 
 class ParticipantStatus(StrEnum):
@@ -107,8 +115,25 @@ class Participant(Base):
     __tablename__ = "participants"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    identity: Mapped[str] = mapped_column(String(128), unique=True)
-    """정규화된 1인 1계정 식별자."""
+    identity: Mapped[str | None] = mapped_column(String(128), unique=True)
+    """메일 인증 도입 전에 쓰던 자유 입력 식별자(정규화됨). 그 뒤 가입한 참가자는 None."""
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    """학교 메일의 1인 1계정 키(normalize.SchoolEmail.canonical, ID@g.skku.edu). 메일 인증을 끈
+    운영에서는 확인하지 않은 채 저장된다. 이벤트 후 파기하면 None."""
+    email_address: Mapped[str | None] = mapped_column(String(254))
+    """인증·재설정 코드를 보내는 주소(입력한 도메인 그대로). skku.edu와 g.skku.edu는 같은 ID여도
+    메일함이 다를 수 있어 키(email)와 따로 둔다. 이벤트 후 파기하면 None."""
+    verified_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
+    """인증 시각(학교 메일 코드 또는 관리자 확인). None이면 미인증이라, 관리자가 '인증된 참가자만
+    거래'(EventParams.verified_only_trading)를 켜면 주문할 수 없다."""
+    verified_via: Mapped[VerifyMethod | None] = mapped_column(_enum(VerifyMethod))
+    """어떻게 인증됐는지(email·admin)."""
+    name: Mapped[str | None] = mapped_column(String(30))
+    """실명. 메일 인증 도입 전 계정은 재인증할 때 받는다. 이벤트 후 파기하면 None."""
+    student_id: Mapped[str | None] = mapped_column(String(16), unique=True)
+    """학번(숫자 10자리). 한 학번에 한 계정. 이벤트 후 파기하면 None."""
+    department: Mapped[str | None] = mapped_column(String(50))
+    """학과. 이벤트 후 파기하면 None."""
     nickname: Mapped[str] = mapped_column(String(32), unique=True)
     password_hash: Mapped[str] = mapped_column(String(256))
     cash: Mapped[int] = mapped_column(BigInteger)
@@ -121,6 +146,25 @@ class Participant(Base):
         back_populates="participant", cascade="all, delete-orphan"
     )
 
+    @property
+    def verified(self) -> bool:
+        return self.verified_at is not None
+
+    @property
+    def masked_email(self) -> str | None:
+        """본인에게 보여 주는 가린 등록 메일(k***@g.skku.edu)."""
+        return mask_email(self.email_address) if self.email_address else None
+
+    @property
+    def email_verified(self) -> bool:
+        """학교 메일 코드로 인증했다(등록 메일이 본인 것으로 확인됨). 관리자 인증과 구분."""
+        return self.verified_via == VerifyMethod.EMAIL
+
+    @property
+    def needs_profile(self) -> bool:
+        """이름·학번·학과가 없다(메일 인증 도입 전 계정, 또는 이벤트 후 파기)."""
+        return self.student_id is None
+
 
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
@@ -128,6 +172,35 @@ class AuthSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(AwareDateTime())
+
+
+class CodePurpose(StrEnum):
+    VERIFY = "verify"
+    """참가 신청·재인증(아직 아무 계정도 쓰지 않은 학교 메일)."""
+    RESET_PASSWORD = "reset_password"
+    """비밀번호 재설정(이미 가입한 학교 메일)."""
+
+
+class EmailVerification(Base):
+    """학교 메일 인증 코드. 코드는 해시로만 저장한다. 메일별로 가장 최근 코드만 유효하다."""
+
+    __tablename__ = "email_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    """1인 1계정 키(normalize.SchoolEmail.canonical)."""
+    purpose: Mapped[CodePurpose] = mapped_column(
+        _enum(CodePurpose), default=CodePurpose.VERIFY, server_default=CodePurpose.VERIFY.value
+    )
+    """코드 용도. 다른 용도로 받은 코드는 쓸 수 없다."""
+    requested_by: Mapped[int | None] = mapped_column(index=True)
+    """로그인한 참가자가 요청했으면 그 id(계정 기준 재요청 대기·한도). 가입·재설정 요청은 None."""
+    code_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime(), index=True)
+    expires_at: Mapped[datetime] = mapped_column(AwareDateTime())
+    attempts: Mapped[int] = mapped_column(default=0)
+    """틀린 코드 입력 횟수."""
+    consumed_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
 
 
 class Holding(Base):

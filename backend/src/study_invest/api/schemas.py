@@ -26,8 +26,14 @@ from ..models import (
     PriceSource,
     RejectReason,
     Side,
+    VerifyMethod,
 )
-from ..normalize import normalize_identity, normalize_nickname
+from ..normalize import (
+    normalize_identity,
+    normalize_nickname,
+    normalize_student_id,
+    normalize_text,
+)
 
 
 class Schema(BaseModel):
@@ -84,6 +90,15 @@ class ClockInfo(Schema):
     """다음 운영일 18:00(장 마감·정산)이 되는 실제 시각. 남은 운영일이 없으면 null."""
 
 
+class SignupInfo(Schema):
+    """가입·인증 운영 설정(화면이 가입 폼과 안내를 고른다)."""
+
+    email_verification: bool
+    """true면 가입할 때 학교 메일 인증 코드가 필요하다. false면 메일 주소만 받고 미인증으로 가입."""
+    verified_only_trading: bool
+    """true면 인증된 참가자만 주문할 수 있다(관리자가 부정 대응으로 켠다)."""
+
+
 class EventInfo(Schema):
     start: date
     end: date | None
@@ -102,6 +117,7 @@ class EventInfo(Schema):
     daily_buy_limit_ratio: float
     clock: ClockInfo | None = None
     """테스트 시계로 돌 때만 채운다. 실제 시계(운영)면 null."""
+    signup: SignupInfo
 
 
 class Instrument(Schema):
@@ -162,14 +178,81 @@ Nickname = Annotated[
 ]
 
 
+# 이름·학번·학과(관리자만 본다). 길이 상한은 DB 컬럼(name 30, student_id 16, department 50) 이내.
+Name = Annotated[str, _before(normalize_text), StringConstraints(min_length=1, max_length=30)]
+StudentId = Annotated[str, _before(normalize_student_id), StringConstraints(pattern=r"^[0-9]{10}$")]
+Department = Annotated[str, _before(normalize_text), StringConstraints(min_length=1, max_length=50)]
+
+# 형식·도메인 검사는 서비스(email_verification.parse)가 업무 오류 코드로 한다.
+Email = Annotated[str, StringConstraints(min_length=1, max_length=254)]
+Code = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9]{6}$")]
+
+
+class EmailCodeRequest(BaseModel):
+    email: Email
+
+
+class EmailCodeResponse(Schema):
+    email: str
+    """코드를 보낸 주소. 등록 메일로 보냈으면 가린 주소(k***@g.skku.edu)."""
+    expires_in: int
+    """코드 유효시간(초)."""
+    resend_after: int
+    """다시 요청할 수 있을 때까지(초)."""
+
+
 class RegisterRequest(BaseModel):
-    identity: Identity
+    email: Email
+    """학교 메일. 메일 인증을 꺼도 받는다(비밀번호 재설정 코드를 받는 주소)."""
+    code: Code | None = None
+    """학교 메일 인증 코드. 메일 인증을 켠 운영(signup.email_verification)에서만 필요하다."""
+    name: Name
+    student_id: StudentId
+    """숫자 10자리. 한 학번에 한 계정."""
+    department: Department
     nickname: Nickname
     password: str = Field(min_length=8, max_length=128)
+    privacy_consent: bool
+    """개인정보(학교 메일·이름·학번·학과) 수집·이용 동의. true여야 한다."""
+
+
+class MyEmailCodeRequest(BaseModel):
+    email: Email | None = None
+    """비우면 등록 메일로 보낸다. 다른 주소로 인증하려면 그 주소."""
+
+
+class VerifyEmailRequest(BaseModel):
+    """학교 메일 코드 인증. 보통은 코드만 보낸다(등록 메일로 받은 코드).
+
+    email: 다른 주소로 코드를 받았으면 그 주소(인증하면 등록 메일이 그 주소로 바뀐다).
+    이름·학번·학과·동의는 그 정보가 없는 계정(Participant.needs_profile, 메일 인증 도입 전
+    가입)만 함께 보낸다.
+    """
+
+    email: Email | None = None
+    code: Code
+    name: Name | None = None
+    student_id: StudentId | None = None
+    department: Department | None = None
+    privacy_consent: bool = False
+
+
+class PasswordResetCodeRequest(BaseModel):
+    identity: Identity
+    """학번(학교 메일도 받는다). 코드는 그 계정의 등록 메일로만 간다."""
+
+
+class PasswordResetRequest(BaseModel):
+    identity: Identity
+    """코드를 요청할 때와 같은 학번(또는 학교 메일)."""
+    code: Code
+    password: str = Field(min_length=8, max_length=128)
+    """새 비밀번호."""
 
 
 class LoginRequest(BaseModel):
     identity: Identity
+    """학번(숫자 10자리). 학교 메일(@skku.edu·@g.skku.edu)이나 메일 인증 도입 전 식별자도 받는다."""
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -178,6 +261,16 @@ class Participant(Schema):
     nickname: str
     status: ParticipantStatus
     joined_at: datetime
+    masked_email: str | None
+    """가린 등록 메일(k***@g.skku.edu). 본인 응답에도 전체 주소는 싣지 않는다. 없으면 null."""
+    verified: bool
+    """인증(학교 메일 코드 또는 관리자 확인)을 마쳤는지. signup.verified_only_trading이면 false인
+    동안 주문할 수 없다."""
+    email_verified: bool
+    """학교 메일 코드로 인증했다(등록 메일이 본인 것으로 확인됨). false면 메일 인증을 할 수 있다
+    (미인증이거나 관리자 인증만 받은 계정)."""
+    needs_profile: bool
+    """이름·학번·학과가 없다(메일 인증 도입 전 계정). 인증할 때 함께 받는다."""
 
 
 class AuthResponse(Schema):
@@ -272,7 +365,17 @@ class CertificationStatus(Schema):
 
 
 class AdminParticipant(Participant):
-    identity: str
+    identity: str | None
+    """메일 인증 도입 전 식별자. 그 뒤 가입한 참가자는 null."""
+    email: str | None
+    """등록 학교 메일 전체 주소(코드를 보내는 주소). 관리자만 본다."""
+    name: str | None
+    student_id: str | None
+    department: str | None
+    """이름·학번·학과. 재인증 전 계정이거나 이벤트 후 파기했으면 null."""
+    verified_at: datetime | None
+    verified_via: VerifyMethod | None
+    """email(학교 메일 코드) 또는 admin(관리자 확인). 미인증이면 null."""
     cash: int
     total_assets: int
     principal: int
@@ -284,7 +387,11 @@ class AdminParticipant(Participant):
 
 
 class ParticipantPatch(BaseModel):
-    status: ParticipantStatus
+    """바꿀 항목만 보낸다."""
+
+    status: ParticipantStatus | None = None
+    verified: bool | None = None
+    """true면 관리자 인증 처리, false면 인증 취소."""
 
 
 class AdminCertification(Certification):
@@ -315,12 +422,19 @@ class Params(Schema):
     daily_buy_limit_ratio: float
     reward_cash: int
     certification_cutoff: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    verified_only_trading: bool | None = None
+    """인증된 참가자만 거래. null이면 현재 값 유지(바꾸려면 PUT /api/admin/trading-access)."""
 
     @field_validator("certification_cutoff")
     @classmethod
     def _valid_time(cls, v: str) -> str:
         time.fromisoformat(v)
         return v
+
+
+class TradingAccess(BaseModel):
+    verified_only: bool
+    """true면 인증된 참가자만 주문할 수 있다."""
 
 
 class ManualPriceRequest(BaseModel):

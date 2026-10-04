@@ -29,6 +29,7 @@ simulate: CPU 작업을 프로세스 풀에 맡기고 await만 한다."""
 ASYNC_DEPENDENCIES = {
     "get_state",
     "get_now",
+    "get_real_now",
     "bearer_token",
     "current_participant",
     "require_admin",

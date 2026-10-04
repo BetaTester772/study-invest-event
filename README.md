@@ -20,7 +20,7 @@
 ## Docker Compose로 실행
 
 ```bash
-cp .env.example .env        # STUDY_INVEST_ADMIN_KEY, POSTGRES_PASSWORD 변경
+cp .env.example .env        # STUDY_INVEST_ADMIN_KEY, POSTGRES_PASSWORD, SMTP(인증 메일) 설정
 docker compose up --build
 ```
 
@@ -59,6 +59,7 @@ uv sync --locked --extra dev               # uv.lock 버전 그대로 .venv에 �
 docker compose up -d db                     # 저장소 루트에서. 또는 로컬 PostgreSQL
 export STUDY_INVEST_DATABASE_URL=postgresql+psycopg://study:change-me@localhost:5432/study_invest
 export STUDY_INVEST_ADMIN_KEY=dev-key
+export STUDY_INVEST_MAIL_LOG_ONLY=1             # 인증·재설정 코드를 로그로 확인(SMTP 없이)
 alembic upgrade head
 uvicorn --factory study_invest.api.app:create_app --reload
 ```
@@ -80,6 +81,7 @@ study-invest open --day 2026-10-06           # 수동 공시
 study-invest settle --day 2026-10-06         # 수동 정산
 study-invest simulate --paths 100000 --seed 42 [--use-price-cap] [--defaults]
 study-invest purge-images                    # 이벤트 종료 후 인증 사진 삭제
+study-invest purge-personal-info             # 이벤트 종료 후 학교 메일·이름·학번·학과·인증 코드 기록 삭제
 ```
 
 환경 변수:
@@ -106,6 +108,13 @@ study-invest purge-images                    # 이벤트 종료 후 인증 사�
 | `STUDY_INVEST_QA_TOOLS` | `0` | `1`이면 관리자 > 배치·정산에 "지금 가격 변동시키기" 버튼이 생긴다. 18:00·다음 날을 기다리지 않고 최신 공시일을 정산하고 다음 운영일 시작가를 바로 공시한다. 테스트·QA 서버에서만 켠다 |
 | `STUDY_INVEST_QA_UNLIMITED` | `0` | `1`이면 QA 무제한 모드. 종료일(`STUDY_INVEST_EVENT_END`)을 무시하고 시작일 이후 매일 공시·정산·회차가 끝없이 이어진다. 참가 신청도 닫히지 않는다. `STUDY_INVEST_QA_TOOLS`의 가격 변동 버튼(첫 클릭은 이벤트 첫날 공시)이나 `STUDY_INVEST_TIME_SCALE`과 함께 써서 실제 이벤트 기간과 상관없이 긴 가격 추세를 본다. 테스트·QA 서버에서만 켠다 |
 | `STUDY_INVEST_FRONTEND_DIST` | (없음) | 빌드된 프론트엔드를 백엔드가 직접 제공할 때 경로 |
+| `STUDY_INVEST_EMAIL_VERIFICATION` | `0` | `1`이면 가입 때 학교 메일 인증 코드 필수. `0`이면 메일 주소만 받고 미인증으로 가입(인증된 참가자만 거래하게 하는 스위치는 관리자 > 참가자) |
+| `STUDY_INVEST_SMTP_HOST` | (없음) | 학교 메일 인증·비밀번호 재설정 코드 SMTP 서버(예: `smtp.gmail.com`). 비우면 메일을 보낼 수 없어 코드 요청이 503(`MAIL_NOT_CONFIGURED`) |
+| `STUDY_INVEST_MAIL_LOG_ONLY` | `0` | `1`이면 SMTP 없이 메일 내용(코드 포함)을 로그로 남김. 로컬 개발·CI 전용, 운영 금지 |
+| `STUDY_INVEST_SMTP_PORT` / `_SMTP_SECURITY` | `587` / `starttls` | `starttls`·`ssl`(보통 465)·`none` |
+| `STUDY_INVEST_SMTP_USERNAME` / `_SMTP_PASSWORD` | (없음) | SMTP 로그인. Gmail은 2단계 인증 후 만든 **앱 비밀번호** |
+| `STUDY_INVEST_MAIL_FROM` | (= USERNAME) | 보내는 주소. Gmail SMTP는 로그인한 계정 주소여야 한다 |
+| `STUDY_INVEST_MAIL_DAILY_LIMIT` | `400` | 최근 24시간 인증 메일 상한(넘으면 503). 발송 계정 한도보다 낮게(Gmail 개인 계정 약 500통/일) |
 
 ### 프론트엔드
 

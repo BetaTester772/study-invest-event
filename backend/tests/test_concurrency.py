@@ -11,11 +11,12 @@ import random
 import threading
 import time as time_mod
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import date, datetime, time
 from typing import Any
 
 import pytest
-from conftest import PNG, TEST_DB_URL
+from conftest import PNG, TEST_DB_URL, student_id_for
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,7 +25,9 @@ from study_invest.db import Base, make_engine, make_session_factory
 from study_invest.event_calendar import EventCalendar
 from study_invest.models import (
     AuditLog,
+    AuthSession,
     CertStatus,
+    EmailVerification,
     Holding,
     Order,
     OrderStatus,
@@ -33,9 +36,16 @@ from study_invest.models import (
     Side,
     StudyCertification,
 )
+from study_invest.normalize import parse_school_email
 from study_invest.params import KST, EventParams
-from study_invest.services import auth, certification, market, trading
-from study_invest.services.common import DomainError, market_day
+from study_invest.services import auth, certification, email_verification, market, trading
+from study_invest.services.common import (
+    DomainError,
+    get_params,
+    market_day,
+    params_lock,
+    set_params,
+)
 
 pytestmark = pytest.mark.skipif(
     not TEST_DB_URL.startswith("postgresql"), reason="PostgreSQL 전용(행·advisory 잠금)"
@@ -62,7 +72,9 @@ def factory() -> Iterator[sessionmaker[Session]]:
 
 def setup_participant(factory: sessionmaker[Session], name: str = "alice") -> int:
     with factory() as s:
-        p, _ = auth.register(s, name, name, "password123", at(D1, 8), CAL)
+        email = parse_school_email(f"{name}@g.skku.edu")
+        profile = auth.Profile("홍길동", student_id_for(name), "소프트웨어학과")
+        p, _ = auth.register(s, email, profile, name, "tiger-moon-river-42", at(D1, 8), CAL)
         if market_day(s, D1) is None:
             market.open_day(s, D1, at(D1, 9), CAL)
         s.commit()
@@ -225,20 +237,124 @@ class TestUniqueConflicts:
         with factory() as s:
             assert s.scalar(select(func.count()).select_from(StudyCertification)) == 1
 
-    def test_duplicate_registration_is_domain_error(self, factory: sessionmaker[Session]) -> None:
-        def register(nickname: str) -> Callable[[], str]:
+    def test_concurrent_code_requests_respect_cooldown_and_quota(
+        self, factory: sessionmaker[Session]
+    ) -> None:
+        def request(raw: str, limit: int = 400) -> Callable[[], str]:
             def fn() -> str:
                 with factory() as s:
-                    auth.register(s, "same@corp", nickname, "password123", at(D1, 8), CAL)
+                    email_verification.request_code(s, raw, at(D1, 8), limit)
+                    time_mod.sleep(0.2)  # 커밋 전에 다른 요청이 같은 검사를 지나가려 한다
+                    s.commit()
+                    return "ok"
+
+            return fn
+
+        # 같은 사람(두 도메인)이 동시에 요청해도 코드는 하나만 나간다(재요청 60초)
+        results = run_together(request("same@g.skku.edu"), request("same@skku.edu"))
+        assert sorted(r if isinstance(r, str) else r.code for r in results) == [
+            "CODE_RECENTLY_SENT",
+            "ok",
+        ]
+        # 전체 하루 한도도 동시 요청으로 넘지 않는다(한도 2, 이미 1통)
+        results = run_together(request("a@g.skku.edu", 2), request("b@g.skku.edu", 2))
+        assert sorted(r if isinstance(r, str) else r.code for r in results) == [
+            "MAIL_QUOTA_EXCEEDED",
+            "ok",
+        ]
+        with factory() as s:
+            assert s.scalar(select(func.count()).select_from(EmailVerification)) == 2
+
+    def test_params_switch_and_form_save_do_not_overwrite_each_other(
+        self, factory: sessionmaker[Session]
+    ) -> None:
+        """'인증된 참가자만 거래' 스위치와 파라미터 폼 저장이 동시에 와도 둘 다 남는다."""
+
+        def toggle() -> str:  # PUT /api/admin/trading-access 와 같은 순서
+            with factory() as s:
+                params_lock(s)
+                current = get_params(s)
+                time_mod.sleep(0.3)  # 그 사이 폼 저장이 들어온다
+                set_params(s, replace(current, verified_only_trading=True), at(D1, 8))
+                s.commit()
+                return "toggle"
+
+        def form() -> str:  # PUT /api/admin/params(스위치 값은 현재 값 유지)
+            time_mod.sleep(0.1)
+            with factory() as s:
+                params_lock(s)
+                current = get_params(s)
+                set_params(s, replace(current, reward_cash=100_000), at(D1, 8))
+                s.commit()
+                return "form"
+
+        assert run_together(toggle, form) == ["toggle", "form"]
+        with factory() as s:
+            final = get_params(s)
+        assert (final.verified_only_trading, final.reward_cash) == (True, 100_000)
+
+    def test_password_reset_ends_login_racing_with_old_password(
+        self, factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """재설정 중 옛 비밀번호로 로그인해도 그 로그인은 살아남지 않는다."""
+        pid = setup_participant(factory)
+        sid = student_id_for("alice")
+        original = auth.verify_password
+
+        def slow_verify(password: str, stored: str) -> bool:
+            ok = original(password, stored)
+            time_mod.sleep(0.4)  # 비밀번호 확인(scrypt) 동안 재설정이 끝난다
+            return ok
+
+        monkeypatch.setattr(auth, "verify_password", slow_verify)
+
+        def login() -> str:
+            with factory() as s:
+                _, token = auth.login(s, sid, "tiger-moon-river-42", at(D1, 8))
+                s.commit()
+                return token
+
+        def reset() -> str:
+            time_mod.sleep(0.1)
+            with factory() as s:
+                me = s.get(Participant, pid)
+                assert me is not None
+                auth.reset_password(s, me, "amber-lake-sunset-19", at(D1, 8))
+                s.commit()
+                return "reset"
+
+        results = run_together(login, reset)
+        with factory() as s:
+            sessions = s.scalar(
+                select(func.count())
+                .select_from(AuthSession)
+                .where(AuthSession.participant_id == pid)
+            )
+        assert results[1] == "reset"
+        assert getattr(results[0], "code", None) == "INVALID_CREDENTIALS"
+        assert sessions == 1  # 재설정이 발급한 토큰만
+
+    def test_duplicate_registration_is_domain_error(self, factory: sessionmaker[Session]) -> None:
+        def register(nickname: str, domain: str) -> Callable[[], str]:
+            def fn() -> str:
+                with factory() as s:
+                    email = parse_school_email(f"same@{domain}")
+                    profile = auth.Profile(
+                        "홍길동", f"20260000{len(nickname):02d}", "소프트웨어학과"
+                    )
+                    auth.register(
+                        s, email, profile, nickname, "tiger-moon-river-42", at(D1, 8), CAL
+                    )
                     time_mod.sleep(0.2)
                     s.commit()
                     return "ok"
 
             return fn
 
-        results = run_together(register("one"), register("two"))
+        # 두 도메인의 같은 ID(같은 사람)가 동시에 가입해도 하나만 된다
+        results = run_together(register("one", "g.skku.edu"), register("two", "skku.edu"))
         assert sorted(r if isinstance(r, str) else r.code for r in results) == [
-            "IDENTITY_TAKEN",
+            "EMAIL_TAKEN",
             "ok",
         ]
         assert all(isinstance(r, str | DomainError) for r in results)

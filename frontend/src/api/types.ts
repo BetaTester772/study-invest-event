@@ -42,6 +42,22 @@ export interface Participant {
   nickname: string;
   status: ParticipantStatus;
   joined_at: string;
+  /** 가린 등록 메일(k***@g.skku.edu). 본인 응답에도 전체 주소는 오지 않는다. 없으면 null. */
+  masked_email: string | null;
+  /** 학교 메일 코드나 관리자 확인으로 인증했는지. `signup.verified_only_trading`이면 false인 동안 주문 불가. */
+  verified: boolean;
+  /** 학교 메일 코드로 인증했는지. false면 메일 인증을 할 수 있다(미인증 또는 관리자 인증만). */
+  email_verified: boolean;
+  /** 이름·학번·학과가 없는 계정(메일 인증 도입 전 가입). 인증할 때 함께 받는다. */
+  needs_profile: boolean;
+}
+
+/** 가입·인증 운영 설정. */
+export interface SignupInfo {
+  /** true면 가입할 때 학교 메일 인증 코드가 필요하다. false(기본)면 메일 주소만 받고 미인증으로 가입. */
+  email_verification: boolean;
+  /** true면 인증된 참가자만 주문할 수 있다(관리자가 부정 대응으로 켠다). */
+  verified_only_trading: boolean;
 }
 
 export interface HoldingView {
@@ -143,6 +159,7 @@ export interface EventInfo {
   daily_buy_limit_ratio: number;
   /** Test clock (QA servers only). `null` on the real clock. */
   clock: ClockInfo | null;
+  signup: SignupInfo;
 }
 
 /** BYUNG daily move range (rates are decimals: 2 = +200%). */
@@ -196,13 +213,67 @@ export interface AuthResponse {
   participant: Participant;
 }
 
-export interface RegisterRequest {
-  identity: string;
+export interface EmailCodeRequest {
+  email: string;
+}
+
+export interface EmailCodeResponse {
+  /** 코드를 보낸 주소. 등록 메일로 보냈으면 가린 주소. */
+  email: string;
+  /** 코드 유효시간(초). */
+  expires_in: number;
+  /** 다시 요청할 수 있을 때까지(초). */
+  resend_after: number;
+}
+
+/** 이름·학번·학과. 관리자만 본다(랭킹에는 닉네임만). */
+export interface ProfileFields {
+  name: string;
+  /** 숫자 10자리. 한 학번에 한 계정. */
+  student_id: string;
+  department: string;
+}
+
+export interface RegisterRequest extends ProfileFields {
+  email: string;
+  /** 학교 메일 인증 코드. `signup.email_verification`이 꺼져 있으면 생략(미인증으로 가입). */
+  code?: string;
   nickname: string;
+  password: string;
+  privacy_consent: boolean;
+}
+
+/** 비우면 등록 메일로, 주소를 주면 그 주소로 인증 코드를 보낸다. */
+export interface MyEmailCodeRequest {
+  email?: string;
+}
+
+/**
+ * 학교 메일 코드 인증. 등록 메일로 받았으면 코드만, 다른 주소로 받았으면 그 주소도.
+ * 이름·학번·학과·동의는 `needs_profile`인 계정만 보낸다.
+ */
+export interface VerifyEmailRequest extends Partial<ProfileFields> {
+  email?: string;
+  code: string;
+  privacy_consent?: boolean;
+}
+
+export type VerifyMethod = 'email' | 'admin';
+
+/** 학번(학교 메일도 받는다). 코드는 그 계정의 등록 메일로만 간다. */
+export interface PasswordResetCodeRequest {
+  identity: string;
+}
+
+export interface PasswordResetRequest {
+  identity: string;
+  code: string;
+  /** 새 비밀번호(8자 이상). */
   password: string;
 }
 
 export interface LoginRequest {
+  /** 학번(숫자 10자리). 학교 메일이나 메일 인증 도입 전 식별자도 받는다. */
   identity: string;
   password: string;
 }
@@ -216,7 +287,17 @@ export interface OrderRequest {
 // ---- Admin ----
 
 export interface AdminParticipant extends Participant {
-  identity: string;
+  /** 메일 인증 도입 전 아이디. 그 뒤 가입한 참가자는 null. */
+  identity: string | null;
+  /** 등록 학교 메일 전체 주소(관리자만). */
+  email: string | null;
+  /** 이름·학번·학과. 재인증 전 계정이거나 이벤트 후 파기했으면 null. */
+  name: string | null;
+  student_id: string | null;
+  department: string | null;
+  verified_at: string | null;
+  /** email(학교 메일 코드) 또는 admin(관리자 확인). 미인증이면 null. */
+  verified_via: VerifyMethod | null;
   cash: number;
   total_assets: number;
   principal: number;
@@ -249,6 +330,12 @@ export interface Params {
   daily_buy_limit_ratio: number;
   reward_cash: number;
   certification_cutoff: string;
+  /** 인증된 참가자만 거래. 파라미터 폼은 보내지 않는다(서버가 현재 값 유지). */
+  verified_only_trading?: boolean | null;
+}
+
+export interface TradingAccess {
+  verified_only: boolean;
 }
 
 export interface SettlementStock {

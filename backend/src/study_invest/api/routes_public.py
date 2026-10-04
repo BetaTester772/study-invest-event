@@ -1,22 +1,29 @@
-"""공개 API: 이벤트 정보, 시세(F-02), 랭킹(F-10), 참가 등록·로그인(F-01)."""
+"""공개 API: 이벤트 정보, 시세(F-02), 랭킹(F-10), 학교 메일 인증·참가 등록·로그인(F-01)."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 
 from fastapi import APIRouter, Response
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from ..clock import ScaledClock
 from ..event_calendar import EventCalendar, to_kst
 from ..instruments import BY_CODE, INSTRUMENTS
-from ..models import MarketDay, PriceHistory
+from ..mail import NoMailer
+from ..models import CodePurpose, MarketDay, PriceHistory
+from ..normalize import mask_email
 from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
-from ..services import auth, market, ranking
+from ..services import auth, email_verification, market, ranking
 from ..services.common import DomainError, current_prices, get_params, latest_opened_day
 from . import schemas
-from .deps import NowDep, OptionalMeDep, SessionDep, StateDep, TokenDep
+from .deps import AppState, NowDep, OptionalMeDep, RealNowDep, SessionDep, StateDep, TokenDep
+from .email_codes import consume_code
+
+log = logging.getLogger("study_invest")
 
 router = APIRouter(prefix="/api")
 
@@ -96,6 +103,10 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
         initial_cash=INITIAL_CASH,
         daily_buy_limit_ratio=params.daily_buy_limit_ratio,
         clock=_clock_info(state.clock, now, cal),
+        signup=schemas.SignupInfo(
+            email_verification=state.settings.email_verification,
+            verified_only_trading=params.verified_only_trading,
+        ),
     )
 
 
@@ -166,13 +177,118 @@ def get_ranking(s: SessionDep, now: NowDep, me: OptionalMeDep) -> schemas.Rankin
     )
 
 
+def send_code(
+    state: AppState,
+    s: Session,
+    raw_email: str,
+    now: datetime,
+    purpose: CodePurpose,
+    *,
+    requester_id: int | None = None,
+    shown: Callable[[str], str] = lambda address: address,
+) -> schemas.EmailCodeResponse:
+    """코드를 발급하고 메일로 보낸다. shown: 응답에 보여 줄 주소(등록 메일이면 가린 주소)."""
+    if isinstance(state.mailer, NoMailer):  # 코드를 만들기 전에 거절한다(재요청 대기에 안 걸리게)
+        raise DomainError(
+            "MAIL_NOT_CONFIGURED",
+            "지금은 인증 메일을 보낼 수 없습니다. 운영진에게 문의하세요.",
+            503,
+        )
+    # 느린 SMTP가 공용 스레드풀을 다 차지하지 않게 동시 발송 수를 제한한다. 꽉 차면 코드를 만들기
+    # 전에 바로 거절한다(재요청 대기에 걸리지 않게).
+    if not state.mail_slots.acquire(blocking=False):
+        raise DomainError(
+            "MAIL_BUSY", "인증 메일 요청이 몰리고 있습니다. 잠시 후 다시 시도하세요.", 503
+        )
+    try:
+        email, _, code = email_verification.request_code(
+            s, raw_email, now, state.settings.mail_daily_limit, purpose, requester_id
+        )
+        # 먼저 커밋해 DB 연결·발급 잠금을 돌려준다. SMTP를 기다리는 동안 api 풀을 잡지 않는다.
+        s.commit()
+        try:
+            state.mailer.send(email.address, *email_verification.message(code, purpose))
+        except Exception as exc:
+            # 코드 기록은 지우지 않는다: 재요청 대기·한도에 계속 센다. 연결 종료 중 오류처럼
+            # 메일이 실제로 갔을 수도 있으니 코드도 그대로 유효하다.
+            log.exception("인증 메일 발송 실패")
+            raise DomainError(
+                "MAIL_SEND_FAILED", "인증 메일을 보내지 못했습니다. 1분 뒤 다시 시도하세요.", 503
+            ) from exc
+    finally:
+        state.mail_slots.release()
+    return schemas.EmailCodeResponse(
+        email=shown(email.address),
+        expires_in=int(email_verification.CODE_TTL.total_seconds()),
+        resend_after=int(email_verification.RESEND_COOLDOWN.total_seconds()),
+    )
+
+
+@router.post("/auth/email-code", response_model=schemas.EmailCodeResponse, status_code=202)
+def request_email_code(
+    body: schemas.EmailCodeRequest,
+    state: StateDep,
+    s: SessionDep,
+    now: NowDep,
+    real_now: RealNowDep,
+) -> schemas.EmailCodeResponse:
+    """학교 메일로 6자리 인증 코드를 보낸다(참가 신청·미인증 계정의 인증 공용)."""
+    auth.ensure_registration_open(now, state.calendar)
+    return send_code(state, s, body.email, real_now, CodePurpose.VERIFY)
+
+
 @router.post("/auth/register", response_model=schemas.AuthResponse, status_code=201)
 def register(
-    body: schemas.RegisterRequest, state: StateDep, s: SessionDep, now: NowDep
+    body: schemas.RegisterRequest, state: StateDep, s: SessionDep, now: NowDep, real_now: RealNowDep
 ) -> schemas.AuthResponse:
+    auth.ensure_registration_open(now, state.calendar)
+    auth.ensure_privacy_consent(body.privacy_consent)
+    # 코드가 있으면 확인해 인증된 채로 가입한다. 메일 인증을 켠 운영이면 코드가 꼭 있어야 한다.
+    # 끈 운영(기본)이면 주소만 받아 미인증으로 가입한다(나중에 메일 코드나 관리자가 인증).
+    verify = body.code is not None
+    if verify:
+        assert body.code is not None
+        email = consume_code(s, body.email, body.code, real_now)
+    elif state.settings.email_verification:
+        raise DomainError("CODE_REQUIRED", "학교 메일로 받은 인증 코드를 입력하세요.", 422)
+    else:
+        email = email_verification.parse(body.email)
+    profile = auth.Profile(body.name, body.student_id, body.department)
     participant, token = auth.register(
-        s, body.identity, body.nickname, body.password, now, state.calendar
+        s, email, profile, body.nickname, body.password, now, state.calendar, verified=verify
     )
+    s.commit()
+    return schemas.AuthResponse(
+        token=token, participant=schemas.Participant.model_validate(participant)
+    )
+
+
+@router.post("/auth/password-reset/code", response_model=schemas.EmailCodeResponse, status_code=202)
+def request_password_reset_code(
+    body: schemas.PasswordResetCodeRequest, state: StateDep, s: SessionDep, real_now: RealNowDep
+) -> schemas.EmailCodeResponse:
+    """학번(또는 학교 메일)으로 찾은 계정의 등록 메일로 재설정 코드를 보낸다. 응답 주소는 가린다."""
+    participant = auth.account_for_reset(s, body.identity)
+    assert participant.email_address is not None
+    return send_code(
+        state,
+        s,
+        participant.email_address,
+        real_now,
+        CodePurpose.RESET_PASSWORD,
+        shown=mask_email,
+    )
+
+
+@router.post("/auth/password-reset", response_model=schemas.AuthResponse)
+def reset_password(
+    body: schemas.PasswordResetRequest, s: SessionDep, real_now: RealNowDep
+) -> schemas.AuthResponse:
+    """코드를 확인하고 비밀번호를 바꾼 뒤 로그인시킨다. 다른 기기의 로그인은 끊는다."""
+    participant = auth.account_for_reset(s, body.identity)
+    assert participant.email_address is not None
+    consume_code(s, participant.email_address, body.code, real_now, CodePurpose.RESET_PASSWORD)
+    participant, token = auth.reset_password(s, participant, body.password, real_now)
     s.commit()
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)
