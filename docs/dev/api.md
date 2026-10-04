@@ -215,7 +215,7 @@ interface RankingEntry {
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | GET | `/api/me` | – | `Participant` |
-| POST | `/api/me/email/code` | `{email?}` | 202 `{email, expires_in, resend_after}` — 비우면 등록 메일로 보내고 `email`은 가린 주소. 주소를 주면 그 주소로(등록 메일을 잘못 적었거나 메일이 없는 예전 계정) / 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN`, `EVENT_ENDED`(이벤트 종료 후), 422 `EMAIL_REQUIRED`(메일 없는 계정이 주소를 비움), 429, 503 |
+| POST | `/api/me/email/code` | `{email?}` | 202 `{email, expires_in, resend_after}` — 비우면 등록 메일로 보내고 `email`은 가린 주소. 주소를 주면 그 주소로(등록 메일을 잘못 적었거나 메일이 없는 예전 계정). 재요청 대기(60초)·하루 5통은 주소마다와 함께 **계정마다**도 센다(주소를 바꿔 가며 요청해도) / 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN`, `EVENT_ENDED`(이벤트 종료 후), 422 `EMAIL_REQUIRED`(메일 없는 계정이 주소를 비움), 429, 503 |
 | POST | `/api/me/email` | `{email?, code, name?, student_id?, department?, privacy_consent?}` | `Participant` — 학교 메일 코드 인증. 등록 메일로 받았으면 코드만, 다른 주소로 받았으면 그 주소도(인증하면 등록 메일이 그 주소로 바뀜). 메일 코드로 아직 인증하지 않은 계정만(미인증, 관리자 인증만): 메일 코드로 인증된 계정은 409 `ALREADY_VERIFIED`. `needs_profile`인 계정은 이름·학번·학과·동의도(없으면 422 `PROFILE_REQUIRED`). 409 `EMAIL_TAKEN`, `STUDENT_ID_TAKEN`, `EVENT_ENDED` |
 | GET | `/api/me/portfolio` | – | `Portfolio` |
 | GET | `/api/me/orders` | `?limit=100` | `Order[]` (최신순) |

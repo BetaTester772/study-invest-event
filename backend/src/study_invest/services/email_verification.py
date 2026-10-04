@@ -15,7 +15,7 @@ import math
 import secrets
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, func, or_, select, text, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from ..event_calendar import EventCalendar, to_kst
@@ -27,7 +27,7 @@ CODE_TTL = timedelta(minutes=10)
 RESEND_COOLDOWN = timedelta(seconds=60)
 MAX_ATTEMPTS = 5
 MAX_CODES_PER_EMAIL = 5
-"""메일 하나에 24시간 동안 보낼 수 있는 코드 수."""
+"""메일 하나(그리고 로그인한 계정 하나)에 24시간 동안 보낼 수 있는 코드 수."""
 WINDOW = timedelta(hours=24)
 
 CODE_LOCK_KEY = 7_720_261_007
@@ -92,6 +92,22 @@ def registered_participant(s: Session, email: SchoolEmail) -> Participant:
     return participant
 
 
+def _check_recent(s: Session, condition: ColumnElement[bool], now: datetime) -> None:
+    """condition에 맞는 최근 24시간 코드 기록으로 재요청 대기(60초)·하루 한도(5통)를 본다."""
+    recent = s.scalars(
+        select(EmailVerification.created_at)
+        .where(condition, EmailVerification.created_at > now - WINDOW)
+        .order_by(EmailVerification.created_at.desc())
+    ).all()
+    if recent and now - recent[0] < RESEND_COOLDOWN:
+        wait = math.ceil((recent[0] + RESEND_COOLDOWN - now).total_seconds())
+        raise DomainError("CODE_RECENTLY_SENT", f"{wait}초 뒤에 다시 요청할 수 있습니다.", 429)
+    if len(recent) >= MAX_CODES_PER_EMAIL:
+        raise DomainError(
+            "TOO_MANY_CODES", "인증 코드를 너무 많이 요청했습니다. 내일 다시 시도하세요.", 429
+        )
+
+
 def request_code(
     s: Session,
     raw_email: str,
@@ -104,7 +120,8 @@ def request_code(
 
     VERIFY는 다른 사람의 인증된 계정이 쓰지 않는 메일, RESET_PASSWORD는 가입한 메일에만 보낸다.
     requester_id: 로그인한 본인의 요청이면 그 계정(자기 메일이면 인증 여부와 상관없이 보낸다).
-    재요청 대기·하루 한도는 용도와 상관없이 메일마다 센다(메일함 폭탄 방지). 발송에 실패해도
+    재요청 대기·하루 한도는 용도와 상관없이 메일마다 센다(메일함 폭탄 방지). 로그인한 요청은
+    계정마다도 같은 한도로 센다(주소를 바꿔 가며 요청해도). 발송에 실패해도
     기록은 남아 한도에 센다(SMTP 장애 중 무한 재시도 방지).
     """
     email = parse(raw_email)
@@ -121,20 +138,11 @@ def request_code(
             raise email_taken()
     else:
         registered_participant(s, email)
-    recent = s.scalars(
-        select(EmailVerification.created_at)
-        .where(
-            EmailVerification.email == email.canonical, EmailVerification.created_at > now - WINDOW
-        )
-        .order_by(EmailVerification.created_at.desc())
-    ).all()
-    if recent and now - recent[0] < RESEND_COOLDOWN:
-        wait = math.ceil((recent[0] + RESEND_COOLDOWN - now).total_seconds())
-        raise DomainError("CODE_RECENTLY_SENT", f"{wait}초 뒤에 다시 요청할 수 있습니다.", 429)
-    if len(recent) >= MAX_CODES_PER_EMAIL:
-        raise DomainError(
-            "TOO_MANY_CODES", "인증 코드를 너무 많이 요청했습니다. 내일 다시 시도하세요.", 429
-        )
+    _check_recent(s, EmailVerification.email == email.canonical, now)
+    if requester_id is not None:
+        # 로그인한 계정은 주소를 바꿔 가며 요청해도 계정 기준으로 같은 제한을 받는다(남의 주소로
+        # 메일을 뿌리거나 전체 하루 한도를 혼자 소진하지 못하게).
+        _check_recent(s, EmailVerification.requested_by == requester_id, now)
     sent = s.scalar(
         select(func.count())
         .select_from(EmailVerification)
@@ -150,6 +158,7 @@ def request_code(
     row = EmailVerification(
         email=email.canonical,
         purpose=purpose,
+        requested_by=requester_id,
         code_hash=_hash(email.canonical, code),
         created_at=now,
         expires_at=now + CODE_TTL,

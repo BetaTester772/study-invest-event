@@ -1038,3 +1038,33 @@ class TestAfterEvent:
         assert r.json()["detail"]["code"] == "EVENT_ENDED"
         row = client.get("/api/admin/participants", headers=admin).json()[0]
         assert [row[k] for k in ("email", "name", "student_id", "department")] == [None] * 4
+
+
+class TestPerAccountLimit:
+    def test_changing_address_does_not_bypass_account_cooldown(
+        self, client: TestClient, clock: Clock, mailer: FakeMailer
+    ) -> None:
+        """로그인한 계정은 주소를 바꿔 가며 요청해도 계정 기준 60초·하루 5통에 걸린다."""
+        h = _register_without_code(client, "kim@g.skku.edu", "kim")
+        assert _my_code(client, h, "a1@g.skku.edu").status_code == 202
+        r = _my_code(client, h, "a2@g.skku.edu")  # 다른 주소라도 바로는 안 된다
+        assert r.status_code == 429 and r.json()["detail"]["code"] == "CODE_RECENTLY_SENT"
+        for i in range(2, 6):
+            clock.now += timedelta(minutes=1)
+            assert _my_code(client, h, f"a{i}@g.skku.edu").status_code == 202
+        clock.now += timedelta(minutes=1)
+        r = _my_code(client, h, "a6@g.skku.edu")
+        assert r.status_code == 429 and r.json()["detail"]["code"] == "TOO_MANY_CODES"
+        assert len(mailer.sent) == 5
+        # 다른 계정·가입 요청은 이 계정의 한도와 상관없다
+        assert request(client, "fresh@g.skku.edu").status_code == 202
+        other = _register_without_code(client, "lee@g.skku.edu", "lee")
+        assert _my_code(client, other).status_code == 202
+
+    def test_account_limit_counts_registered_address_requests_too(
+        self, client: TestClient, clock: Clock
+    ) -> None:
+        h = _register_without_code(client, "kim@g.skku.edu", "kim")
+        assert _my_code(client, h).status_code == 202  # 등록 메일로
+        r = _my_code(client, h, "other@g.skku.edu")
+        assert r.json()["detail"]["code"] == "CODE_RECENTLY_SENT"

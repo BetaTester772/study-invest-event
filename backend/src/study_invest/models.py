@@ -193,6 +193,8 @@ class EmailVerification(Base):
         _enum(CodePurpose), default=CodePurpose.VERIFY, server_default=CodePurpose.VERIFY.value
     )
     """코드 용도. 다른 용도로 받은 코드는 쓸 수 없다."""
+    requested_by: Mapped[int | None] = mapped_column(index=True)
+    """로그인한 참가자가 요청했으면 그 id(계정 기준 재요청 대기·한도). 가입·재설정 요청은 None."""
     code_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(AwareDateTime(), index=True)
     expires_at: Mapped[datetime] = mapped_column(AwareDateTime())
