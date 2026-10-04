@@ -58,7 +58,7 @@ export function ProfileFields({
       />
       <TextField
         label="학과"
-        hint="예: 소프트웨어학과"
+        hint="예: 지능형소프트웨어학과"
         value={value.department}
         onChange={(e) => set('department', e.target.value)}
         error={errors.department}

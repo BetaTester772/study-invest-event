@@ -118,7 +118,7 @@ export function RegisterPage() {
               hint={
                 requireCode
                   ? undefined
-                  : '@skku.edu 또는 @g.skku.edu. 비밀번호를 잊었을 때 재설정 코드를 받는 주소예요. 한 메일에 한 계정이에요.'
+                  : '@skku.edu 또는 @g.skku.edu. 비밀번호를 잊었을 때 재설정 코드를 받는 주소예요.'
               }
               email={form.email}
               onEmailChange={(v) => set('email', v)}
