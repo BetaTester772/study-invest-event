@@ -97,7 +97,7 @@ export function NewsTab() {
       key: 'state',
       header: '상태',
       render: (n) =>
-        n.settled ? <Badge tone="neutral">반영 완료</Badge> : <Badge tone="info">대기</Badge>,
+        n.applied ? <Badge tone="neutral">반영 완료</Badge> : <Badge tone="info">대기</Badge>,
     },
     { key: 'created', header: '작성 시각', hideOnMobile: true, nowrap: true, render: (n) => formatDateTime(n.created_at) },
     {
@@ -105,7 +105,7 @@ export function NewsTab() {
       header: '',
       align: 'right',
       render: (n) =>
-        n.settled ? null : (
+        n.applied ? null : (
           <Button variant="ghost" size="sm" onClick={() => void remove(n)}>
             지우기
           </Button>
@@ -117,7 +117,7 @@ export function NewsTab() {
     <Stack gap={6}>
       <Card
         title="호재·악재 쓰기"
-        description="아직 정산되지 않은 운영일에 쓸 수 있어요. 그날 09:00 공시와 함께 발표되고 18:00 정산 때 그 종목 변동률에 곱해져요. 같은 날·같은 종목에 이미 뉴스(무작위 생성분 포함)가 있으면 덮어써요."
+        description="전날 18:00 정산 전까지 쓸 수 있어요. 그 정산에서 그 종목 변동률에 곱해져 발표일 시작가에 반영되고, 09:00 공시와 함께 참가자에게 보여요. 같은 날·같은 종목에 이미 뉴스가 있으면 덮어써요. 첫 운영일은 앞선 정산이 없어 쓸 수 없어요."
       >
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
@@ -164,7 +164,11 @@ export function NewsTab() {
                 max={100}
                 step={1}
                 suffix="%"
-                hint={kind === 'good' ? `그날 변동률에 ×(1 + ${percent}%)` : `그날 변동률에 ×(1 − ${percent}%)`}
+                hint={
+                  kind === 'good'
+                    ? `전날 정산 변동률에 ×(1 + ${percent}%)`
+                    : `전날 정산 변동률에 ×(1 − ${percent}%)`
+                }
                 error={errors.percent}
                 required
               />
@@ -220,7 +224,7 @@ export function NewsTab() {
             rows={list.data ?? []}
             rowKey={(n) => n.id}
             loading={list.loading}
-            empty="아직 뉴스가 없어요. 무작위 뉴스는 전날 18:00 정산 때 생겨요."
+            empty="아직 뉴스가 없어요. 무작위 뉴스는 전날 18:00 정산 때 생기고 그 자리에서 반영돼요."
           />
         )}
       </Card>

@@ -18,7 +18,6 @@ from ..event_calendar import to_kst
 from ..models import (
     AuditLog,
     CertStatus,
-    MarketDay,
     NewsKind,
     Participant,
     SettlementLog,
@@ -208,15 +207,12 @@ def manual_price(
     )
 
 
-def _settled_days(s: SessionDep) -> set[date]:
-    return set(s.scalars(select(MarketDay.day).where(MarketDay.settled_at.is_not(None))))
-
-
 @router.get("/news", response_model=list[schemas.AdminNewsItem])
-def list_news(s: SessionDep) -> list[schemas.AdminNewsItem]:
+def list_news(s: SessionDep, state: StateDep) -> list[schemas.AdminNewsItem]:
     """미래 날짜를 포함한 전체 호재·악재, 최신 날짜부터."""
-    settled = _settled_days(s)
-    return [views.admin_news_item(n, n.day in settled) for n in news.all_news(s)]
+    return [
+        views.admin_news_item(n, news.is_priced(s, n.day, state.calendar)) for n in news.all_news(s)
+    ]
 
 
 @router.put("/news/{day}/{code}", response_model=schemas.AdminNewsItem)
@@ -228,7 +224,7 @@ def manual_news(
     s: BatchSessionDep,
     now: NowDep,
 ) -> schemas.AdminNewsItem:
-    """아직 정산되지 않은 운영일의 뉴스를 쓴다. 같은 날·종목이 있으면(무작위 생성분도) 덮어쓴다."""
+    """시작가가 아직 정해지지 않은 운영일의 뉴스를 쓴다. 같은 날·종목이 있으면 덮어쓴다."""
     item = news.set_manual_news(
         s,
         day,
@@ -243,7 +239,7 @@ def manual_news(
         byline=body.byline,
     )
     s.commit()
-    return views.admin_news_item(item, settled=False)
+    return views.admin_news_item(item, applied=False)
 
 
 @router.delete("/news/{day}/{code}", status_code=204)

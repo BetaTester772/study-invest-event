@@ -83,11 +83,11 @@ def news_item(n: NewsItem) -> schemas.NewsItem:
     )
 
 
-def admin_news_item(n: NewsItem, settled: bool) -> schemas.AdminNewsItem:
+def admin_news_item(n: NewsItem, applied: bool) -> schemas.AdminNewsItem:
     base = news_item(n)
     return schemas.AdminNewsItem(
         **base.model_dump(),
         source=n.source.value,
         created_at=n.created_at,
-        settled=settled,
+        applied=applied,
     )

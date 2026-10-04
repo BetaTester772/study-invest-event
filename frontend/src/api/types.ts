@@ -21,14 +21,14 @@ export type PriceSource = 'initial' | 'settlement' | 'carry_over' | 'manual';
 
 export type NewsKind = 'good' | 'bad';
 
-/** 호재·악재. 발표 운영일 09:00 공시와 함께 보이고 그날 18:00 정산에 반영된다. */
+/** 호재·악재. 전날 18:00 정산에서 발표 운영일 시작가에 반영되고, 09:00 공시와 함께 보인다. */
 export interface NewsItem {
   id: number;
   day: string;
   code: string;
   name: string;
   kind: NewsKind;
-  /** 효과 크기(양수). 호재면 +rate, 악재면 -rate가 그날 변동률에 곱으로 얹힌다. */
+  /** 효과 크기(양수). 호재면 +rate, 악재면 -rate가 그날 시작가 변동률에 곱으로 들어가 있다. */
   rate: number;
   headline: string;
   /** 기사 부제·본문·매체명. 제목만 쓴 관리자 뉴스는 null. */
@@ -40,8 +40,8 @@ export interface NewsItem {
 export interface AdminNewsItem extends NewsItem {
   source: 'random' | 'manual';
   created_at: string;
-  /** 발표일 정산이 끝났으면 바꾸거나 지울 수 없다. */
-  settled: boolean;
+  /** 발표일 시작가에 이미 반영됐으면(전날 정산 뒤) 바꾸거나 지울 수 없다. */
+  applied: boolean;
 }
 
 export interface ManualNewsRequest {

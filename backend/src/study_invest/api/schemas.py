@@ -121,7 +121,7 @@ class EventInfo(Schema):
 
 
 class NewsItem(Schema):
-    """호재·악재. 발표 운영일 09:00 공시와 함께 보이고 그날 18:00 정산에 반영된다."""
+    """호재·악재. 전날 18:00 정산에서 발표 운영일 시작가에 반영되고 09:00 공시와 함께 보인다."""
 
     id: int
     day: date
@@ -129,7 +129,7 @@ class NewsItem(Schema):
     name: str
     kind: Literal["good", "bad"]
     rate: float
-    """효과 크기(양수). 호재면 +rate, 악재면 −rate가 그날 변동률에 곱으로 얹힌다."""
+    """효과 크기(양수). 호재면 +rate, 악재면 −rate가 전날 정산의 변동률에 곱으로 얹힌다."""
     headline: str
     subtitle: str | None = None
     body: str | None = None
@@ -488,8 +488,8 @@ class ManualNewsRequest(BaseModel):
 class AdminNewsItem(NewsItem):
     source: Literal["random", "manual"]
     created_at: datetime
-    settled: bool
-    """발표일 정산이 끝났는지(끝났으면 바꾸거나 지울 수 없다)."""
+    applied: bool
+    """발표일 시작가에 이미 반영됐는지(전날 정산이 끝났으면 참. 참이면 바꾸거나 지울 수 없다)."""
 
 
 class BatchRequest(BaseModel):

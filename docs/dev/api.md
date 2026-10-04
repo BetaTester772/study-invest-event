@@ -49,7 +49,7 @@ type NewsKind = "good" | "bad";   // 호재 / 악재
 
 interface NewsItem {
   id: number;
-  day: string;             // 발표·반영 운영일. 09:00 공시와 함께 보이고 18:00 정산에 반영
+  day: string;             // 발표 운영일. 전날 18:00 정산에서 이날 시작가에 반영되고 09:00 공시와 함께 보임
   code: string; name: string;   // 주식 종목만
   kind: NewsKind;
   rate: number;            // 효과 크기(양수, 소수). 호재 ×(1 + rate), 악재 ×(1 − rate)
@@ -320,11 +320,11 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | GET | `/api/admin/params` | – | `Params` |
 | PUT | `/api/admin/params` | `Params` | `Params` |
 | PUT | `/api/admin/prices/{day}/{code}` | `{price, reason}` | `PricePoint` / 409 `DAY_ALREADY_OPENED` |
-| GET | `/api/admin/news` | – | `AdminNewsItem[]` (`NewsItem` + `source: "random"\|"manual"`, `created_at`, `settled`). 미래 날짜 포함, 최신 날짜부터 |
-| PUT | `/api/admin/news/{day}/{code}` | `{kind, rate, headline, subtitle?, body?, byline?}` | `AdminNewsItem` — 아직 정산되지 않은 운영일의 뉴스를 쓴다(같은 날·종목이 있으면 무작위 생성분이라도 덮어씀). 부제·본문·바이라인은 선택이며 공백은 정리되고 비면 null. 감사 로그 `news.manual` / 404 `UNKNOWN_INSTRUMENT`, 409 `DAY_ALREADY_SETTLED`, 422 `NOT_A_STOCK`, `NOT_OPERATING_DAY`, `NO_ROUND`, `INVALID_RATE`, `HEADLINE_REQUIRED`, `HEADLINE_TOO_LONG`, `ARTICLE_TOO_LONG` |
-| DELETE | `/api/admin/news/{day}/{code}` | – | 204. 감사 로그 `news.delete` / 404 `NEWS_NOT_FOUND`, 409 `DAY_ALREADY_SETTLED` |
+| GET | `/api/admin/news` | – | `AdminNewsItem[]` (`NewsItem` + `source: "random"\|"manual"`, `created_at`, `applied`(발표일 시작가에 이미 반영됨)). 미래 날짜 포함, 최신 날짜부터 |
+| PUT | `/api/admin/news/{day}/{code}` | `{kind, rate, headline, subtitle?, body?, byline?}` | `AdminNewsItem` — 시작가가 아직 정해지지 않은 운영일(전날 정산 전)의 뉴스를 쓴다(같은 날·종목이 있으면 덮어씀). 전날 정산에서 곱해진다. 부제·본문·바이라인은 선택이며 공백은 정리되고 비면 null. 감사 로그 `news.manual` / 404 `UNKNOWN_INSTRUMENT`, 409 `PRICE_ALREADY_FIXED`, 422 `NOT_A_STOCK`, `NOT_OPERATING_DAY`, `NO_ROUND`, `NO_PREVIOUS_SETTLEMENT`(첫 운영일), `INVALID_RATE`, `HEADLINE_REQUIRED`, `HEADLINE_TOO_LONG`, `ARTICLE_TOO_LONG` |
+| DELETE | `/api/admin/news/{day}/{code}` | – | 204. 감사 로그 `news.delete` / 404 `NEWS_NOT_FOUND`, 409 `PRICE_ALREADY_FIXED` |
 | POST | `/api/admin/batch/open` | `{day?}` (기본 오늘) | `BatchResult` |
-| POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` — `detail.news.applied`(그날 반영한 뉴스), `detail.news.next`(다음 운영일에 새로 만든 무작위 뉴스 또는 null) |
+| POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` — `detail.news`: 이 정산에서 다음 운영일 시작가에 곱한 뉴스 목록(`day, code, kind, rate, headline, source`) |
 | POST | `/api/admin/batch/run-due` | – | `BatchResult[]` (현재 시각에 밀린 배치 실행) |
 | GET | `/api/admin/qa` | – | `{enabled: boolean}` — QA 도구 사용 가능 여부(`STUDY_INVEST_QA_TOOLS`). 화면이 QA 버튼을 보일지 정한다 |
 | POST | `/api/admin/qa/advance-price` | – | `BatchResult`(`action: "advance"`, `day`는 새로 공시된 운영일) / 403 `QA_DISABLED`, 409 `NO_ROUND`(마지막 운영일. 무제한 모드에는 없음) — 최신 공시일을 시각과 무관하게 정산하고 다음 운영일 시작가를 바로 공시한다(이미 정산됐다면 공시만, 공시된 날이 없으면 이벤트 첫날 공시만). 한 트랜잭션이며 감사 로그에 `qa.advance_price`가 남는다 |

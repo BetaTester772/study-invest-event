@@ -176,19 +176,19 @@ def settle_day(
     # 나머지는 0.5를 돌려주므로, 이 순서면 주식 잡음이 전 종목 같은 배수가 되어 상쇄된다.
     coin = draw_coin(prices[COIN.code], params, rng, calm=is_calm_round(round_no, params))
     stock_codes = [i.code for i in STOCKS]
-    today_news = news.news_on(s, day)  # 09:00에 발표된 그날 호재·악재
+    noise = draw_stock_noise(stock_codes, params, rng)
+    # 다음 운영일(effective)의 호재·악재는 코인·잡음 다음에 뽑고, 이 정산에서 바로 곱해
+    # effective 시작가에 반영한다. 참가자는 반영된 가격과 함께 09:00에 뉴스를 본다(03-pricing §3).
+    # 반영일이 없는 마지막 날에는 만들지 않는다. 관리자가 미리 써 둔 뉴스가 있으면 그것을 쓴다.
+    if calendar.round_of(effective) is not None:
+        news.create_random_news(s, effective, now, params, rng)
+    applied_news = news.news_on(s, effective)
     stock_moves = settle_stocks(
         {code: prices[code] for code in stock_codes},
         {c: a for c, a in amounts.items() if c in stock_codes},
         params,
-        noise=draw_stock_noise(stock_codes, params, rng),
-        news=news.news_rates(today_news),
-    )
-    # 다음 운영일 뉴스는 코인·잡음 다음에 뽑는다(반영일이 없는 마지막 날에는 만들지 않는다).
-    next_news = (
-        news.create_random_news(s, effective, now, params, rng)
-        if calendar.round_of(effective) is not None
-        else None
+        noise=noise,
+        news=news.news_rates(applied_news),
     )
 
     new_prices = {code: m.new_price for code, m in stock_moves.items()}
@@ -251,21 +251,17 @@ def settle_day(
         )
     )
     md.settled_at = now
-    news_detail = {
-        "applied": [
-            {"code": n.code, "kind": n.kind.value, "rate": n.rate, "headline": n.headline}
-            for n in today_news
-        ],
-        "next": None
-        if next_news is None
-        else {
-            "day": effective.isoformat(),
-            "code": next_news.code,
-            "kind": next_news.kind.value,
-            "rate": next_news.rate,
-            "headline": next_news.headline,
-        },
-    }
+    news_detail = [
+        {
+            "day": n.day.isoformat(),
+            "code": n.code,
+            "kind": n.kind.value,
+            "rate": n.rate,
+            "headline": n.headline,
+            "source": n.source.value,
+        }
+        for n in applied_news
+    ]
     audit(
         s,
         now,

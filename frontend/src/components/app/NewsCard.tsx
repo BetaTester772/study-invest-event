@@ -32,8 +32,8 @@ export function NewsArticle({ item, showDay }: { item: NewsItem; showDay?: boole
 }
 
 /**
- * Today's 호재·악재 and a short history. News is announced with the 09:00 prices and
- * multiplied into that day's 18:00 settlement, so it is something to trade on, not a result.
+ * Today's 호재·악재 and a short history. News is drawn in the previous evening's settlement and
+ * already multiplied into today's opening price; it explains the move rather than predicting it.
  */
 export function NewsCard({
   news,
@@ -58,7 +58,7 @@ export function NewsCard({
   return (
     <Card
       title="오늘의 뉴스"
-      description="09:00 공시와 함께 발표되고, 오늘 18:00 정산 때 그 종목 변동률에 곱해져요. 호재 종목에 매수가 몰리면 쏠림 때문에 내려갈 수도 있어요. 제목을 누르면 기사를 볼 수 있어요."
+      description="오늘 시작가에 이미 반영된 뉴스예요. 제목을 누르면 기사를 볼 수 있어요."
     >
       <Stack gap={4}>
         {todays.length > 0 ? (
