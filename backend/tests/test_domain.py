@@ -206,6 +206,29 @@ class TestCalendar:
         assert len(days) == 11 and days[0] == date(2026, 10, 6) and days[-1] == date(2026, 10, 16)
         assert self.cal.total_rounds == 10
 
+    def test_unlimited(self) -> None:
+        cal = EventCalendar(date(2026, 10, 6), None)
+        far = date(2027, 10, 6)
+        assert cal.unlimited and cal.total_rounds is None
+        assert cal.is_operating_day(far) and not cal.is_operating_day(date(2026, 10, 5))
+        assert not cal.is_ended(far)
+        assert cal.round_of(far) == 366 and cal.next_operating_day(far) == far + timedelta(days=1)
+        assert cal.next_operating_time(datetime(2027, 10, 6, 19, tzinfo=KST), time(9)) == (
+            datetime(2027, 10, 7, 9, tzinfo=KST)
+        )
+        assert cal.days_through(date(2026, 10, 8)) == (
+            date(2026, 10, 6),
+            date(2026, 10, 7),
+            date(2026, 10, 8),
+        )
+        with pytest.raises(ValueError):
+            _ = cal.operating_days
+
+    def test_days_through_is_clipped_to_the_period(self) -> None:
+        assert self.cal.days_through(date(2027, 1, 1)) == self.cal.operating_days
+        assert self.cal.days_through(date(2026, 10, 1)) == ()
+        assert self.cal.is_ended(date(2026, 10, 17)) and not self.cal.is_ended(date(2026, 10, 16))
+
     def test_rounds(self) -> None:
         assert self.cal.round_of(date(2026, 10, 6)) == 1
         assert self.cal.round_of(date(2026, 10, 15)) == 10

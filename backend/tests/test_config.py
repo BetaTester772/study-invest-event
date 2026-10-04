@@ -124,6 +124,31 @@ def test_time_settings_default_to_real_clock(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize(
+    ("env", "attr"),
+    [("STUDY_INVEST_QA_TOOLS", "qa_tools"), ("STUDY_INVEST_QA_UNLIMITED", "qa_unlimited")],
+)
+@pytest.mark.parametrize(
+    ("value", "expected"), [(None, False), ("", False), ("0", False), ("1", True), ("On", True)]
+)
+def test_qa_flags_from_env(
+    monkeypatch: pytest.MonkeyPatch, env: str, attr: str, value: str | None, expected: bool
+) -> None:
+    if value is None:
+        monkeypatch.delenv(env, raising=False)
+    else:
+        monkeypatch.setenv(env, value)
+    assert getattr(Settings.from_env(), attr) is expected
+
+
+def test_qa_unlimited_ignores_event_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STUDY_INVEST_EVENT_START", "2026-09-24")
+    monkeypatch.setenv("STUDY_INVEST_EVENT_END", "2026-10-04")
+    monkeypatch.setenv("STUDY_INVEST_QA_UNLIMITED", "1")
+    cal = Settings.from_env().calendar
+    assert (cal.start, cal.end) == (date(2026, 9, 24), None)
+
+
+@pytest.mark.parametrize(
     "origin", ["2026-10-01T15:00", "2026-10-01T15:00:00+09:00", "2026-10-01T06:00:00Z"]
 )
 def test_time_settings_from_env(monkeypatch: pytest.MonkeyPatch, origin: str) -> None:

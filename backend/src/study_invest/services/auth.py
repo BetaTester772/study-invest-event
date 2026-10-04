@@ -65,7 +65,7 @@ def register(
     calendar: EventCalendar,
 ) -> tuple[Participant, str]:
     """참가 등록. 중도 참가도 시드는 동일하다(INITIAL_CASH)."""
-    if to_kst(now).date() > calendar.end:
+    if calendar.is_ended(to_kst(now).date()):
         raise DomainError("REGISTRATION_CLOSED", "이벤트가 종료되어 참가 신청을 받지 않습니다.")
     norm = normalize_identity(identity)
     nickname = normalize_nickname(nickname)

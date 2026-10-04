@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { publicApi, useApi, type ClockInfo } from '../../api';
 import { formatClockTime, formatDayLength } from '../../lib/format';
-import { Alert, Container } from '../ui';
+import { Alert, Container, Stack } from '../ui';
 
 /** Explains a sped-up test clock (QA servers) in real-world time. */
 export function TestClockNotice({ clock }: { clock: ClockInfo }) {
@@ -33,17 +33,30 @@ export function TestClockNotice({ clock }: { clock: ClockInfo }) {
   );
 }
 
-/** Top-of-page banner. Renders nothing on the real clock (production). */
+/** QA unlimited mode: the event has no end date. */
+export function UnlimitedNotice() {
+  return (
+    <Alert title="QA 무제한 모드예요.">
+      이벤트 종료일 없이 매일 공시·정산이 이어져요. 실제 이벤트 기간과 상관없이 가격 추세를 길게 볼 수 있어요.
+    </Alert>
+  );
+}
+
+/** Top-of-page banner. Renders nothing on the real clock and period (production). */
 export function TestClockBanner() {
   // Keep polling only where there is a test clock; production fetches once.
   const [poll, setPoll] = useState(false);
   const event = useApi(() => publicApi.event(), [], { refreshInterval: poll ? 30_000 : undefined });
   const clock = event.data?.clock ?? null;
+  const unlimited = event.data?.end === null;
   useEffect(() => setPoll(clock !== null), [clock]);
-  if (!clock) return null;
+  if (!clock && !unlimited) return null;
   return (
     <Container padTop>
-      <TestClockNotice clock={clock} />
+      <Stack gap={3}>
+        {unlimited && <UnlimitedNotice />}
+        {clock && <TestClockNotice clock={clock} />}
+      </Stack>
     </Container>
   );
 }
