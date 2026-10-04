@@ -131,6 +131,11 @@ class NewsItem(Schema):
     rate: float
     """효과 크기(양수). 호재면 +rate, 악재면 −rate가 그날 변동률에 곱으로 얹힌다."""
     headline: str
+    subtitle: str | None = None
+    body: str | None = None
+    """기사 본문. 제목만 쓴 관리자 뉴스는 null."""
+    byline: str | None = None
+    """가상 매체명."""
 
 
 class Instrument(Schema):
@@ -475,6 +480,9 @@ class ManualNewsRequest(BaseModel):
     rate: float
     """효과 크기(양수, ≤ 1). 0.15 = ±15%."""
     headline: str = Field(max_length=120)
+    subtitle: str | None = Field(default=None, max_length=120)
+    body: str | None = Field(default=None, max_length=600)
+    byline: str | None = Field(default=None, max_length=40)
 
 
 class AdminNewsItem(NewsItem):

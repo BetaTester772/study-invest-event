@@ -13,6 +13,7 @@ import {
   Select,
   Stack,
   Table,
+  TextArea,
   TextField,
   useToast,
   type Column,
@@ -29,6 +30,9 @@ export function NewsTab() {
   const [kind, setKind] = useState<NewsKind>('good');
   const [percent, setPercent] = useState(15);
   const [headline, setHeadline] = useState('');
+  const [subtitle, setSubtitle] = useState('');
+  const [body, setBody] = useState('');
+  const [byline, setByline] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -48,9 +52,18 @@ export function NewsTab() {
     setSaving(true);
     setFormError(null);
     try {
-      const saved = await adminApi.setNews(day, code, { kind, rate: percent / 100, headline: headline.trim() });
+      const saved = await adminApi.setNews(day, code, {
+        kind,
+        rate: percent / 100,
+        headline: headline.trim(),
+        subtitle: subtitle.trim() || null,
+        body: body.trim() || null,
+        byline: byline.trim() || null,
+      });
       toast.success('뉴스를 저장했어요', `${saved.name}, ${formatDay(saved.day)} ${NEWS_KIND_LABEL[saved.kind]}`);
       setHeadline('');
+      setSubtitle('');
+      setBody('');
       void list.refetch();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : '뉴스를 저장하지 못했어요.');
@@ -161,9 +174,33 @@ export function NewsTab() {
               value={headline}
               onChange={(e) => setHeadline(e.target.value)}
               maxLength={120}
-              placeholder="예: 삼수전자, 대형 수주 계약 체결"
+              placeholder="예: 삼수전자, 세 번째 도전 끝에 차세대 칩 양산 성공"
               error={errors.headline}
               required
+            />
+            <Grid min="12rem" gap={4}>
+              <TextField
+                label="부제 (선택)"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                maxLength={120}
+                placeholder="한 줄 요약"
+              />
+              <TextField
+                label="매체명 (선택)"
+                value={byline}
+                onChange={(e) => setByline(e.target.value)}
+                maxLength={40}
+                placeholder="예: 병더리움경제TV, 명륜뉴스, 율전일보"
+              />
+            </Grid>
+            <TextArea
+              label="본문 (선택)"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              maxLength={600}
+              hint="2~3문장. 비우면 참가자에게 제목만 보여요. 변동률 숫자는 쓰지 마세요(크기는 위에서 정한 값이 배지로 보여요)."
+              placeholder="기사체로 적어 주세요. 예: 삼수전자가 차세대 반도체 양산 라인의 수율 안정화에 성공했다고 밝혔다."
             />
             <Stack direction="row" justify="end">
               <Button type="submit" loading={saving}>

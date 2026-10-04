@@ -332,6 +332,10 @@ class TestNews:
         ins = {i["code"]: i for i in client.get("/api/instruments").json()}
         assert ins["SKLOW"]["news"]["headline"] == nxt["headline"]
         assert ins["SAMSU"]["news"] is None and ins["SKLOW"]["price"] == 170_000
+        # 무작위 뉴스는 종목별 기사 풀에서 제목·부제·본문·바이라인을 모두 채운다
+        article = items[0]
+        assert article["subtitle"] and article["body"] and article["byline"]
+        assert "SK로우닉스" in article["body"] and "{name}" not in article["body"]
         # D2 정산: 아무도 안 사면 쏠림 0% → SKLOW만 +15%
         rng.queue = [0.9, 0.0]
         result = settle_day(client, clock, D2)
@@ -359,6 +363,7 @@ class TestNews:
             False,
             "LB, 공장 화재",
         )
+        assert (r.json()["subtitle"], r.json()["body"], r.json()["byline"]) == (None, None, None)
         # 무작위 뉴스가 나올 난수를 넣어도 D2에 이미 뉴스가 있으므로 만들지 않는다
         rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
         result = settle_day(client, clock, D1)
@@ -387,6 +392,22 @@ class TestNews:
         audit = client.get("/api/admin/audit", headers=admin).json()
         assert {a["action"] for a in audit} >= {"news.manual", "market.settle"}
 
+    def test_random_news_avoids_repeating_an_article(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        """같은 종목에 같은 pick 값이 와도 이미 나온 제목은 피한다."""
+        days = [D1, D2, D3]
+        headlines = []
+        for d in days:
+            open_day(client, clock, d)
+            # 매번 SKLOW 호재, pick=0
+            rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+            nxt = settle_day(client, clock, d)["detail"]["news"]["next"]
+            headlines.append(nxt["headline"])
+        assert len(set(headlines)) == 3
+        listed = client.get("/api/admin/news", headers=admin).json()
+        assert all(n["code"] == "SKLOW" and n["body"] for n in listed)
+
     def test_manual_news_validation_and_delete(
         self, client: TestClient, clock: Clock, admin: dict[str, str]
     ) -> None:
@@ -406,6 +427,9 @@ class TestNews:
         assert put(D1, "LB", headline="   ").json()["detail"]["code"] == "HEADLINE_REQUIRED"
         assert put(D1, "LB", headline="x" * 121).status_code == 422
         assert put(D1, "LB", kind="meh").status_code == 422
+        assert put(D1, "LB", body="x" * 601).status_code == 422  # 스키마 상한
+        trimmed = put(D1, "LB", byline=" 명륜  뉴스 ", body="  본문  한 줄 ").json()
+        assert (trimmed["body"], trimmed["byline"]) == ("본문 한 줄", "명륜 뉴스")
         assert put(D1, "LB").status_code == 200
         assert client.delete(f"/api/admin/news/{D1}/LB", headers=admin).status_code == 204
         assert client.delete(f"/api/admin/news/{D1}/LB", headers=admin).status_code == 404

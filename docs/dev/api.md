@@ -54,6 +54,9 @@ interface NewsItem {
   kind: NewsKind;
   rate: number;            // 효과 크기(양수, 소수). 호재 ×(1 + rate), 악재 ×(1 − rate)
   headline: string;        // 120자 이내
+  subtitle: string | null; // 부제(120자). 제목만 쓴 관리자 뉴스는 null
+  body: string | null;     // 기사 본문(600자)
+  byline: string | null;   // 가상 매체명(40자)
 }
 
 interface Instrument {
@@ -318,7 +321,7 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | PUT | `/api/admin/params` | `Params` | `Params` |
 | PUT | `/api/admin/prices/{day}/{code}` | `{price, reason}` | `PricePoint` / 409 `DAY_ALREADY_OPENED` |
 | GET | `/api/admin/news` | – | `AdminNewsItem[]` (`NewsItem` + `source: "random"\|"manual"`, `created_at`, `settled`). 미래 날짜 포함, 최신 날짜부터 |
-| PUT | `/api/admin/news/{day}/{code}` | `{kind, rate, headline}` | `AdminNewsItem` — 아직 정산되지 않은 운영일의 뉴스를 쓴다(같은 날·종목이 있으면 무작위 생성분이라도 덮어씀). 감사 로그 `news.manual` / 404 `UNKNOWN_INSTRUMENT`, 409 `DAY_ALREADY_SETTLED`, 422 `NOT_A_STOCK`, `NOT_OPERATING_DAY`, `NO_ROUND`, `INVALID_RATE`, `HEADLINE_REQUIRED`, `HEADLINE_TOO_LONG` |
+| PUT | `/api/admin/news/{day}/{code}` | `{kind, rate, headline, subtitle?, body?, byline?}` | `AdminNewsItem` — 아직 정산되지 않은 운영일의 뉴스를 쓴다(같은 날·종목이 있으면 무작위 생성분이라도 덮어씀). 부제·본문·바이라인은 선택이며 공백은 정리되고 비면 null. 감사 로그 `news.manual` / 404 `UNKNOWN_INSTRUMENT`, 409 `DAY_ALREADY_SETTLED`, 422 `NOT_A_STOCK`, `NOT_OPERATING_DAY`, `NO_ROUND`, `INVALID_RATE`, `HEADLINE_REQUIRED`, `HEADLINE_TOO_LONG`, `ARTICLE_TOO_LONG` |
 | DELETE | `/api/admin/news/{day}/{code}` | – | 204. 감사 로그 `news.delete` / 404 `NEWS_NOT_FOUND`, 409 `DAY_ALREADY_SETTLED` |
 | POST | `/api/admin/batch/open` | `{day?}` (기본 오늘) | `BatchResult` |
 | POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` — `detail.news.applied`(그날 반영한 뉴스), `detail.news.next`(다음 운영일에 새로 만든 무작위 뉴스 또는 null) |

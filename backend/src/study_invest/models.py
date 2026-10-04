@@ -285,6 +285,12 @@ class NewsItem(Base):
     rate: Mapped[float] = mapped_column(Float)
     """효과 크기(양수, 0 < rate ≤ 1). 부호는 kind가 정한다."""
     headline: Mapped[str] = mapped_column(String(120))
+    subtitle: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    """부제 한 줄. 제목만 쓴 관리자 뉴스는 None."""
+    body: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    """기사 본문 2~3문장."""
+    byline: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    """가상 매체명(바이라인)."""
     source: Mapped[NewsSource] = mapped_column(_enum(NewsSource))
     created_at: Mapped[datetime] = mapped_column(AwareDateTime())
 

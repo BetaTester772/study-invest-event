@@ -31,6 +31,10 @@ export interface NewsItem {
   /** 효과 크기(양수). 호재면 +rate, 악재면 -rate가 그날 변동률에 곱으로 얹힌다. */
   rate: number;
   headline: string;
+  /** 기사 부제·본문·매체명. 제목만 쓴 관리자 뉴스는 null. */
+  subtitle: string | null;
+  body: string | null;
+  byline: string | null;
 }
 
 export interface AdminNewsItem extends NewsItem {
@@ -44,6 +48,9 @@ export interface ManualNewsRequest {
   kind: NewsKind;
   rate: number;
   headline: string;
+  subtitle?: string | null;
+  body?: string | null;
+  byline?: string | null;
 }
 
 export interface Instrument {

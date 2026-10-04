@@ -5,14 +5,28 @@ import { Card, Skeleton, Stack, Text } from '../ui';
 import { NewsBadge } from './badges';
 import styles from './NewsCard.module.css';
 
-function Item({ item, showDay }: { item: NewsItem; showDay?: boolean }) {
-  return (
-    <li className={styles.item}>
+/** One article. Headline is a link to the instrument; the body opens inline when there is one. */
+export function NewsArticle({ item, showDay }: { item: NewsItem; showDay?: boolean }) {
+  const head = (
+    <span className={styles.head}>
       <NewsBadge kind={item.kind} rate={item.rate} />
       <Link to={`/instruments/${item.code}`} className={styles.headline}>
         {item.headline}
       </Link>
       <span className={styles.meta}>{showDay ? formatDayShort(item.day) : item.name}</span>
+    </span>
+  );
+  if (!item.body && !item.subtitle) return <li className={styles.item}>{head}</li>;
+  return (
+    <li className={styles.item}>
+      <details className={styles.article}>
+        <summary className={styles.summary}>{head}</summary>
+        <div className={styles.body}>
+          {item.subtitle && <p className={styles.subtitle}>{item.subtitle}</p>}
+          {item.body && <p className={styles.text}>{item.body}</p>}
+          {item.byline && <p className={styles.byline}>{item.byline}</p>}
+        </div>
+      </details>
     </li>
   );
 }
@@ -44,13 +58,13 @@ export function NewsCard({
   return (
     <Card
       title="오늘의 뉴스"
-      description="09:00 공시와 함께 발표되고, 오늘 18:00 정산 때 그 종목 변동률에 곱해져요. 호재 종목에 매수가 몰리면 쏠림 때문에 내려갈 수도 있어요."
+      description="09:00 공시와 함께 발표되고, 오늘 18:00 정산 때 그 종목 변동률에 곱해져요. 호재 종목에 매수가 몰리면 쏠림 때문에 내려갈 수도 있어요. 제목을 누르면 기사를 볼 수 있어요."
     >
       <Stack gap={4}>
         {todays.length > 0 ? (
           <ul className={styles.list} aria-label="오늘의 뉴스">
             {todays.map((n) => (
-              <Item key={n.id} item={n} />
+              <NewsArticle key={n.id} item={n} />
             ))}
           </ul>
         ) : (
@@ -61,7 +75,7 @@ export function NewsCard({
             <summary className={styles.summary}>지난 뉴스 {past.length}건</summary>
             <ul className={styles.list} aria-label="지난 뉴스">
               {past.map((n) => (
-                <Item key={n.id} item={n} showDay />
+                <NewsArticle key={n.id} item={n} showDay />
               ))}
             </ul>
           </details>

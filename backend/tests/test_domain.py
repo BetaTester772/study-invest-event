@@ -491,3 +491,37 @@ class TestParams:
     def test_validation(self, bad: dict[str, Any]) -> None:
         with pytest.raises(ValueError):
             replace(P, **bad)
+
+
+class TestNewsPool:
+    """news_pool: 종목별 호재 5·악재 5, 공통 예비 호재 3·악재 3. 패러디 제약을 지킨다."""
+
+    def test_pool_shape(self) -> None:
+        from study_invest.news_pool import COMMON_POOLS, STOCK_POOLS, articles_for
+
+        assert set(STOCK_POOLS) == {i.code for i in STOCKS}
+        for code, kinds in STOCK_POOLS.items():
+            assert {k: len(v) for k, v in kinds.items()} == {"good": 5, "bad": 5}, code
+        assert {k: len(v) for k, v in COMMON_POOLS.items()} == {"good": 3, "bad": 3}
+        candidates = articles_for("SKLOW", "SK로우닉스", "good")
+        assert len(candidates) == 8
+        assert all("{name}" not in a.headline + a.subtitle + a.body for a in candidates)
+        assert all("SK로우닉스" in a.headline for a in candidates)
+
+    def test_pool_constraints(self) -> None:
+        import re
+
+        from study_invest.news_pool import BYLINES, COMMON_POOLS, STOCK_POOLS
+
+        banned = ("삼성", "하이닉스", "LG전자", "미래에셋")
+        seen: set[str] = set()
+        every = [a for kinds in STOCK_POOLS.values() for pool in kinds.values() for a in pool]
+        every += [a for pool in COMMON_POOLS.values() for a in pool]
+        for a in every:
+            assert a.headline not in seen, a.headline  # 제목 중복 없음
+            seen.add(a.headline)
+            assert len(a.headline) <= 120 and len(a.subtitle) <= 120 and len(a.body) <= 600
+            assert a.byline in BYLINES
+            text = a.headline + a.subtitle + a.body
+            assert not any(b in text for b in banned), a.headline
+            assert not re.search(r"\d+\s*%", text), a.headline  # 변동률 숫자는 쓰지 않는다

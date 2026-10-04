@@ -230,7 +230,17 @@ def manual_news(
 ) -> schemas.AdminNewsItem:
     """아직 정산되지 않은 운영일의 뉴스를 쓴다. 같은 날·종목이 있으면(무작위 생성분도) 덮어쓴다."""
     item = news.set_manual_news(
-        s, day, code, NewsKind(body.kind), body.rate, body.headline, now, state.calendar
+        s,
+        day,
+        code,
+        NewsKind(body.kind),
+        body.rate,
+        body.headline,
+        now,
+        state.calendar,
+        subtitle=body.subtitle,
+        body=body.body,
+        byline=body.byline,
     )
     s.commit()
     return views.admin_news_item(item, settled=False)

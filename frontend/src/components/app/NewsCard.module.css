@@ -7,6 +7,10 @@
 }
 
 .item {
+  min-width: 0;
+}
+
+.head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -28,12 +32,49 @@
   white-space: nowrap;
 }
 
+/* The article: the summary row looks like a plain item; the body opens under it. */
+.article > .summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.article > .summary::-webkit-details-marker {
+  display: none;
+}
+
+.body {
+  margin: var(--space-2) 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-border);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.subtitle {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.text {
+  margin: 0;
+  line-height: var(--leading-relaxed, 1.6);
+  color: var(--color-text);
+}
+
+.byline {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
 .past {
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-3);
 }
 
-.summary {
+.past > .summary {
   cursor: pointer;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
@@ -41,7 +82,7 @@
 }
 
 @media (max-width: 480px) {
-  .item {
+  .head {
     grid-template-columns: auto minmax(0, 1fr);
   }
 

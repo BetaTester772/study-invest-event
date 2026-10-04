@@ -100,13 +100,31 @@ export function InstrumentPage() {
                 {instrument.news && <NewsBadge kind={instrument.news.kind} rate={instrument.news.rate} />}
               </Stack>
               {instrument.news && (
-                <Text as="p" tone="ink">
-                  {instrument.news.headline}
-                  <Text as="span" size="sm" tone="muted">
-                    {' '}
-                    · 오늘 18:00 정산 때 변동률에 곱해져요.
+                <Stack gap={1}>
+                  <Text as="p" tone="ink">
+                    {instrument.news.headline}
+                    <Text as="span" size="sm" tone="muted">
+                      {' '}
+                      · 오늘 18:00 정산 때 변동률에 곱해져요.
+                    </Text>
                   </Text>
-                </Text>
+                  {instrument.news.subtitle && (
+                    <Text as="p" size="sm" tone="muted">
+                      {instrument.news.subtitle}
+                    </Text>
+                  )}
+                  {instrument.news.body && (
+                    <Text as="p" size="sm">
+                      {instrument.news.body}
+                      {instrument.news.byline && (
+                        <Text as="span" size="sm" tone="muted">
+                          {' '}
+                          — {instrument.news.byline}
+                        </Text>
+                      )}
+                    </Text>
+                  )}
+                </Stack>
               )}
               <Stack direction="row" gap={3} align="center" wrap>
                 <Money value={instrument.price} display="xl" />

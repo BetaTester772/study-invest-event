@@ -77,6 +77,9 @@ def news_item(n: NewsItem) -> schemas.NewsItem:
         kind=n.kind.value,
         rate=n.rate,
         headline=n.headline,
+        subtitle=n.subtitle,
+        body=n.body,
+        byline=n.byline,
     )
 
 

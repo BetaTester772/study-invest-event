@@ -18,31 +18,30 @@ from ..event_calendar import EventCalendar
 from ..instruments import BY_CODE, STOCKS
 from ..models import NewsItem, NewsKind, NewsSource
 from ..money import exact
+from ..news_pool import Article, articles_for
 from ..params import NEWS_RATE_MAX, EventParams
 from ..pricing import draw_news
 from .common import DomainError, audit, batch_lock, latest_opened_day, market_day
 
 HEADLINE_MAX = 120
+SUBTITLE_MAX = 120
+BODY_MAX = 600
+BYLINE_MAX = 40
 
-HEADLINES: dict[NewsKind, tuple[str, ...]] = {
-    NewsKind.GOOD: (
-        "{name}, 대형 수주 계약 체결",
-        "{name}, 분기 실적 예상치 크게 웃돌아",
-        "{name}, 신제품 출시 첫날 완판",
-        "{name}, 해외 시장 진출 승인",
-        "{name}, 자사주 대규모 매입 발표",
-        "{name}, 업계 1위 탈환",
-    ),
-    NewsKind.BAD: (
-        "{name}, 주력 공장 가동 중단",
-        "{name}, 분기 실적 예상치 크게 밑돌아",
-        "{name}, 주력 제품 전량 리콜",
-        "{name}, 핵심 임원 돌연 사임",
-        "{name}, 규제 당국 조사 착수",
-        "{name}, 대규모 소송에 피소",
-    ),
-}
-"""무작위 뉴스 제목 틀. {name}에 종목명이 들어간다."""
+
+def pick_article(s: Session, code: str, name: str, kind: NewsKind, pick: float) -> Article:
+    """종목별 기사 풀(+공통 예비)에서 하나 고른다. 이번 이벤트에서 이미 나온 제목은 피하고,
+    다 썼으면 전체에서 다시 고른다. pick ~ U(0, 1) 하나만 쓴다."""
+    pool = articles_for(code, name, kind.value)
+    used = set(
+        s.scalars(
+            select(NewsItem.headline).where(
+                NewsItem.code == code, NewsItem.headline.in_([a.headline for a in pool])
+            )
+        )
+    )
+    candidates = [a for a in pool if a.headline not in used] or list(pool)
+    return candidates[min(int(pick * len(candidates)), len(candidates) - 1)]
 
 
 def signed_rate(item: NewsItem) -> Fraction:
@@ -91,16 +90,16 @@ def create_random_news(
     if draw is None:
         return None
     kind = NewsKind(draw.kind)
-    pool = HEADLINES[kind]
-    headline = pool[min(int(draw.headline_pick * len(pool)), len(pool) - 1)].format(
-        name=BY_CODE[draw.code].name
-    )
+    article = pick_article(s, draw.code, BY_CODE[draw.code].name, kind, draw.headline_pick)
     item = NewsItem(
         day=day,
         code=draw.code,
         kind=kind,
         rate=draw.rate,
-        headline=headline,
+        headline=article.headline,
+        subtitle=article.subtitle,
+        body=article.body,
+        byline=article.byline,
         source=NewsSource.RANDOM,
         created_at=now,
     )
@@ -130,8 +129,15 @@ def set_manual_news(
     headline: str,
     now: datetime,
     calendar: EventCalendar,
+    *,
+    subtitle: str | None = None,
+    body: str | None = None,
+    byline: str | None = None,
 ) -> NewsItem:
-    """아직 정산되지 않은 운영일의 뉴스를 쓴다(같은 날·종목이 있으면 덮어쓴다)."""
+    """아직 정산되지 않은 운영일의 뉴스를 쓴다(같은 날·종목이 있으면 덮어쓴다).
+
+    부제·본문·바이라인은 선택이다. 비우면 참가자 화면에 제목만 보인다.
+    """
     batch_lock(s)  # 정산·무작위 생성과 겹치지 않게
     inst = BY_CODE.get(code)
     if inst is None:
@@ -154,9 +160,23 @@ def set_manual_news(
     if item is None:
         item = NewsItem(day=day, code=code, created_at=now)
         s.add(item)
+    extras = {
+        "subtitle": (subtitle, SUBTITLE_MAX),
+        "body": (body, BODY_MAX),
+        "byline": (byline, BYLINE_MAX),
+    }
+    cleaned: dict[str, str | None] = {}
+    for field, (value, limit) in extras.items():
+        text = " ".join(value.split()) if value else ""
+        if len(text) > limit:
+            raise DomainError("ARTICLE_TOO_LONG", f"{field}은(는) {limit}자 이내여야 합니다.", 422)
+        cleaned[field] = text or None
     item.kind = kind
     item.rate = rate
     item.headline = headline
+    item.subtitle = cleaned["subtitle"]
+    item.body = cleaned["body"]
+    item.byline = cleaned["byline"]
     item.source = NewsSource.MANUAL
     item.created_at = now
     s.flush()
