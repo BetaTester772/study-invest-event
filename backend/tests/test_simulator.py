@@ -15,20 +15,22 @@ from study_invest.simulator import (
     simulate_coin,
 )
 
-UNCAPPED = replace(EventParams(), coin_price_cap=None)
+V04 = replace(EventParams(), coin_up_exp=3, coin_cap=2.0)
+"""v0.4 기본값(상승폭 지수 3, 상한 +200%). 규격 v0.4 누적 분포표를 재현한다."""
+UNCAPPED = replace(V04, coin_price_cap=None)
 V03 = replace(UNCAPPED, coin_cap=3.0, coin_floor=-0.5, coin_calm_rounds=0)
 """v0.2~v0.3 기본값(하루 -50%~+300%, 안정기 없음). 규격 v0.2 누적 분포표를 재현한다."""
 
 
 @pytest.fixture(scope="module")
 def report() -> SimulationReport:
-    """기본 파라미터(초반 안정기 1~3회차 포함)."""
+    """v0.4 파라미터(초반 안정기 1~3회차 포함)."""
     return simulate_coin(UNCAPPED, paths=20_000, seed=20261006)
 
 
 @pytest.fixture(scope="module")
 def no_calm() -> SimulationReport:
-    """기본 파라미터에서 안정기만 뺀 조건(10회 모두 평소 범위)."""
+    """v0.4 파라미터에서 안정기만 뺀 조건(10회 모두 평소 범위)."""
     return simulate_coin(replace(UNCAPPED, coin_calm_rounds=0), paths=20_000, seed=20261006)
 
 
