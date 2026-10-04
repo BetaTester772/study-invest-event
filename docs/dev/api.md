@@ -250,7 +250,7 @@ interface SimulationReport {
   cumulative: { quantiles: { q: number; multiple: number }[]; prob_above: { multiple: number; prob: number }[];
                 cap_hit_ratio: number };
 }
-interface BatchResult { action: "open" | "settle"; day: string; detail: Record<string, unknown>; }
+interface BatchResult { action: "open" | "settle" | "advance"; day: string; detail: Record<string, unknown>; }
 interface AuditEntry { id: number; at: string; actor: string; action: string; detail: Record<string, unknown>; }
 ```
 
@@ -267,6 +267,8 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | POST | `/api/admin/batch/open` | `{day?}` (기본 오늘) | `BatchResult` |
 | POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` |
 | POST | `/api/admin/batch/run-due` | – | `BatchResult[]` (현재 시각에 밀린 배치 실행) |
+| GET | `/api/admin/qa` | – | `{enabled: boolean}` — QA 도구 사용 가능 여부(`STUDY_INVEST_QA_TOOLS`). 화면이 QA 버튼을 보일지 정한다 |
+| POST | `/api/admin/qa/advance-price` | – | `BatchResult`(`action: "advance"`, `day`는 새로 공시된 운영일) / 403 `QA_DISABLED`, 409 `NOT_OPENED`·`NO_ROUND` — 최신 공시일을 시각과 무관하게 정산하고 다음 운영일 시작가를 바로 공시한다(이미 정산됐다면 공시만). 한 트랜잭션이며 감사 로그에 `qa.advance_price`가 남는다 |
 | GET | `/api/admin/settlements` | – | `SettlementLog[]` |
 | GET | `/api/admin/audit` | `?limit=200` | `AuditEntry[]` |
 | GET | `/api/admin/db-pools` | – | `{api: PoolStatus, batch: PoolStatus}` — 앱 연결 풀 현황(`size` 설정 크기, `opened` 열린 연결, `checked_out` 사용 중, `idle`, `overflow` 초과분, `timeout`) |

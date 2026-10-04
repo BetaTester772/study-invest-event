@@ -73,6 +73,7 @@ services:
       # 비우면 실제 시계. 테스트·QA 서버에서만 지정한다(24 = 실제 1시간이 이벤트 하루).
       STUDY_INVEST_TIME_SCALE: ${STUDY_INVEST_TIME_SCALE:-}
       STUDY_INVEST_TIME_ORIGIN: ${STUDY_INVEST_TIME_ORIGIN:-}
+      STUDY_INVEST_QA_TOOLS: ${STUDY_INVEST_QA_TOOLS:-0}
       STUDY_INVEST_UPLOAD_DIR: /data/uploads
       TZ: Asia/Seoul
     volumes:

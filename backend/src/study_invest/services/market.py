@@ -71,12 +71,17 @@ def _ratio(new: int, old: int | None) -> float | None:
 # --- 09:00 공시 ------------------------------------------------------------------
 
 
-def open_day(s: Session, day: date, now: datetime, calendar: EventCalendar) -> BatchResult:
-    """day의 시작가를 확정·공시하고 밀린 인증 보상을 지급한다."""
+def open_day(
+    s: Session, day: date, now: datetime, calendar: EventCalendar, *, ignore_clock: bool = False
+) -> BatchResult:
+    """day의 시작가를 확정·공시하고 밀린 인증 보상을 지급한다.
+
+    ignore_clock은 QA 전용이다. day가 시계보다 미래여도 공시한다.
+    """
     batch_lock(s)  # 다른 배치와 직렬화(재진입 가능)
     if not calendar.is_operating_day(day):
         raise DomainError("NOT_OPERATING_DAY", f"{day}는 운영일이 아닙니다.", 422)
-    if to_kst(now).date() < day:
+    if not ignore_clock and to_kst(now).date() < day:
         raise DomainError("TOO_EARLY", f"{day} 이전에는 공시할 수 없습니다.")
     if market_day(s, day) is not None:
         raise DomainError("ALREADY_OPENED", f"{day}는 이미 공시되었습니다.")
@@ -137,8 +142,15 @@ def buy_amounts(s: Session, day: date) -> dict[str, int]:
 
 
 def settle_day(
-    s: Session, day: date, now: datetime, calendar: EventCalendar, rng: random.Random
+    s: Session,
+    day: date,
+    now: datetime,
+    calendar: EventCalendar,
+    rng: random.Random,
+    *,
+    ignore_clock: bool = False,
 ) -> BatchResult:
+    """day 주문을 집계해 다음 운영일 시작가를 정한다. ignore_clock은 QA 전용(18:00 전에도 정산)."""
     batch_lock(s)  # 다른 배치와 직렬화(재진입 가능)
     round_no = calendar.round_of(day)
     if round_no is None:
@@ -150,7 +162,7 @@ def settle_day(
     if md.settled_at is not None:
         raise DomainError("ALREADY_SETTLED", f"{day}는 이미 정산되었습니다.")
     local = to_kst(now)
-    if (local.date(), local.time()) < (day, MARKET_CLOSE):
+    if not ignore_clock and (local.date(), local.time()) < (day, MARKET_CLOSE):
         raise DomainError("TOO_EARLY", "장 마감(18:00) 이후에 정산할 수 있습니다.")
     effective = calendar.next_operating_day(day)
     assert effective is not None
@@ -313,6 +325,45 @@ def run_due(
                     continue  # 전일 정산 실패 → 공시가 전일 가격을 이월한다
                 return results
     return results
+
+
+# --- QA: 시각과 무관하게 가격 변동 즉시 실행 -----------------------------------------------
+
+
+def advance_price(
+    s: Session, now: datetime, calendar: EventCalendar, rng: random.Random
+) -> BatchResult:
+    """최신 공시일을 지금 정산하고 다음 운영일 시작가를 바로 공시한다(QA 전용).
+
+    09:00·18:00을 기다리지 않고 가격이 한 회차 움직이는 것을 보려는 용도다. 정산과 공시를
+    한 트랜잭션으로 실행하므로 중간에 실패하면 아무것도 기록되지 않는다. 이미 정산된
+    날(정산만 끝나고 공시가 남은 경우)은 공시만 실행한다.
+    """
+    batch_lock(s)
+    day = latest_opened_day(s)
+    if day is None:
+        raise DomainError("NOT_OPENED", "공시된 운영일이 없습니다. 먼저 시작가를 공시하세요.")
+    md = market_day(s, day)
+    assert md is not None
+    settled = None
+    if md.settled_at is None:
+        settled = settle_day(s, day, now, calendar, rng, ignore_clock=True)
+    effective = calendar.next_operating_day(day)
+    assert effective is not None  # 반영일이 없는 마지막 날은 settle_day가 NO_ROUND로 거부
+    opened = open_day(s, effective, now, calendar, ignore_clock=True)
+    audit(
+        s,
+        now,
+        "admin",
+        "qa.advance_price",
+        settled_day=day.isoformat(),
+        opened_day=effective.isoformat(),
+    )
+    detail: dict[str, Any] = {"prices": opened.detail["prices"], "settled_day": day.isoformat()}
+    if settled is not None:
+        detail["round"] = settled.detail["round"]
+        detail["manual_kept"] = settled.detail["manual_kept"]
+    return BatchResult("advance", effective, detail)
 
 
 # --- 관리자 수동 가격 개입 (F-11) ---------------------------------------------------

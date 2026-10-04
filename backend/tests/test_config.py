@@ -124,6 +124,19 @@ def test_time_settings_default_to_real_clock(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize(
+    ("value", "expected"), [(None, False), ("", False), ("0", False), ("1", True), ("On", True)]
+)
+def test_qa_tools_flag_from_env(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, expected: bool
+) -> None:
+    if value is None:
+        monkeypatch.delenv("STUDY_INVEST_QA_TOOLS", raising=False)
+    else:
+        monkeypatch.setenv("STUDY_INVEST_QA_TOOLS", value)
+    assert Settings.from_env().qa_tools is expected
+
+
+@pytest.mark.parametrize(
     "origin", ["2026-10-01T15:00", "2026-10-01T15:00:00+09:00", "2026-10-01T06:00:00Z"]
 )
 def test_time_settings_from_env(monkeypatch: pytest.MonkeyPatch, origin: str) -> None:

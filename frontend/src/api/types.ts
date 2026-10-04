@@ -325,9 +325,13 @@ export interface SimulationRequest {
 }
 
 export interface BatchResult {
-  action: 'open' | 'settle';
+  action: 'open' | 'settle' | 'advance';
   day: string;
   detail: Record<string, unknown>;
+}
+
+export interface QaStatus {
+  enabled: boolean;
 }
 
 export interface AuditEntry {

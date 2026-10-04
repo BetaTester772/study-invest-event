@@ -335,6 +335,10 @@ class BatchResult(Schema):
     detail: dict[str, Any]
 
 
+class QaStatus(Schema):
+    enabled: bool
+
+
 class StockSettlement(Schema):
     code: str
     buy_amount: int

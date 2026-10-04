@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, time
 from typing import Any
 
@@ -260,6 +261,78 @@ class TestSettlement:
         ] == ["open", "settle"]
         event = client.get("/api/event").json()
         assert event["market"]["day_settled"] is True and event["market"]["is_open"] is False
+
+
+class TestQaAdvancePrice:
+    URL = "/api/admin/qa/advance-price"
+
+    def enable(self, client: TestClient) -> None:
+        state = client.app.state.study_invest  # type: ignore[attr-defined]
+        state.settings = dataclasses.replace(state.settings, qa_tools=True)
+
+    def test_disabled_by_default(self, client: TestClient, admin: dict[str, str]) -> None:
+        assert client.get("/api/admin/qa", headers=admin).json() == {"enabled": False}
+        r = client.post(self.URL, headers=admin)
+        assert r.status_code == 403 and r.json()["detail"]["code"] == "QA_DISABLED"
+
+    def test_requires_admin_key(self, client: TestClient) -> None:
+        self.enable(client)
+        assert client.post(self.URL).status_code == 401
+
+    def test_needs_an_opened_day(self, client: TestClient, admin: dict[str, str]) -> None:
+        self.enable(client)
+        r = client.post(self.URL, headers=admin)
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "NOT_OPENED"
+
+    def test_settles_and_opens_next_day_before_the_clock(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        self.enable(client)
+        assert client.get("/api/admin/qa", headers=admin).json() == {"enabled": True}
+        open_day(client, clock, D1)  # 시계는 D1 10:00 — 18:00·D2 모두 아직 먼 미래
+        rng.queue = [0.5, 1.0]  # 병더리움 하락일, X=1 → 안정기 -10%
+        r = client.post(self.URL, headers=admin)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["action"] == "advance" and body["day"] == D2.isoformat()
+        assert body["detail"]["settled_day"] == D1.isoformat() and body["detail"]["round"] == 1
+        assert prices(client)["BYUNG"] == 225_000  # 250,000 × 0.9, 즉시 공시됨
+        actions = [a["action"] for a in client.get("/api/admin/audit", headers=admin).json()]
+        assert {"market.settle", "market.open", "qa.advance_price"} <= set(actions)
+
+    def test_repeats_round_by_round_until_last_day(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        self.enable(client)
+        open_day(client, clock, D1)
+        for round_no in range(1, 11):
+            r = client.post(self.URL, headers=admin)
+            assert r.status_code == 200, r.text
+            assert r.json()["detail"]["round"] == round_no
+        assert r.json()["day"] == LAST.isoformat()
+        r = client.post(self.URL, headers=admin)  # 마지막 날은 반영일이 없다
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "NO_ROUND"
+
+    def test_opens_only_when_already_settled(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        self.enable(client)
+        open_day(client, clock, D1)
+        settle_day(client, clock, D1)  # 정산만 끝나고 다음 날 공시 전
+        assert prices(client)["BYUNG"] == 250_000  # 아직 D1 시작가가 공시 중
+        r = client.post(self.URL, headers=admin)
+        assert r.status_code == 200 and "round" not in r.json()["detail"]
+        assert r.json()["day"] == D2.isoformat()
+        assert prices(client)["BYUNG"] == 243_750  # 정산 결과(-2.5%)가 공시됨
+
+    def test_normal_batches_still_respect_the_clock(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        self.enable(client)
+        open_day(client, clock, D1)
+        clock.set(D1, time(17, 0))
+        r = client.post("/api/admin/batch/settle", json={"day": D1.isoformat()}, headers=admin)
+        assert r.json()["detail"]["code"] == "TOO_EARLY"
 
 
 class TestCertification:
