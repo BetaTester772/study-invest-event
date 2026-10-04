@@ -18,9 +18,11 @@ from typing import Annotated
 from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..clock import ScaledClock
 from ..config import Settings
 from ..db import DatabasePools
 from ..event_calendar import EventCalendar
+from ..mail import Mailer
 from ..models import Participant
 from ..params import EventParams
 from ..services import auth
@@ -38,6 +40,8 @@ class AppState:
     calendar: EventCalendar
     clock: Callable[[], datetime]
     rng: random.Random
+    mailer: Mailer
+    """인증 메일 발송(SmtpMailer, SMTP 미설정이면 LogMailer)."""
     time_scale: float = 1.0
     """clock의 배속. 스케줄러는 다음 배치까지 남은 시계 초를 이 값으로 나눠 실제로 기다린다."""
     cpu_executor: Executor | None = field(default=None)
@@ -89,6 +93,16 @@ async def get_now(state: StateDep) -> datetime:
 NowDep = Annotated[datetime, Depends(get_now)]
 
 
+async def get_real_now(state: StateDep) -> datetime:
+    """실제 시각. 인증 코드 유효시간·재발송 간격처럼 사람이 기다리는 시간은 테스트 시계 배속을
+    따르지 않는다(배속 24면 10분이 25초가 된다). 테스트가 주입한 시계는 그대로 쓴다."""
+    clock = state.clock
+    return clock.source() if isinstance(clock, ScaledClock) else clock()
+
+
+RealNowDep = Annotated[datetime, Depends(get_real_now)]
+
+
 def current_params(s: SessionDep) -> EventParams:
     return get_params(s)
 
@@ -120,6 +134,18 @@ async def current_participant(
 
 MeDep = Annotated[Participant, Depends(current_participant)]
 OptionalMeDep = Annotated[Participant | None, Depends(optional_participant)]
+
+
+async def verified_participant(participant: MeDep) -> Participant:
+    """학교 메일 인증을 마친 참가자만(메일 인증 도입 전 계정은 재인증해야 한다)."""
+    if not participant.email_verified:
+        raise DomainError(
+            "EMAIL_VERIFICATION_REQUIRED", "학교 메일 인증을 마쳐야 이용할 수 있습니다.", 403
+        )
+    return participant
+
+
+VerifiedMeDep = Annotated[Participant, Depends(verified_participant)]
 
 
 async def require_admin(

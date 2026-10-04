@@ -4,7 +4,14 @@ import { ApiError, meApi, tokenStore, type Participant } from '../../api';
 import { AuthProvider, useAuth } from '../AuthContext';
 import { RequireAuth } from '../RequireAuth';
 
-const ME: Participant = { id: 1, nickname: 'alice', status: 'normal', joined_at: '2026-10-06T09:00:00+09:00' };
+const ME: Participant = {
+  id: 1,
+  nickname: 'alice',
+  status: 'normal',
+  joined_at: '2026-10-06T09:00:00+09:00',
+  email: 'alice@g.skku.edu',
+  email_verified: true,
+};
 
 function Probe() {
   const { status, participant } = useAuth();
@@ -29,6 +36,7 @@ function renderApp() {
             }
           />
           <Route path="/login" element={<p>login page</p>} />
+          <Route path="/verify-email" element={<p>verify email page</p>} />
         </Routes>
         <Probe />
       </MemoryRouter>
@@ -74,5 +82,12 @@ describe('AuthProvider', () => {
     renderApp();
     await waitFor(() => expect(screen.getByText('login page')).toBeInTheDocument());
     expect(tokenStore.get()).toBeNull();
+  });
+
+  it('sends accounts without a verified school email to /verify-email', async () => {
+    vi.spyOn(meApi, 'me').mockResolvedValue({ ...ME, email: null, email_verified: false });
+    renderApp();
+    await waitFor(() => expect(screen.getByText('verify email page')).toBeInTheDocument());
+    expect(screen.queryByText('protected page')).not.toBeInTheDocument();
   });
 });

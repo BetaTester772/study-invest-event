@@ -33,6 +33,7 @@ from study_invest.models import (
     Side,
     StudyCertification,
 )
+from study_invest.normalize import parse_school_email
 from study_invest.params import KST, EventParams
 from study_invest.services import auth, certification, market, trading
 from study_invest.services.common import DomainError, market_day
@@ -62,7 +63,8 @@ def factory() -> Iterator[sessionmaker[Session]]:
 
 def setup_participant(factory: sessionmaker[Session], name: str = "alice") -> int:
     with factory() as s:
-        p, _ = auth.register(s, name, name, "password123", at(D1, 8), CAL)
+        email = parse_school_email(f"{name}@g.skku.edu")
+        p, _ = auth.register(s, email, name, "password123", at(D1, 8), CAL)
         if market_day(s, D1) is None:
             market.open_day(s, D1, at(D1, 9), CAL)
         s.commit()
@@ -226,19 +228,21 @@ class TestUniqueConflicts:
             assert s.scalar(select(func.count()).select_from(StudyCertification)) == 1
 
     def test_duplicate_registration_is_domain_error(self, factory: sessionmaker[Session]) -> None:
-        def register(nickname: str) -> Callable[[], str]:
+        def register(nickname: str, domain: str) -> Callable[[], str]:
             def fn() -> str:
                 with factory() as s:
-                    auth.register(s, "same@corp", nickname, "password123", at(D1, 8), CAL)
+                    email = parse_school_email(f"same@{domain}")
+                    auth.register(s, email, nickname, "password123", at(D1, 8), CAL)
                     time_mod.sleep(0.2)
                     s.commit()
                     return "ok"
 
             return fn
 
-        results = run_together(register("one"), register("two"))
+        # 두 도메인의 같은 ID(같은 사람)가 동시에 가입해도 하나만 된다
+        results = run_together(register("one", "g.skku.edu"), register("two", "skku.edu"))
         assert sorted(r if isinstance(r, str) else r.code for r in results) == [
-            "IDENTITY_TAKEN",
+            "EMAIL_TAKEN",
             "ok",
         ]
         assert all(isinstance(r, str | DomainError) for r in results)

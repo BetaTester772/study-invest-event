@@ -42,6 +42,10 @@ export interface Participant {
   nickname: string;
   status: ParticipantStatus;
   joined_at: string;
+  /** 인증된 학교 메일(@g.skku.edu로 합쳐 보관). 인증 전이거나 이벤트 후 파기했으면 null. */
+  email: string | null;
+  /** false면 메일 인증 도입 전에 가입한 계정이라 재인증해야 거래·공부 인증을 할 수 있다. */
+  email_verified: boolean;
 }
 
 export interface HoldingView {
@@ -193,13 +197,35 @@ export interface AuthResponse {
   participant: Participant;
 }
 
+export interface EmailCodeRequest {
+  email: string;
+}
+
+export interface EmailCodeResponse {
+  /** 코드를 보낸 주소. */
+  email: string;
+  /** 코드 유효시간(초). */
+  expires_in: number;
+  /** 다시 요청할 수 있을 때까지(초). */
+  resend_after: number;
+}
+
 export interface RegisterRequest {
-  identity: string;
+  email: string;
+  code: string;
   nickname: string;
   password: string;
+  privacy_consent: boolean;
+}
+
+export interface VerifyEmailRequest {
+  email: string;
+  code: string;
+  privacy_consent: boolean;
 }
 
 export interface LoginRequest {
+  /** 학교 메일 또는 메일 인증 도입 전 아이디. */
   identity: string;
   password: string;
 }
@@ -213,7 +239,8 @@ export interface OrderRequest {
 // ---- Admin ----
 
 export interface AdminParticipant extends Participant {
-  identity: string;
+  /** 메일 인증 도입 전 아이디. 그 뒤 가입한 참가자는 null. */
+  identity: string | null;
   cash: number;
   total_assets: number;
   principal: number;

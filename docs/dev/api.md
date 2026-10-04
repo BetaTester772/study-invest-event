@@ -1,6 +1,8 @@
-# API 계약 (v0.2)
+# API 계약 (v0.3)
 
 백엔드(FastAPI)와 프론트엔드(React)가 공유하는 HTTP 계약이다. 모든 경로는 `/api` 접두사를 가진다.
+
+v0.3 (2026-10-04): 1인 1계정을 학교 메일(@skku.edu·@g.skku.edu) 인증으로 확인. `POST /api/auth/email-code`, `POST /api/me/email` 추가, `register` 요청을 `{email, code, nickname, password, privacy_consent}`로 변경, `Participant.email`·`email_verified` 추가, `AdminParticipant.identity`는 nullable. 학교 메일 인증 전 계정은 주문·공부 인증 제출이 403 `EMAIL_VERIFICATION_REQUIRED`.
 
 v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_quantity`·`reward_quantity` → `reward_cash`), 투입 원금 기준 수익률(`Portfolio`·`RankingEntry`·`AdminParticipant`), 코인 초반 안정기(`EventInfo.coin`, `coin_calm_*` 파라미터, 정산 로그 `calm`, 시뮬레이터 `calm_daily`).
 
@@ -15,11 +17,14 @@ v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_qu
 | HTTP | code 예 | 의미 |
 |---|---|---|
 | 401 | `UNAUTHORIZED` | 토큰/관리자 키 없음·불일치 |
-| 403 | `DISQUALIFIED` | 실격 참가자 |
+| 400 | `INVALID_CODE`, `CODE_EXPIRED`, `CODE_ATTEMPTS_EXCEEDED` | 메일 인증 코드가 틀림·만료(10분)·5번 틀림 |
+| 403 | `DISQUALIFIED`, `EMAIL_VERIFICATION_REQUIRED` | 실격 참가자 / 학교 메일 인증 전 계정 |
 | 404 | `NOT_FOUND` | 리소스 없음 |
 | 409 | `CONFLICT` 계열 | 중복 등록, 중복 인증, 배치 순서 위반, 동시 요청 충돌(`CONFLICT`) |
+| 429 | `CODE_RECENTLY_SENT`, `TOO_MANY_CODES` | 인증 코드 재요청 60초 대기 / 메일 하나에 24시간 5통 초과 |
 | 413 | `PAYLOAD_TOO_LARGE` | 요청 본문이 한도 초과(업로드 10MB+여유, 그 외 1MiB). 본문을 받기 전에 거부 |
 | 503 | `DB_BUSY`, `DB_UNAVAILABLE` | api 연결 풀이 가득 참(10초 대기 초과) / DB 연결 불가. `Retry-After: 2` |
+| 503 | `MAIL_SEND_FAILED`, `MAIL_QUOTA_EXCEEDED` | 인증 메일 발송 실패(바로 다시 요청 가능) / 24시간 발송 상한(`STUDY_INVEST_MAIL_DAILY_LIMIT`) 도달 |
 
 ## 공용 타입
 
@@ -58,6 +63,8 @@ interface Participant {
   nickname: string;
   status: ParticipantStatus;
   joined_at: string;
+  email: string | null;      // 인증된 학교 메일(@g.skku.edu로 합쳐 보관). 인증 전·파기 후 null
+  email_verified: boolean;   // false면 재인증 전(메일 인증 도입 전 가입) → 주문·공부 인증 불가
 }
 
 interface HoldingView {
@@ -183,11 +190,15 @@ interface RankingEntry {
 
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
-| POST | `/api/auth/register` | `{identity, nickname, password}` | 201 `{token, participant: Participant}` / 409 `IDENTITY_TAKEN`, `NICKNAME_TAKEN` |
+| POST | `/api/auth/email-code` | `{email}` | 202 `{email, expires_in, resend_after}` (코드를 보낸 주소, 600, 60) / 422 `INVALID_EMAIL`, `EMAIL_DOMAIN_NOT_ALLOWED`, 409 `EMAIL_TAKEN`, `REGISTRATION_CLOSED`, 429, 503 |
+| POST | `/api/auth/register` | `{email, code, nickname, password, privacy_consent}` | 201 `{token, participant: Participant}` / 400 코드 오류, 409 `EMAIL_TAKEN`, `NICKNAME_TAKEN`, 422 `PRIVACY_CONSENT_REQUIRED` |
 | POST | `/api/auth/login` | `{identity, password}` | `{token, participant}` / 401 `INVALID_CREDENTIALS` |
 | POST | `/api/auth/logout` | – | 204 |
 
-- `identity`: 1인 1계정 식별자(사내 계정·학번 등). NFKC 정규화·대소문자 무시·앞뒤 공백 제거 **후** 1~128자. 전각 `ＡＬＩＣＥ`와 `alice`는 같은 식별자.
+- `email`: 학교 메일만(`@skku.edu`, `@g.skku.edu`, 하위 도메인 불가). NFKC·대소문자 무시·앞뒤 공백 제거 뒤 검사한다. ID는 영문 소문자·숫자·`.`·`_`·`-` 1~64자(`+` 별칭 불가). **같은 ID의 두 도메인은 한 사람**으로 보고 `ID@g.skku.edu`로 합쳐 저장·중복 검사한다. 코드 메일은 입력한 주소 그대로 보낸다.
+- `code`: 메일로 받은 6자리 숫자. 10분 유효, 메일마다 가장 최근 코드만 유효, 5번 틀리면 다시 받아야 한다. 가입이 다른 이유(닉네임 중복 등)로 실패하면 코드는 쓰이지 않는다. 재요청은 60초 뒤, 메일 하나에 24시간 5통까지.
+- `privacy_consent`: 개인정보(학교 메일) 수집·이용 동의. `true`가 아니면 422.
+- 로그인 `identity`: 학교 메일(두 도메인 어느 쪽이든) 또는 메일 인증 도입 전 식별자(NFKC·대소문자 무시·공백 제거 후 1~128자).
 - `nickname`: NFC 정규화·앞뒤 공백 제거 **후** 2~20자, 랭킹 공개명(조합형·완성형 한글은 같은 닉네임). `password`: 8자 이상.
 
 ## 참가자 (Bearer)
@@ -195,19 +206,21 @@ interface RankingEntry {
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | GET | `/api/me` | – | `Participant` |
+| POST | `/api/me/email` | `{email, code, privacy_consent}` | `Participant` — 메일 인증 도입 전 계정의 재인증(코드는 `/api/auth/email-code`). 409 `ALREADY_VERIFIED`, `EMAIL_TAKEN` |
 | GET | `/api/me/portfolio` | – | `Portfolio` |
 | GET | `/api/me/orders` | `?limit=100` | `Order[]` (최신순) |
-| POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분). `code`는 1~16자, `quantity`는 정수(64비트 범위 밖이면 422) |
+| POST | `/api/me/orders` | `{code, side, quantity}` | 201 `Order` (체결·거부 모두 201, `status`로 구분). `code`는 1~16자, `quantity`는 정수(64비트 범위 밖이면 422). 학교 메일 인증 전이면 403 `EMAIL_VERIFICATION_REQUIRED` |
 | GET | `/api/me/certifications` | – | `Certification[]` (최신순) |
 | GET | `/api/me/certification-status` | – | `CertificationStatus` — 지금 올릴 수 있는지(제출 API와 같은 판단). 화면은 이 값만 따른다 |
-| POST | `/api/me/certifications` | multipart `file` (image/jpeg·png·webp·heic, ≤10MB) | 201 `Certification` / 409 `ALREADY_CERTIFIED`, 422 `OUTSIDE_EVENT`, `INVALID_IMAGE` |
+| POST | `/api/me/certifications` | multipart `file` (image/jpeg·png·webp·heic, ≤10MB) | 201 `Certification` / 409 `ALREADY_CERTIFIED`, 422 `OUTSIDE_EVENT`, `INVALID_IMAGE`, 403 `EMAIL_VERIFICATION_REQUIRED` |
 | GET | `/api/me/certifications/{id}/image` | – | 이미지 바이너리 |
 
 ## 관리자 (X-Admin-Key)
 
 ```ts
 interface AdminParticipant extends Participant {
-  identity: string; cash: number; total_assets: number;
+  identity: string | null;   // 메일 인증 도입 전 식별자. 그 뒤 가입한 참가자는 null
+  cash: number; total_assets: number;
   principal: number; return_rate: number;   // 투입 원금, 수익률(RankingEntry와 같은 정의)
   rejected_certifications: number; approved_certifications: number;
 }

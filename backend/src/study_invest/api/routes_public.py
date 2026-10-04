@@ -1,7 +1,8 @@
-"""공개 API: 이벤트 정보, 시세(F-02), 랭킹(F-10), 참가 등록·로그인(F-01)."""
+"""공개 API: 이벤트 정보, 시세(F-02), 랭킹(F-10), 학교 메일 인증·참가 등록·로그인(F-01)."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, time
 
@@ -13,10 +14,13 @@ from ..event_calendar import EventCalendar, to_kst
 from ..instruments import BY_CODE, INSTRUMENTS
 from ..models import MarketDay, PriceHistory
 from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
-from ..services import auth, market, ranking
+from ..services import auth, email_verification, market, ranking
 from ..services.common import DomainError, current_prices, get_params
 from . import schemas
-from .deps import NowDep, OptionalMeDep, SessionDep, StateDep, TokenDep
+from .deps import NowDep, OptionalMeDep, RealNowDep, SessionDep, StateDep, TokenDep
+from .email_codes import consume_code
+
+log = logging.getLogger("study_invest")
 
 router = APIRouter(prefix="/api")
 
@@ -160,13 +164,45 @@ def get_ranking(s: SessionDep, now: NowDep, me: OptionalMeDep) -> schemas.Rankin
     )
 
 
+@router.post("/auth/email-code", response_model=schemas.EmailCodeResponse, status_code=202)
+def request_email_code(
+    body: schemas.EmailCodeRequest,
+    state: StateDep,
+    s: SessionDep,
+    now: NowDep,
+    real_now: RealNowDep,
+) -> schemas.EmailCodeResponse:
+    """학교 메일로 6자리 인증 코드를 보낸다(참가 신청·재인증 공용)."""
+    auth.ensure_registration_open(now, state.calendar)
+    email, row, code = email_verification.request_code(
+        s, body.email, real_now, state.settings.mail_daily_limit
+    )
+    # 먼저 커밋해 DB 연결을 풀에 돌려준다. SMTP를 기다리는 동안 api 풀을 잡고 있지 않는다.
+    s.commit()
+    try:
+        state.mailer.send(email.address, *email_verification.message(code))
+    except Exception as exc:
+        log.exception("인증 메일 발송 실패")
+        email_verification.discard(s, row.id)
+        s.commit()
+        raise DomainError(
+            "MAIL_SEND_FAILED", "인증 메일을 보내지 못했습니다. 잠시 후 다시 시도하세요.", 503
+        ) from exc
+    return schemas.EmailCodeResponse(
+        email=email.address,
+        expires_in=int(email_verification.CODE_TTL.total_seconds()),
+        resend_after=int(email_verification.RESEND_COOLDOWN.total_seconds()),
+    )
+
+
 @router.post("/auth/register", response_model=schemas.AuthResponse, status_code=201)
 def register(
-    body: schemas.RegisterRequest, state: StateDep, s: SessionDep, now: NowDep
+    body: schemas.RegisterRequest, state: StateDep, s: SessionDep, now: NowDep, real_now: RealNowDep
 ) -> schemas.AuthResponse:
-    participant, token = auth.register(
-        s, body.identity, body.nickname, body.password, now, state.calendar
-    )
+    auth.ensure_registration_open(now, state.calendar)
+    auth.ensure_privacy_consent(body.privacy_consent)
+    email = consume_code(s, body.email, body.code, real_now)
+    participant, token = auth.register(s, email, body.nickname, body.password, now, state.calendar)
     s.commit()
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)

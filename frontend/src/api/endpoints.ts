@@ -8,6 +8,8 @@ import type {
   CertStatus,
   Certification,
   CertificationStatus,
+  EmailCodeRequest,
+  EmailCodeResponse,
   EventInfo,
   Instrument,
   LoginRequest,
@@ -26,6 +28,7 @@ import type {
   SimulationReport,
   SimulateOptions,
   SimulationRequest,
+  VerifyEmailRequest,
 } from './types';
 
 /** Public endpoints. */
@@ -39,6 +42,8 @@ export const publicApi = {
 };
 
 export const authApi = {
+  requestEmailCode: (body: EmailCodeRequest) =>
+    request<EmailCodeResponse>('/auth/email-code', { method: 'POST', body }),
   register: (body: RegisterRequest) => request<AuthResponse>('/auth/register', { method: 'POST', body }),
   login: (body: LoginRequest) => request<AuthResponse>('/auth/login', { method: 'POST', body }),
   logout: () => request<void>('/auth/logout', { method: 'POST', auth: 'participant' }),
@@ -47,6 +52,8 @@ export const authApi = {
 /** Participant endpoints (Bearer). */
 export const meApi = {
   me: () => request<Participant>('/me', { auth: 'participant' }),
+  verifyEmail: (body: VerifyEmailRequest) =>
+    request<Participant>('/me/email', { method: 'POST', auth: 'participant', body }),
   portfolio: () => request<Portfolio>('/me/portfolio', { auth: 'participant' }),
   orders: (limit = 100) => request<Order[]>('/me/orders', { auth: 'participant', query: { limit } }),
   placeOrder: (body: OrderRequest) => request<Order>('/me/orders', { method: 'POST', auth: 'participant', body }),

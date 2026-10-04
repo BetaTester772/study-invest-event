@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Literal, cast
@@ -94,6 +94,16 @@ class Settings:
     """앱 시계 배속. 24면 실제 1시간이 이벤트 하루다. 테스트·QA 서버에서만 바꾼다."""
     time_origin: datetime | None = None
     """앱 시계가 이벤트 첫날 00:00(KST)을 가리키는 실제 시각. time_scale이 1이 아니면 필수."""
+    smtp_host: str = ""
+    """인증 메일 SMTP 서버(예: smtp.gmail.com). 비우면 메일 대신 로그로 남긴다(로컬 개발용)."""
+    smtp_port: int = 587
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    smtp_username: str = ""
+    smtp_password: str = field(default="", repr=False)
+    mail_from: str = ""
+    """보내는 주소. 비우면 smtp_username. Gmail SMTP는 로그인한 계정 주소여야 한다."""
+    mail_daily_limit: int = 400
+    """최근 24시간 동안 보낼 인증 메일 상한. 넘으면 503. 발송 계정의 하루 한도보다 낮게 둔다."""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -124,6 +134,18 @@ class Settings:
             event_end=_env_date(env, "STUDY_INVEST_EVENT_END", cls.event_end),
             time_scale=_env_float(env, "STUDY_INVEST_TIME_SCALE", cls.time_scale),
             time_origin=_env_datetime(env, "STUDY_INVEST_TIME_ORIGIN"),
+            smtp_host=env.get("STUDY_INVEST_SMTP_HOST", "").strip(),
+            smtp_port=int(env.get("STUDY_INVEST_SMTP_PORT", "").strip() or cls.smtp_port),
+            smtp_security=cast(
+                Literal["starttls", "ssl", "none"],
+                env.get("STUDY_INVEST_SMTP_SECURITY", "").strip() or cls.smtp_security,
+            ),
+            smtp_username=env.get("STUDY_INVEST_SMTP_USERNAME", "").strip(),
+            smtp_password=env.get("STUDY_INVEST_SMTP_PASSWORD", ""),
+            mail_from=env.get("STUDY_INVEST_MAIL_FROM", "").strip(),
+            mail_daily_limit=int(
+                env.get("STUDY_INVEST_MAIL_DAILY_LIMIT", "").strip() or cls.mail_daily_limit
+            ),
         )
 
     @property

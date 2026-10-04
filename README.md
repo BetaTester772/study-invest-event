@@ -20,7 +20,7 @@
 ## Docker Compose로 실행
 
 ```bash
-cp .env.example .env        # STUDY_INVEST_ADMIN_KEY, POSTGRES_PASSWORD 변경
+cp .env.example .env        # STUDY_INVEST_ADMIN_KEY, POSTGRES_PASSWORD, SMTP(인증 메일) 설정
 docker compose up --build
 ```
 
@@ -80,6 +80,7 @@ study-invest open --day 2026-10-06           # 수동 공시
 study-invest settle --day 2026-10-06         # 수동 정산
 study-invest simulate --paths 100000 --seed 42 [--use-price-cap] [--defaults]
 study-invest purge-images                    # 이벤트 종료 후 인증 사진 삭제
+study-invest purge-emails                    # 이벤트 종료 후 학교 메일·인증 코드 기록 삭제
 ```
 
 환경 변수:
@@ -104,6 +105,11 @@ study-invest purge-images                    # 이벤트 종료 후 인증 사�
 | `STUDY_INVEST_EVENT_START` / `_EVENT_END` | `2026-10-06` / `2026-10-16` | 이벤트 기간(YYYY-MM-DD, 양 끝 포함). 테스트·QA 서버에서만 바꾼다 |
 | `STUDY_INVEST_TIME_SCALE` / `_TIME_ORIGIN` | `1` / (없음) | 앱 시계 배속과, 이벤트 첫날 00:00이 시작되는 실제 시각(ISO 8601, 시간대 없으면 KST). `24`면 실제 1시간이 하루. 테스트·QA 서버에서만 바꾼다 |
 | `STUDY_INVEST_FRONTEND_DIST` | (없음) | 빌드된 프론트엔드를 백엔드가 직접 제공할 때 경로 |
+| `STUDY_INVEST_SMTP_HOST` | (없음) | 학교 메일 인증 코드 SMTP 서버(예: `smtp.gmail.com`). 비우면 메일 대신 로그로 남김(로컬 개발 전용) |
+| `STUDY_INVEST_SMTP_PORT` / `_SMTP_SECURITY` | `587` / `starttls` | `starttls`·`ssl`(보통 465)·`none` |
+| `STUDY_INVEST_SMTP_USERNAME` / `_SMTP_PASSWORD` | (없음) | SMTP 로그인. Gmail은 2단계 인증 후 만든 **앱 비밀번호** |
+| `STUDY_INVEST_MAIL_FROM` | (= USERNAME) | 보내는 주소. Gmail SMTP는 로그인한 계정 주소여야 한다 |
+| `STUDY_INVEST_MAIL_DAILY_LIMIT` | `400` | 최근 24시간 인증 메일 상한(넘으면 503). 발송 계정 한도보다 낮게(Gmail 개인 계정 약 500통/일) |
 
 ### 프론트엔드
 

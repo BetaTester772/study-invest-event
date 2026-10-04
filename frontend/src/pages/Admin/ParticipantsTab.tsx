@@ -3,6 +3,7 @@ import { adminApi, ApiError, useApi, type AdminParticipant, type ParticipantStat
 import { PARTICIPANT_STATUS_LABEL, ParticipantStatusBadge } from '../../components/app/badges';
 import { LoadError } from '../../components/app/LoadError';
 import {
+  Badge,
   Button,
   Card,
   Modal,
@@ -45,7 +46,13 @@ export function ParticipantsTab() {
   const columns: Column<AdminParticipant>[] = [
     { key: 'id', header: 'ID', numeric: true, width: '4rem' },
     { key: 'nickname', header: '닉네임', render: (p) => p.nickname },
-    { key: 'identity', header: '아이디', hideOnMobile: true, render: (p) => p.identity },
+    {
+      key: 'email',
+      header: '학교 메일',
+      hideOnMobile: true,
+      render: (p) =>
+        p.email_verified ? (p.email ?? '(파기됨)') : <Badge tone="warning">재인증 전 · {p.identity}</Badge>,
+    },
     { key: 'status', header: '상태', nowrap: true, render: (p) => <ParticipantStatusBadge status={p.status} /> },
     { key: 'cash', header: '현금', numeric: true, hideOnMobile: true, render: (p) => <Money value={p.cash} /> },
     { key: 'total', header: '총자산', numeric: true, render: (p) => <Money value={p.total_assets} /> },

@@ -107,8 +107,12 @@ class Participant(Base):
     __tablename__ = "participants"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    identity: Mapped[str] = mapped_column(String(128), unique=True)
-    """정규화된 1인 1계정 식별자."""
+    identity: Mapped[str | None] = mapped_column(String(128), unique=True)
+    """메일 인증 도입 전에 쓰던 자유 입력 식별자(정규화됨). 그 뒤 가입한 참가자는 None."""
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    """인증된 학교 메일의 1인 1계정 키(normalize.SchoolEmail.canonical). 이벤트 후 파기하면 None."""
+    email_verified_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
+    """학교 메일 인증 시각. None이면 인증 전 계정이라 거래·공부 인증을 할 수 없다."""
     nickname: Mapped[str] = mapped_column(String(32), unique=True)
     password_hash: Mapped[str] = mapped_column(String(256))
     cash: Mapped[int] = mapped_column(BigInteger)
@@ -121,6 +125,10 @@ class Participant(Base):
         back_populates="participant", cascade="all, delete-orphan"
     )
 
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
+
 
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
@@ -128,6 +136,22 @@ class AuthSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(AwareDateTime())
+
+
+class EmailVerification(Base):
+    """학교 메일 인증 코드. 코드는 해시로만 저장한다. 메일별로 가장 최근 코드만 유효하다."""
+
+    __tablename__ = "email_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    """1인 1계정 키(normalize.SchoolEmail.canonical)."""
+    code_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime(), index=True)
+    expires_at: Mapped[datetime] = mapped_column(AwareDateTime())
+    attempts: Mapped[int] = mapped_column(default=0)
+    """틀린 코드 입력 횟수."""
+    consumed_at: Mapped[datetime | None] = mapped_column(AwareDateTime())
 
 
 class Holding(Base):

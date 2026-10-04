@@ -1,6 +1,7 @@
 import { Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { RequireAuth } from './auth/RequireAuth';
+import { EmailVerificationBanner } from './components/app/EmailVerificationBanner';
 import { TestClockBanner } from './components/app/TestClockBanner';
 import {
   AppShell,
@@ -16,6 +17,7 @@ import {
 import { AdminPage } from './pages/Admin/AdminPage';
 import { LoginPage } from './pages/Auth/LoginPage';
 import { RegisterPage } from './pages/Auth/RegisterPage';
+import { VerifyEmailPage } from './pages/Auth/VerifyEmailPage';
 import { CertificationPage } from './pages/Certification/CertificationPage';
 import { InstrumentPage } from './pages/Instrument/InstrumentPage';
 import { MarketPage } from './pages/Market/MarketPage';
@@ -94,6 +96,7 @@ function Shell() {
       }
     >
       <TestClockBanner />
+      <EmailVerificationBanner />
       <Routes>
         <Route path="/" element={<MarketPage />} />
         <Route path="/instruments/:code" element={<InstrumentPage />} />
@@ -116,6 +119,14 @@ function Shell() {
         <Route path="/ranking" element={<RankingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route
+          path="/verify-email"
+          element={
+            <RequireAuth>
+              <VerifyEmailPage />
+            </RequireAuth>
+          }
+        />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/ui" element={<StyleGuidePage />} />
         <Route path="*" element={<NotFound />} />

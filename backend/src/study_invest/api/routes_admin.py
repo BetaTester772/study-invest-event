@@ -52,6 +52,8 @@ def _admin_participant(
         status=p.status,
         joined_at=p.joined_at,
         identity=p.identity,
+        email=p.email,
+        email_verified=p.email_verified,
         cash=p.cash,
         total_assets=valuation.total_assets,
         principal=valuation.principal,

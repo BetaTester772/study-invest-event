@@ -20,7 +20,7 @@ export function LoginPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!identity.trim() || !password) {
-      setError('아이디와 비밀번호를 모두 입력해 주세요.');
+      setError('학교 메일과 비밀번호를 모두 입력해 주세요.');
       return;
     }
     setSubmitting(true);
@@ -32,7 +32,7 @@ export function LoginPage() {
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === 'INVALID_CREDENTIALS'
-          ? '아이디나 비밀번호가 맞지 않아요. 다시 확인해 주세요.'
+          ? '학교 메일이나 비밀번호가 맞지 않아요. 다시 확인해 주세요.'
           : err instanceof ApiError
             ? err.message
             : '로그인하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
@@ -43,14 +43,14 @@ export function LoginPage() {
 
   return (
     <Container size="sm">
-      <PageHeader title="로그인" description="참가 신청할 때 쓴 아이디로 로그인하세요." />
+      <PageHeader title="로그인" description="참가 신청할 때 인증한 학교 메일로 로그인하세요." />
       <Card>
         <form onSubmit={onSubmit} noValidate>
           <Stack gap={4}>
             {error && <Alert tone="danger">{error}</Alert>}
             <TextField
-              label="아이디"
-              hint="사내 계정이나 학번처럼 참가 신청할 때 쓴 식별자예요."
+              label="학교 메일"
+              hint="@skku.edu와 @g.skku.edu 어느 쪽으로도 로그인할 수 있어요. 메일 인증이 생기기 전에 가입했다면 그때 쓴 아이디를 입력하세요."
               autoComplete="username"
               value={identity}
               onChange={(e) => setIdentity(e.target.value)}

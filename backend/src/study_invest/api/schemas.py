@@ -159,14 +159,44 @@ Nickname = Annotated[
 ]
 
 
+# 형식·도메인 검사는 서비스(email_verification.parse)가 업무 오류 코드로 한다.
+Email = Annotated[str, StringConstraints(min_length=1, max_length=254)]
+Code = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9]{6}$")]
+
+
+class EmailCodeRequest(BaseModel):
+    email: Email
+
+
+class EmailCodeResponse(Schema):
+    email: str
+    """코드를 보낸 주소."""
+    expires_in: int
+    """코드 유효시간(초)."""
+    resend_after: int
+    """다시 요청할 수 있을 때까지(초)."""
+
+
 class RegisterRequest(BaseModel):
-    identity: Identity
+    email: Email
+    code: Code
     nickname: Nickname
     password: str = Field(min_length=8, max_length=128)
+    privacy_consent: bool
+    """개인정보(학교 메일) 수집·이용 동의. true여야 한다."""
+
+
+class VerifyEmailRequest(BaseModel):
+    """메일 인증 도입 전에 가입한 참가자의 재인증."""
+
+    email: Email
+    code: Code
+    privacy_consent: bool
 
 
 class LoginRequest(BaseModel):
     identity: Identity
+    """학교 메일(@skku.edu·@g.skku.edu) 또는 메일 인증 도입 전 식별자."""
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -175,6 +205,10 @@ class Participant(Schema):
     nickname: str
     status: ParticipantStatus
     joined_at: datetime
+    email: str | None
+    """인증된 학교 메일(@g.skku.edu로 합쳐 보관). 인증 전이거나 이벤트 후 파기했으면 null."""
+    email_verified: bool
+    """false면 학교 메일 재인증 전이라 거래·공부 인증을 할 수 없다."""
 
 
 class AuthResponse(Schema):
@@ -269,7 +303,8 @@ class CertificationStatus(Schema):
 
 
 class AdminParticipant(Participant):
-    identity: str
+    identity: str | None
+    """메일 인증 도입 전 식별자. 그 뒤 가입한 참가자는 null."""
     cash: int
     total_assets: int
     principal: int

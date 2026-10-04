@@ -253,10 +253,19 @@ jobs:
           curl -fsS http://localhost:8080/ -o /dev/null
           curl -fsS http://localhost:8080/api/health
           curl -fsS http://localhost:8080/api/instruments > /dev/null
+          # 학교 메일 인증: SMTP 미설정이라 코드는 백엔드 로그에 남는다
+          curl -fsS -X POST http://localhost:8080/api/auth/email-code \
+            -H 'content-type: application/json' -d '{"email":"ci-bot@g.skku.edu"}' > /dev/null
+          mail_code=$(docker compose logs backend | sed -n 's/.*인증 코드: \([0-9]\{6\}\).*/\1/p' | tail -n 1)
+          test -n "$mail_code"
           token=$(curl -fsS -X POST http://localhost:8080/api/auth/register \
             -H 'content-type: application/json' \
-            -d '{"identity":"ci@example.com","nickname":"ci-bot","password":"password123"}' \
+            -d "{\"email\":\"ci-bot@g.skku.edu\",\"code\":\"${mail_code}\",\"nickname\":\"ci-bot\",\"password\":\"password123\",\"privacy_consent\":true}" \
             | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+          # 학교 메일이 아니면 거부
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/api/auth/email-code \
+            -H 'content-type: application/json' -d '{"email":"ci@example.com"}')
+          test "$code" = "422"
           curl -fsS http://localhost:8080/api/me/portfolio -H "Authorization: Bearer ${token}" > /dev/null
           pools=$(curl -fsS http://localhost:8080/api/admin/db-pools -H 'X-Admin-Key: ci-admin-key')
           echo "$pools"

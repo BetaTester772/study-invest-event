@@ -1,4 +1,7 @@
-"""참가자 API: 포트폴리오(F-04), 주문(F-03), 공부 인증(F-06)."""
+"""참가자 API: 포트폴리오(F-04), 주문(F-03), 공부 인증(F-06), 학교 메일 재인증.
+
+주문·공부 인증 제출은 학교 메일 인증을 마친 참가자만 할 수 있다(VerifiedMeDep).
+"""
 
 from __future__ import annotations
 
@@ -9,16 +12,39 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 
 from ..models import Order, StudyCertification
-from ..services import certification, trading
+from ..services import auth, certification, trading
 from ..services.common import DomainError, get_params
 from . import schemas, views
-from .deps import MeDep, NowDep, ParamsDep, SessionDep, StateDep
+from .deps import (
+    MeDep,
+    NowDep,
+    ParamsDep,
+    RealNowDep,
+    SessionDep,
+    StateDep,
+    VerifiedMeDep,
+)
+from .email_codes import consume_code
 
 router = APIRouter(prefix="/api/me")
 
 
 @router.get("", response_model=schemas.Participant)
 def me(participant: MeDep) -> schemas.Participant:
+    return schemas.Participant.model_validate(participant)
+
+
+@router.post("/email", response_model=schemas.Participant)
+def verify_email(
+    body: schemas.VerifyEmailRequest, participant: MeDep, s: SessionDep, real_now: RealNowDep
+) -> schemas.Participant:
+    """메일 인증 도입 전에 가입한 참가자의 재인증(코드는 POST /api/auth/email-code로 받는다)."""
+    auth.ensure_privacy_consent(body.privacy_consent)
+    if participant.email_verified:
+        raise DomainError("ALREADY_VERIFIED", "이미 학교 메일 인증을 마쳤습니다.")
+    email = consume_code(s, body.email, body.code, real_now)
+    auth.verify_email(s, participant, email, real_now)
+    s.commit()
     return schemas.Participant.model_validate(participant)
 
 
@@ -42,7 +68,11 @@ def orders(
 
 @router.post("/orders", response_model=schemas.Order, status_code=201)
 def place_order(
-    body: schemas.OrderRequest, participant: MeDep, state: StateDep, s: SessionDep, now: NowDep
+    body: schemas.OrderRequest,
+    participant: VerifiedMeDep,
+    state: StateDep,
+    s: SessionDep,
+    now: NowDep,
 ) -> schemas.Order:
     order = trading.place_order(
         s, participant, body.code, body.side, body.quantity, now, state.calendar, get_params(s)
@@ -79,7 +109,7 @@ def certification_status(
 
 @router.post("/certifications", response_model=schemas.Certification, status_code=201)
 def submit_certification(
-    participant: MeDep,
+    participant: VerifiedMeDep,
     state: StateDep,
     s: SessionDep,
     now: NowDep,

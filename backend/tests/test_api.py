@@ -6,7 +6,17 @@ from datetime import date, time
 from typing import Any
 
 import pytest
-from conftest import PNG, Clock, StubRandom, open_day, order, register, settle_day
+from conftest import (
+    PNG,
+    Clock,
+    StubRandom,
+    email_code,
+    open_day,
+    order,
+    register,
+    register_with,
+    settle_day,
+)
 from fastapi.testclient import TestClient
 
 D1, D2, D3 = date(2026, 10, 6), date(2026, 10, 7), date(2026, 10, 8)
@@ -25,28 +35,30 @@ class TestRegistration:
         pf = client.get("/api/me/portfolio", headers=h).json()
         assert pf["cash"] == 1_000_000 and pf["total_assets"] == 1_000_000 and pf["holdings"] == []
 
-    def test_one_account_per_identity(self, client: TestClient) -> None:
-        register(client)
-        r = client.post(
-            "/api/auth/register",
-            json={"identity": "  ALICE@corp ", "nickname": "other", "password": "password123"},
-        )
-        assert r.status_code == 409 and r.json()["detail"]["code"] == "IDENTITY_TAKEN"
-        r = client.post(
-            "/api/auth/register",
-            json={"identity": "bob@corp", "nickname": "alice", "password": "password123"},
-        )
+    def test_one_account_per_school_id(self, client: TestClient) -> None:
+        register(client)  # alice@g.skku.edu
+        # skku.edu와 g.skku.edu의 같은 ID는 같은 사람 → 코드 요청부터 거부
+        for email in ("alice@skku.edu", "  ALICE@g.skku.edu "):
+            r = client.post("/api/auth/email-code", json={"email": email})
+            assert r.status_code == 409 and r.json()["detail"]["code"] == "EMAIL_TAKEN"
+        r = register_with(client, "bob@skku.edu", "alice")
         assert r.json()["detail"]["code"] == "NICKNAME_TAKEN"
 
     def test_login_logout(self, client: TestClient) -> None:
         register(client)
-        bad = client.post("/api/auth/login", json={"identity": "alice@corp", "password": "nope"})
-        assert bad.status_code == 401
-        r = client.post(
-            "/api/auth/login", json={"identity": "Alice@corp", "password": "password123"}
+        bad = client.post(
+            "/api/auth/login", json={"identity": "alice@g.skku.edu", "password": "nope"}
         )
+        assert bad.status_code == 401
+        # 두 도메인 어느 쪽으로도 로그인
+        for identity in ("Alice@g.skku.edu", "alice@skku.edu"):
+            r = client.post(
+                "/api/auth/login", json={"identity": identity, "password": "password123"}
+            )
+            assert r.status_code == 200, identity
         h = {"Authorization": f"Bearer {r.json()['token']}"}
-        assert client.get("/api/me", headers=h).status_code == 200
+        me = client.get("/api/me", headers=h).json()
+        assert me["email"] == "alice@g.skku.edu" and me["email_verified"] is True
         assert client.post("/api/auth/logout", headers=h).status_code == 204
         assert client.get("/api/me", headers=h).status_code == 401
 
@@ -56,11 +68,11 @@ class TestRegistration:
         assert client.get("/api/me/portfolio", headers=h).json()["cash"] == 1_000_000
 
     def test_closed_after_event(self, client: TestClient, clock: Clock) -> None:
+        code = email_code(client, "x@g.skku.edu")
         clock.set(date(2026, 10, 17))
-        r = client.post(
-            "/api/auth/register",
-            json={"identity": "x", "nickname": "xx", "password": "password123"},
-        )
+        r = client.post("/api/auth/email-code", json={"email": "y@g.skku.edu"})
+        assert r.json()["detail"]["code"] == "REGISTRATION_CLOSED"
+        r = register_with(client, "x@g.skku.edu", "xx", code)
         assert r.json()["detail"]["code"] == "REGISTRATION_CLOSED"
 
 
