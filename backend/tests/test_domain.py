@@ -2,21 +2,32 @@
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from fractions import Fraction
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
 from study_invest.event_calendar import EventCalendar
 from study_invest.instruments import INSTRUMENTS, STOCKS
 from study_invest.money import exact, round_half_up
-from study_invest.params import CALM_ROUNDS_MAX, INITIAL_CASH, KST, REWARD_CASH_MAX, EventParams
+from study_invest.params import (
+    CALM_ROUNDS_MAX,
+    INITIAL_CASH,
+    KST,
+    REWARD_CASH_MAX,
+    STOCK_NOISE_MAX,
+    EventParams,
+)
 from study_invest.pricing import (
+    EULER_GAMMA,
     coin_rate,
     draw_coin,
+    draw_stock_noise,
+    gumbel,
     is_calm_round,
     next_coin_price,
     next_stock_price,
@@ -196,6 +207,104 @@ class TestStock:
     def test_unknown_stock_rejected(self) -> None:
         with pytest.raises(ValueError):
             settle_stocks(PRICES, {"BYUNG": 1}, P)
+
+
+class TestStockNoise:
+    """03-pricing §2.5: 매수지분에 Gumbel 잡음 배수 exp(τ·(G − γ))를 곱한다."""
+
+    buys: ClassVar[dict[str, int]] = {
+        "SAMSU": 2000 * MAN,
+        "SKLOW": 1200 * MAN,
+        "MIRAE": 600 * MAN,
+        "LB": 200 * MAN,
+    }
+
+    def test_default_scale_and_range(self) -> None:
+        assert P.stock_noise_scale == 0.10
+        EventParams(stock_noise_scale=0)
+        EventParams(stock_noise_scale=STOCK_NOISE_MAX)
+        for bad in (-0.1, STOCK_NOISE_MAX + 0.1, float("nan")):
+            with pytest.raises(ValueError):
+                EventParams(stock_noise_scale=bad)
+
+    def test_no_noise_when_scale_is_zero(self) -> None:
+        rng = random.Random(1)
+        assert draw_stock_noise(PRICES, replace(P, stock_noise_scale=0), rng) is None
+        moves = settle_stocks(PRICES, self.buys, P0, noise=None)
+        assert all(m.noise_factor is None for m in moves.values())
+        assert moves["SAMSU"].rate == Fraction(-3, 10)  # §2.4 표와 같다
+
+    def test_equal_factors_cancel(self) -> None:
+        """전 종목 같은 배수면 지분이 그대로다(테스트 StubRandom의 0.5 고정값이 이 경우)."""
+        plain = settle_stocks(PRICES, self.buys, P0)
+        same = settle_stocks(PRICES, self.buys, P0, noise=dict.fromkeys(PRICES, 0.9))
+        assert {c: m.rate for c, m in same.items()} == {c: m.rate for c, m in plain.items()}
+        assert [m.new_price for m in same.values()] == [m.new_price for m in plain.values()]
+        assert all(m.noise_factor == 0.9 for m in same.values())
+
+    def test_noise_moves_prices_without_orders(self) -> None:
+        """아무도 안 사도(전 종목 L만) 잡음이 있으면 가격이 움직이고, 변동률 합은 0이다."""
+        noise = {"SAMSU": 1.1, "SKLOW": 1.0, "MIRAE": 1.0, "LB": 1.0}
+        moves = settle_stocks(PRICES, {}, P, noise=noise)
+        assert moves["SAMSU"].concentration == Fraction(44, 41)
+        assert moves["SAMSU"].rate < 0 < moves["LB"].rate
+        assert sum(m.rate for m in moves.values()) == 0  # Σ(1 − rᵢ) = 0 이므로 클램프 전 합은 0
+        assert moves["SAMSU"].adjusted_amount == P.virtual_liquidity  # B′는 잡음 전 값
+
+    def test_noise_is_clamped_like_any_rate(self) -> None:
+        noise = {"SAMSU": 100.0, "SKLOW": 1.0, "MIRAE": 1.0, "LB": 1.0}
+        moves = settle_stocks(PRICES, {}, P, noise=noise)
+        assert moves["SAMSU"].concentration == Fraction(400, 103)  # 원 변동률 −86% → −30%
+        assert moves["SAMSU"].rate == Fraction(-3, 10)
+        assert 0 < moves["LB"].rate < Fraction(3, 10)  # rᵢ > 0이라 +30%에는 닿지 않는다
+
+    def test_noise_validation(self) -> None:
+        with pytest.raises(ValueError):
+            settle_stocks(PRICES, {}, P, noise={"SAMSU": 1.0})  # 종목 누락
+        for bad in (0.0, -1.0, float("inf"), float("nan")):
+            with pytest.raises(ValueError):
+                settle_stocks(PRICES, {}, P, noise=dict.fromkeys(PRICES, bad))
+
+    def test_gumbel_draw(self) -> None:
+        class Seq(random.Random):
+            def __init__(self, values: list[float]) -> None:
+                super().__init__(0)
+                self.values = values
+
+            def random(self) -> float:
+                return self.values.pop(0)
+
+        assert gumbel(Seq([0.0, 0.5])) == pytest.approx(0.36651292)  # U=0은 버린다
+        assert gumbel(Seq([math.exp(-1)])) == pytest.approx(0.0)  # 최빈값
+        # 균등난수 0.5 고정이면 모든 종목이 같은 배수 → 지분 불변
+        rng = StubHalf()
+        factors = draw_stock_noise(PRICES, P, rng)
+        assert factors is not None and len(set(factors.values())) == 1
+        assert factors["SAMSU"] == pytest.approx(math.exp(0.1 * (0.36651292 - EULER_GAMMA)))
+
+    def test_noise_statistics(self) -> None:
+        """ln 배수의 평균 ≈ 0, 표준편차 ≈ τ·π/√6 (Gumbel 분산 π²/6)."""
+        rng = random.Random(2026)
+        tau = 0.1
+        params = replace(P, stock_noise_scale=tau)
+        logs = [
+            math.log(f)
+            for _ in range(5_000)
+            for f in (draw_stock_noise(PRICES, params, rng) or {}).values()
+        ]
+        n = len(logs)
+        mean = sum(logs) / n
+        sd = math.sqrt(sum((v - mean) ** 2 for v in logs) / n)
+        assert abs(mean) < 0.005
+        assert sd == pytest.approx(tau * math.pi / math.sqrt(6), abs=0.01)
+
+
+class StubHalf(random.Random):
+    def __init__(self) -> None:
+        super().__init__(0)
+
+    def random(self) -> float:
+        return 0.5
 
 
 class TestCalendar:

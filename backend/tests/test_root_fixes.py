@@ -32,6 +32,7 @@ from study_invest.params import (
     COIN_CAP_MAX,
     PRICE_MAX,
     REWARD_CASH_MAX,
+    STOCK_NOISE_MAX,
     EventParams,
 )
 from study_invest.pricing import next_coin_price, next_stock_price
@@ -261,6 +262,8 @@ class TestNumericLimits:
             ("stock_min_price", PRICE_MAX + 10),
             ("coin_price_cap", PRICE_MAX + 10),
             ("virtual_liquidity", AMOUNT_MAX + 1),
+            ("stock_noise_scale", -0.1),
+            ("stock_noise_scale", STOCK_NOISE_MAX + 1),
             ("coin_cap", COIN_CAP_MAX * 2),
         ],
     )

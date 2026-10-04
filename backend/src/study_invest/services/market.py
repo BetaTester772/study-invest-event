@@ -29,7 +29,7 @@ from ..models import (
 )
 from ..money import PRICE_UNIT
 from ..params import KST, MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
-from ..pricing import draw_coin, is_calm_round, settle_stocks
+from ..pricing import draw_coin, draw_stock_noise, is_calm_round, settle_stocks
 from . import certification
 from .common import (
     DomainError,
@@ -172,12 +172,16 @@ def settle_day(
     params = get_params(s)
     prices = prices_on(s, day)
     amounts = buy_amounts(s, day)
-    stock_moves = settle_stocks(
-        {i.code: prices[i.code] for i in STOCKS},
-        {c: a for c, a in amounts.items() if c in {i.code for i in STOCKS}},
-        params,
-    )
+    # 난수는 코인(p, X) → 주식 잡음 순서로 뽑는다. 테스트의 StubRandom은 코인용 난수를 큐로 넣고
+    # 나머지는 0.5를 돌려주므로, 이 순서면 주식 잡음이 전 종목 같은 배수가 되어 상쇄된다.
     coin = draw_coin(prices[COIN.code], params, rng, calm=is_calm_round(round_no, params))
+    stock_codes = [i.code for i in STOCKS]
+    stock_moves = settle_stocks(
+        {code: prices[code] for code in stock_codes},
+        {c: a for c, a in amounts.items() if c in stock_codes},
+        params,
+        noise=draw_stock_noise(stock_codes, params, rng),
+    )
 
     new_prices = {code: m.new_price for code, m in stock_moves.items()}
     new_prices[COIN.code] = coin.new_price
@@ -208,6 +212,7 @@ def settle_day(
             "code": m.code,
             "buy_amount": m.buy_amount,
             "adjusted_amount": m.adjusted_amount,
+            "noise_factor": m.noise_factor,
             "concentration": None if m.concentration is None else float(m.concentration),
             "rate": float(m.rate),
             "old_price": m.old_price,

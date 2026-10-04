@@ -184,6 +184,22 @@ class TestSettlement:
         assert logs[0]["coin"]["p"] == 0.1 and logs[0]["coin"]["direction"] == "up"
         assert logs[0]["coin"]["calm"] is True
         assert logs[0]["stocks"][0]["buy_amount"] == 375_000
+        # 주식 잡음은 코인 뒤에 뽑는다. StubRandom은 큐가 비면 0.5라 전 종목 같은 배수(<1)가 되어
+        # 지분에 영향이 없고, 위의 73,760원이 그대로다. 배수는 정산 로그에 남는다.
+        factors = [x["noise_factor"] for x in logs[0]["stocks"]]
+        assert len(set(factors)) == 1 and 0.97 < factors[0] < 1.0
+        assert logs[0]["params"]["stock_noise_scale"] == 0.1
+
+    def test_stock_noise_can_be_turned_off(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        r = client.put("/api/admin/params", json=dict(params, stock_noise_scale=0), headers=admin)
+        assert r.status_code == 200 and r.json()["stock_noise_scale"] == 0
+        open_day(client, clock, D1)
+        settle_day(client, clock, D1)
+        logs = client.get("/api/admin/settlements", headers=admin).json()
+        assert all(x["noise_factor"] is None and x["rate"] == 0 for x in logs[0]["stocks"])
 
     def test_coin_is_calm_for_first_three_rounds(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]

@@ -333,6 +333,8 @@ export interface Params {
   stock_sensitivity: number;
   stock_min_price: number;
   virtual_liquidity: number;
+  /** 매수지분 잡음 세기 τ (0~2). 0이면 잡음 없음. */
+  stock_noise_scale: number;
   daily_buy_limit_ratio: number;
   reward_cash: number;
   certification_cutoff: string;
@@ -348,6 +350,8 @@ export interface SettlementStock {
   code: string;
   buy_amount: number;
   adjusted_amount: number;
+  /** Gumbel noise multiplier on the buy share; null when noise is off or for older logs. */
+  noise_factor: number | null;
   concentration: number | null;
   rate: number;
   old_price: number;

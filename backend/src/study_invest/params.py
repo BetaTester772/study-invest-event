@@ -40,6 +40,8 @@ COIN_CAP_MAX = 10.0
 """코인 일일 상승 상한 파라미터의 최대값(+1000%)."""
 CALM_ROUNDS_MAX = 100
 """코인 초반 안정기 회차 수 파라미터의 최대값."""
+STOCK_NOISE_MAX = 2.0
+"""주식 매수지분 잡음 세기 τ 파라미터의 최대값."""
 
 STOCK_DAILY_LIMIT = Fraction(3, 10)
 """주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 감도 계수와 별개로 고정."""
@@ -79,6 +81,9 @@ class EventParams:
     """주식 최저가 하한(원)."""
     virtual_liquidity: int = 5_000_000
     """종목별 가상 유동성 L(원). Bᵢ′ = Bᵢ + L."""
+    stock_noise_scale: float = 0.10
+    """매수지분 잡음 세기 τ: Bᵢ″ = Bᵢ′ × exp(τ·(Gᵢ − γ)), Gᵢ ~ Gumbel(0, 1). 0이면 잡음 없음
+    (변동률이 당일 매수만으로 결정된다). 0.1이면 매수가 전혀 없을 때 종목당 대략 ±5%(5~95%)."""
 
     # 거래 (04-trading §2)
     daily_buy_limit_ratio: float = 0.40
@@ -105,6 +110,7 @@ class EventParams:
             "coin_calm_cap": self.coin_calm_cap,
             "coin_calm_floor": self.coin_calm_floor,
             "stock_sensitivity": self.stock_sensitivity,
+            "stock_noise_scale": self.stock_noise_scale,
             "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
         }
         for name, value in floats.items():  # NaN·Infinity는 모든 계산을 깨뜨린다
@@ -136,6 +142,10 @@ class EventParams:
             ),
             (-1 < self.coin_calm_floor < 0, "coin_calm_floor must be in (-1, 0)"),
             (0 < self.stock_sensitivity <= 10, "stock_sensitivity must be in (0, 10]"),
+            (
+                0 <= self.stock_noise_scale <= STOCK_NOISE_MAX,
+                f"stock_noise_scale must be in [0, {STOCK_NOISE_MAX:g}]",
+            ),
             (
                 price_ok(self.stock_min_price),
                 f"stock_min_price must be a multiple of 10 in [10, {PRICE_MAX:,}]",

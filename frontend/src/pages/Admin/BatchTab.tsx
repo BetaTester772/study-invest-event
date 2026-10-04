@@ -64,6 +64,13 @@ const STOCK_COLUMNS: Column<SettlementStock>[] = [
     render: (s) => <Money value={s.adjusted_amount} />,
   },
   {
+    key: 'noise',
+    header: '잡음 배수',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => (s.noise_factor == null ? '—' : `×${formatNumber(s.noise_factor, 3)}`),
+  },
+  {
     key: 'r',
     header: '쏠림 r',
     numeric: true,

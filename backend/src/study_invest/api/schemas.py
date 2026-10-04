@@ -425,6 +425,8 @@ class Params(Schema):
     stock_sensitivity: float
     stock_min_price: int
     virtual_liquidity: int
+    stock_noise_scale: float
+    """매수지분 잡음 세기 τ(0~2). 0이면 잡음 없이 당일 매수만으로 변동률을 정한다."""
     daily_buy_limit_ratio: float
     reward_cash: int
     certification_cutoff: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -466,6 +468,8 @@ class StockSettlement(Schema):
     code: str
     buy_amount: int
     adjusted_amount: int
+    noise_factor: float | None = None
+    """매수지분 잡음 배수 exp(τ·(G − γ)). 잡음 없음(τ = 0)이거나 도입 전 기록이면 None."""
     concentration: float | None
     rate: float
     old_price: int

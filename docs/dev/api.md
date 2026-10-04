@@ -247,13 +247,14 @@ interface AdminCertification extends Certification {
 }
 // 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_cash 0~100,000,000,
 // virtual_liquidity 0~10^15, coin_cap·coin_calm_cap (0, 10], coin_floor·coin_calm_floor (-1, 0),
-// coin_calm_rounds 0~100, 실수 파라미터는 유한값만(NaN·Infinity는 422).
+// coin_calm_rounds 0~100, stock_noise_scale 0~2, 실수 파라미터는 유한값만(NaN·Infinity는 422).
 interface Params {
   coin_p_up: number; coin_up_exp: number; coin_down_exp: number;
   coin_cap: number; coin_floor: number; coin_price_cap: number | null;
   coin_calm_rounds: number;              // 1회차부터 이 회차까지 안정기 상·하한(기본 3)
   coin_calm_cap: number; coin_calm_floor: number;   // 안정기 상·하한(0.3, -0.1)
   stock_sensitivity: number; stock_min_price: number; virtual_liquidity: number;
+  stock_noise_scale: number;             // 매수지분 Gumbel 잡음 세기 τ(기본 0.1, 0이면 잡음 없음)
   daily_buy_limit_ratio: number;
   reward_cash: number;                   // 인증 1건당 지급 현금(기본 250,000원 = 시드의 1/4)
   certification_cutoff: string;          // "23:59"
@@ -262,6 +263,7 @@ interface Params {
 interface SettlementLog {
   id: number; round: number; trade_day: string; effective_day: string; created_at: string;
   stocks: { code: string; buy_amount: number; adjusted_amount: number;
+            noise_factor: number | null;   // 매수지분 잡음 배수 exp(τ·(G−γ)). τ=0·도입 전 기록은 null
             concentration: number | null; rate: number; old_price: number; new_price: number }[];
   coin: { p: number; x: number; direction: "up" | "down"; rate: number; old_price: number; new_price: number;
           calm: boolean };   // 초반 안정기 상·하한으로 뽑았는지(v0.4 전 기록은 false)
