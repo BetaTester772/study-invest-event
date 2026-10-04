@@ -15,6 +15,7 @@ import {
   useToast,
 } from '../../components/ui';
 import { formatDay } from '../../lib/format';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 export function PriceTab() {
   const toast = useToast();
@@ -27,6 +28,7 @@ export function PriceTab() {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ code: string; point: PricePoint } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formRef] = useScrollToFormError(errors, formError);
 
   const selected = instruments.data?.find((i) => i.code === code);
 
@@ -59,7 +61,7 @@ export function PriceTab() {
         title="시작가 직접 정하기"
         description="아직 공시되지 않은 운영일의 시작가만 바꿀 수 있어요. 사유는 감사 로그에 남아요."
       >
-        <form onSubmit={submit} noValidate>
+        <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
             {formError && (
               <Alert tone="danger" title="가격을 바꾸지 못했어요">

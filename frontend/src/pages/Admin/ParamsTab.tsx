@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { adminApi, ApiError, useApi, type Params } from '../../api';
 import { LoadError } from '../../components/app/LoadError';
 import { Alert, Button, Card, Grid, Skeleton, Stack, TextField, useToast } from '../../components/ui';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 type Kind = 'float' | 'int' | 'nullableInt' | 'time';
 
@@ -129,6 +130,7 @@ export function ParamsTab() {
   const [errors, setErrors] = useState<Partial<Record<keyof Params, string>>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [formRef] = useScrollToFormError(errors, saveError);
 
   useEffect(() => {
     if (params.data) setDraft(toDraft(params.data));
@@ -158,7 +160,7 @@ export function ParamsTab() {
   };
 
   return (
-    <form onSubmit={save} noValidate>
+    <form ref={formRef} onSubmit={save} noValidate>
       <Stack gap={5}>
         {saveError && (
           <Alert tone="danger" title="파라미터를 저장하지 못했어요">

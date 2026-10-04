@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 export function LoginPage() {
   const { login, status } = useAuth();
@@ -13,6 +14,7 @@ export function LoginPage() {
   const [identity, setIdentity] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [formRef, scrollToError] = useScrollToFormError(error);
   const [submitting, setSubmitting] = useState(false);
 
   if (status === 'authenticated' && !submitting) return <Navigate to={from} replace />;
@@ -21,6 +23,7 @@ export function LoginPage() {
     e.preventDefault();
     if (!identity.trim() || !password) {
       setError('학번과 비밀번호를 모두 입력해 주세요.');
+      scrollToError();
       return;
     }
     setSubmitting(true);
@@ -45,7 +48,7 @@ export function LoginPage() {
     <Container size="sm">
       <PageHeader title="로그인" description="참가 신청할 때 등록한 학번으로 로그인하세요." />
       <Card>
-        <form onSubmit={onSubmit} noValidate>
+        <form ref={formRef} onSubmit={onSubmit} noValidate>
           <Stack gap={4}>
             {error && <Alert tone="danger">{error}</Alert>}
             <TextField

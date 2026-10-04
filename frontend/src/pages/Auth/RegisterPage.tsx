@@ -6,6 +6,7 @@ import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, use
 import { EMPTY_PROFILE, ProfileFields, profileErrors, trimProfile, type ProfileErrors } from './ProfileFields';
 import { CODE_ERRORS, PrivacyConsent, SchoolEmailFields, codeError, schoolEmailError } from './SchoolEmailFields';
 import { PASSWORD_HINT, WEAK_PASSWORD_MESSAGE } from './password';
+import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 interface Errors extends ProfileErrors {
   email?: string;
@@ -60,6 +61,7 @@ export function RegisterPage() {
     consent: false,
   });
   const [errors, setErrors] = useState<Errors>({});
+  const [formRef] = useScrollToFormError(errors);
   const [submitting, setSubmitting] = useState(false);
   const set = <K extends keyof RegisterForm>(key: K, value: RegisterForm[K]) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -110,7 +112,7 @@ export function RegisterPage() {
         description="학교 메일과 학번으로 한 사람당 한 계정만 만들 수 있어요. 모두 같은 1,000,000원으로 시작하고, 중간에 들어와도 똑같이 받아요."
       />
       <Card>
-        <form onSubmit={onSubmit} noValidate>
+        <form ref={formRef} onSubmit={onSubmit} noValidate>
           <Stack gap={4}>
             {errors.form && <Alert tone="danger">{errors.form}</Alert>}
             <SchoolEmailFields
