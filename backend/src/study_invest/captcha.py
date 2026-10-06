@@ -1,7 +1,8 @@
 """봇 확인(Cloudflare Turnstile). 사이트 키·비밀 키가 없으면 확인하지 않는다(로컬 개발·테스트).
 
 프론트엔드 위젯이 만든 토큰을 `X-Turnstile-Token` 헤더로 받아 Cloudflare siteverify로 확인한다.
-토큰은 한 번만 쓸 수 있고 5분 뒤 만료된다. 사이트의 DNS·호스팅이 Cloudflare가 아니어도 된다(예: Route 53).
+토큰은 한 번만 쓸 수 있고 5분 뒤 만료된다. 사이트의 DNS·호스팅이 Cloudflare가 아니어도 된다
+(예: Route 53).
 """
 
 from __future__ import annotations
