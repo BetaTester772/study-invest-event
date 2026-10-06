@@ -26,11 +26,15 @@ from ..params import INITIAL_CASH, EventParams
 class DomainError(Exception):
     """API에서 `{"detail": {"code", "message"}}`로 변환되는 업무 오류."""
 
-    def __init__(self, code: str, message: str, status: int = 409) -> None:
+    def __init__(
+        self, code: str, message: str, status: int = 409, *, context: dict[str, Any] | None = None
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.context = context or {}
+        """서버 로그에만 남기는 원인 정보. 응답에는 싣지 않는다. 개인정보는 가려서 넣는다."""
 
 
 def audit(s: Session, now: datetime, actor: str, action: str, **detail: Any) -> None:

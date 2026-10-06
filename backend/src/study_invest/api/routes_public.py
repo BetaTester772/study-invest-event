@@ -231,7 +231,13 @@ def send_code(
         except Exception as exc:
             # 코드 기록은 지우지 않는다: 재요청 대기·한도에 계속 센다. 연결 종료 중 오류처럼
             # 메일이 실제로 갔을 수도 있으니 코드도 그대로 유효하다.
-            log.exception("인증 메일 발송 실패")
+            log.exception(
+                "인증 메일 발송 실패: purpose=%s to=%s mailer=%s error=%s",
+                purpose.value,
+                mask_email(email.address),
+                type(state.mailer).__name__,
+                type(exc).__name__,
+            )
             raise DomainError(
                 "MAIL_SEND_FAILED", "인증 메일을 보내지 못했습니다. 1분 뒤 다시 시도하세요.", 503
             ) from exc

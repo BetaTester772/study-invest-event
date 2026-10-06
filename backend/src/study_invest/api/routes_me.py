@@ -143,7 +143,17 @@ def place_order(
         s, participant, body.code, body.side, body.quantity, now, state.calendar, get_params(s)
     )
     s.commit()
-    log.info("order placed: id=%s %s %s x%d", order.id, body.side, body.code, body.quantity)
+    log.log(
+        logging.WARNING if order.reject_reason else logging.INFO,
+        "order %s: id=%s %s %s x%d price=%s reject_reason=%s",
+        order.status.value,
+        order.id,
+        body.side,
+        body.code,
+        body.quantity,
+        order.price,
+        order.reject_reason.value if order.reject_reason else None,
+    )
     return views.order(order)
 
 

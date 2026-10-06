@@ -209,12 +209,14 @@ def require_captcha(action: str, *, fail_open: bool = False) -> Callable[..., No
                 "CAPTCHA_UNAVAILABLE",
                 "지금은 보안 확인을 할 수 없습니다. 잠시 후 다시 시도하세요.",
                 503,
+                context={"action": action},
             ) from None
         if not ok:
             raise DomainError(
                 "CAPTCHA_FAILED",
                 "보안 확인에 실패했습니다. 확인이 끝난 뒤 다시 시도하거나 페이지를 새로고침하세요.",
                 403,
+                context={"action": action, "token_present": bool(x_turnstile_token)},
             )
 
     return check

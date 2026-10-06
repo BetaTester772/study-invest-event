@@ -49,7 +49,11 @@ class TextFormatter(logging.Formatter):
             extra.append(f"participant={participant_id}")
         if getattr(record, "admin", False):
             extra.append("admin")
-        return f"{text} ({', '.join(extra)})" if extra else text
+        text = f"{text} ({', '.join(extra)})" if extra else text
+        detail = getattr(record, "detail", None)
+        if isinstance(detail, dict) and detail:
+            text += " | " + json.dumps(detail, ensure_ascii=False, default=str)
+        return text
 
 
 class JsonFormatter(logging.Formatter):
@@ -66,6 +70,9 @@ class JsonFormatter(logging.Formatter):
             data["participant_id"] = participant_id
         if getattr(record, "admin", False):
             data["admin"] = True
+        detail = getattr(record, "detail", None)
+        if isinstance(detail, dict) and detail:
+            data["detail"] = detail
         fields = getattr(record, "fields", None)
         if isinstance(fields, dict):
             data.update(fields)

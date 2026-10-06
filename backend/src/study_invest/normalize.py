@@ -75,6 +75,11 @@ def parse_school_email(value: str) -> SchoolEmail:
     return SchoolEmail(f"{local}@{domain}", f"{local}@{CANONICAL_SCHOOL_DOMAIN}")
 
 
+def mask_value(value: str, keep: int = 2) -> str:
+    """로그용으로 앞 keep자만 남기고 가린다: 2026123456 → 20***(10자)."""
+    return f"{value[:keep]}***({len(value)}자)" if value else "(빈 값)"
+
+
 def mask_email(address: str) -> str:
     """본인 응답용 가린 주소: kim@g.skku.edu → k***@g.skku.edu."""
     local, _, domain = address.partition("@")

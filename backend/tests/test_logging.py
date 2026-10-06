@@ -148,3 +148,53 @@ def test_configure_logging_is_idempotent_and_validates() -> None:
     assert logger.level == logging.INFO
     with pytest.raises(ValueError):
         configure_logging("LOUD")
+
+
+def _detail(logs: ListHandler, text: str) -> dict[str, object]:
+    d = find(logs, text)["detail"]
+    assert isinstance(d, dict)
+    return d
+
+
+def test_login_failure_logs_reason_without_leaking_identity(
+    client: TestClient, logs: ListHandler
+) -> None:
+    r = client.post("/api/auth/login", json={"identity": "2026123456", "password": "pw-12345678"})
+    assert r.status_code == 401
+    d = _detail(logs, "domain error: INVALID_CREDENTIALS")
+    assert d["origin"].startswith("services/auth.py")  # type: ignore[union-attr]
+    ctx = d["context"]
+    assert isinstance(ctx, dict)
+    assert ctx["why"] == "no_such_account"
+    assert ctx["identity"] == "20***(10자)"
+    assert d["route"] == "/api/auth/login"
+    assert "2026123456" not in json.dumps(logs.lines, ensure_ascii=False)
+    assert "pw-12345678" not in json.dumps(logs.lines, ensure_ascii=False)
+
+
+def test_validation_error_logs_fields_not_values(client: TestClient, logs: ListHandler) -> None:
+    r = client.post("/api/auth/login", json={"identity": "x", "password": 12345})
+    assert r.status_code == 422
+    d = _detail(logs, "validation failed")
+    errors = d["errors"]
+    assert isinstance(errors, list) and errors
+    assert any("password" in e["loc"] for e in errors)
+    assert "12345" not in json.dumps(logs.lines)
+
+
+def test_unknown_route_logs_http_error(client: TestClient, logs: ListHandler) -> None:
+    r = client.get("/api/nope")
+    assert r.status_code == 404
+    assert "http error: 404" in str(find(logs, "http error")["message"])
+
+
+def test_code_errors_log_attempts_and_reason(client: TestClient, logs: ListHandler) -> None:
+    email = "detail@skku.edu"
+    email_code(client, email)
+    r = register_with(client, email, "디테일", code="000000")
+    assert r.status_code == 400
+    ctx = _detail(logs, "domain error: INVALID_CODE")["context"]
+    assert isinstance(ctx, dict)
+    assert ctx["attempts"] == 1
+    assert ctx["remaining_attempts"] >= 0
+    assert email not in json.dumps(logs.lines, ensure_ascii=False)

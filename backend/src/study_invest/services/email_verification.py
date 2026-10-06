@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..event_calendar import EventCalendar, to_kst
 from ..models import CodePurpose, EmailVerification, Participant
-from ..normalize import SchoolEmail, SchoolEmailError, parse_school_email
+from ..normalize import SchoolEmail, SchoolEmailError, mask_value, parse_school_email
 from .common import DomainError, audit
 
 CODE_TTL = timedelta(minutes=10)
@@ -42,13 +42,14 @@ _EMAIL_ERRORS = {
 class InvalidCode(DomainError):
     """틀린 코드. 요청은 실패해도 틀린 횟수는 커밋해야 한다(라우트가 커밋 후 다시 던진다)."""
 
-    def __init__(self, remaining: int) -> None:
+    def __init__(self, remaining: int, context: dict[str, object] | None = None) -> None:
         super().__init__(
             "INVALID_CODE",
             f"인증 코드가 맞지 않습니다. {remaining}번 더 시도할 수 있습니다."
             if remaining
             else "인증 코드가 맞지 않습니다. 코드를 다시 받아 주세요.",
             400,
+            context={"remaining_attempts": remaining, **(context or {})},
         )
 
 
@@ -56,18 +57,21 @@ def parse(raw: str) -> SchoolEmail:
     try:
         return parse_school_email(raw)
     except SchoolEmailError as exc:
-        raise DomainError(exc.code, _EMAIL_ERRORS[exc.code], 422) from exc
+        raise DomainError(
+            exc.code, _EMAIL_ERRORS[exc.code], 422, context={"input": mask_value(raw, 3)}
+        ) from exc
 
 
 def _hash(canonical: str, code: str) -> str:
     return hashlib.sha256(f"{canonical}:{code}".encode()).hexdigest()
 
 
-def email_taken() -> DomainError:
+def email_taken(email: SchoolEmail | None = None) -> DomainError:
     return DomainError(
         "EMAIL_TAKEN",
         "이미 참가한 학교 메일입니다. 1인 1계정만 허용됩니다"
         " (@skku.edu와 @g.skku.edu는 같은 계정으로 봅니다).",
+        context={"email": mask_value(email.canonical, 3)} if email else None,
     )
 
 
@@ -77,7 +81,7 @@ def ensure_email_free(s: Session, email: SchoolEmail, exclude_id: int | None = N
     if exclude_id is not None:
         query = query.where(Participant.id != exclude_id)
     if s.scalar(query):
-        raise email_taken()
+        raise email_taken(email)
 
 
 def registered_participant(s: Session, email: SchoolEmail) -> Participant:
@@ -101,10 +105,18 @@ def _check_recent(s: Session, condition: ColumnElement[bool], now: datetime) -> 
     ).all()
     if recent and now - recent[0] < RESEND_COOLDOWN:
         wait = math.ceil((recent[0] + RESEND_COOLDOWN - now).total_seconds())
-        raise DomainError("CODE_RECENTLY_SENT", f"{wait}초 뒤에 다시 요청할 수 있습니다.", 429)
+        raise DomainError(
+            "CODE_RECENTLY_SENT",
+            f"{wait}초 뒤에 다시 요청할 수 있습니다.",
+            429,
+            context={"wait_seconds": wait, "codes_in_window": len(recent)},
+        )
     if len(recent) >= MAX_CODES_PER_EMAIL:
         raise DomainError(
-            "TOO_MANY_CODES", "인증 코드를 너무 많이 요청했습니다. 내일 다시 시도하세요.", 429
+            "TOO_MANY_CODES",
+            "인증 코드를 너무 많이 요청했습니다. 내일 다시 시도하세요.",
+            429,
+            context={"codes_in_window": len(recent), "limit": MAX_CODES_PER_EMAIL},
         )
 
 
@@ -135,7 +147,7 @@ def request_code(
         # 나중에 인증할 수 있게). 다른 사람은 그 메일로 가입·인증할 수 없다(사용할 때 다시 검사).
         owner = s.scalars(select(Participant).where(Participant.email == email.canonical)).first()
         if owner is not None and owner.id != requester_id and owner.verified:
-            raise email_taken()
+            raise email_taken(email)
     else:
         registered_participant(s, email)
     _check_recent(s, EmailVerification.email == email.canonical, now)
@@ -153,6 +165,7 @@ def request_code(
             "MAIL_QUOTA_EXCEEDED",
             "오늘 보낼 수 있는 인증 메일을 모두 보냈습니다. 운영진에게 문의하세요.",
             503,
+            context={"daily_limit": daily_limit, "sent_in_window": sent},
         )
     code = f"{secrets.randbelow(10**6):06d}"
     row = EmailVerification(
@@ -215,18 +228,30 @@ def consume_code(
         or row.consumed_at is not None
         or row.expires_at <= now
     ):
+        if row is None:
+            why = "no_code"
+        elif row.purpose is not purpose:
+            why = "purpose_mismatch"
+        elif row.consumed_at is not None:
+            why = "already_consumed"
+        else:
+            why = "expired"
         raise DomainError(
-            "CODE_EXPIRED", "인증 코드가 없거나 만료되었습니다. 코드를 다시 받아 주세요.", 400
+            "CODE_EXPIRED",
+            "인증 코드가 없거나 만료되었습니다. 코드를 다시 받아 주세요.",
+            400,
+            context={"why": why, "purpose": purpose.value},
         )
     if row.attempts >= MAX_ATTEMPTS:
         raise DomainError(
             "CODE_ATTEMPTS_EXCEEDED",
             "인증 코드를 너무 많이 틀렸습니다. 코드를 다시 받아 주세요.",
             400,
+            context={"attempts": row.attempts, "limit": MAX_ATTEMPTS},
         )
     if not hmac.compare_digest(row.code_hash, _hash(email.canonical, code.strip())):
         row.attempts += 1
-        raise InvalidCode(MAX_ATTEMPTS - row.attempts)
+        raise InvalidCode(MAX_ATTEMPTS - row.attempts, {"attempts": row.attempts})
     if consume:
         row.consumed_at = now
     return email

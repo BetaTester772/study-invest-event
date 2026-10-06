@@ -13,7 +13,9 @@ from datetime import datetime
 from pathlib import Path
 
 import anyio.to_thread
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
@@ -30,6 +32,7 @@ from ..services.market import run_due
 from . import routes_admin, routes_me, routes_public
 from .access_log import REQUEST_ID_SCOPE_KEY, AccessLogMiddleware
 from .deps import AppState
+from .error_log import db_error_info, origin, request_info
 from .limits import BodySizeLimitMiddleware
 
 log = logging.getLogger("study_invest")
@@ -122,25 +125,43 @@ def create_app(
     app.state.study_invest = state
 
     @app.exception_handler(PoolTimeoutError)  # I/O 없음 → async
-    async def _pool_exhausted(_: Request, exc: PoolTimeoutError) -> JSONResponse:
+    async def _pool_exhausted(request: Request, exc: PoolTimeoutError) -> JSONResponse:
         # api 풀이 가득 차 pool_timeout 동안 연결을 못 받음 → 무한 대기 대신 즉시 503.
-        log.warning("api pool exhausted: %s", exc)
+        log.warning(
+            "api pool exhausted: %s",
+            exc,
+            extra={
+                "detail": {
+                    **request_info(request),
+                    "pools": {n: dict(st) for n, st in state.pools.status().items()},
+                    "pool_timeout": state.settings.api_pool_timeout,
+                }
+            },
+        )
         return _unavailable(
             "DB_BUSY", "요청이 많아 잠시 처리할 수 없습니다. 잠시 후 다시 시도하세요."
         )
 
     @app.exception_handler(OperationalError)  # I/O 없음 → async
-    async def _db_unavailable(_: Request, exc: OperationalError) -> JSONResponse:
+    async def _db_unavailable(request: Request, exc: OperationalError) -> JSONResponse:
         # DB·PgBouncer 연결 실패, PgBouncer query_wait_timeout 등.
-        log.error("database unavailable: %s", exc.orig)
+        log.error(
+            "database unavailable: %s",
+            exc.orig,
+            extra={"detail": {**request_info(request), **db_error_info(exc)}},
+        )
         return _unavailable(
             "DB_UNAVAILABLE", "데이터베이스에 연결할 수 없습니다. 잠시 후 다시 시도하세요."
         )
 
     @app.exception_handler(IntegrityError)  # I/O 없음 → async
-    async def _integrity_error(_: Request, exc: IntegrityError) -> JSONResponse:
+    async def _integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
         # 동시 요청이 같은 유니크 키를 만들려다 충돌한 경우. 세션은 의존성에서 롤백된다.
-        log.info("integrity conflict: %s", exc.orig)
+        log.info(
+            "integrity conflict: %s",
+            exc.orig,
+            extra={"detail": {**request_info(request), **db_error_info(exc)}},
+        )
         return JSONResponse(
             status_code=409,
             content={
@@ -152,22 +173,66 @@ def create_app(
         )
 
     @app.exception_handler(DomainError)  # I/O 없음 → async
-    async def _domain_error(_: Request, exc: DomainError) -> JSONResponse:
-        # 요청 한 줄(access)에는 상태만 남으므로 어떤 규칙에 걸렸는지(code)를 따로 남긴다.
+    async def _domain_error(request: Request, exc: DomainError) -> JSONResponse:
+        # 요청 한 줄(access)에는 상태만 남으므로 어떤 규칙에 걸렸는지·왜 걸렸는지를 따로 남긴다.
         log.log(
-            logging.WARNING if exc.status in (401, 403) else logging.INFO,
-            "domain error: %s (%d)",
+            logging.ERROR
+            if exc.status >= 500
+            else logging.WARNING
+            if exc.status in (401, 403, 429)
+            else logging.INFO,
+            "domain error: %s (%d) %s",
             exc.code,
             exc.status,
+            exc.message,
+            extra={
+                "detail": {
+                    "code": exc.code,
+                    "origin": origin(exc),
+                    **request_info(request),
+                    **({"context": exc.context} if exc.context else {}),
+                }
+            },
         )
         return JSONResponse(
             status_code=exc.status, content={"detail": {"code": exc.code, "message": exc.message}}
         )
 
+    @app.exception_handler(RequestValidationError)  # I/O 없음 → async
+    async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # 어느 필드가 왜 틀렸는지만 남긴다. 입력값(input)은 비밀번호·학번일 수 있어 뺀다.
+        fields = [
+            {"loc": ".".join(str(p) for p in e["loc"]), "type": e["type"], "msg": e["msg"]}
+            for e in exc.errors()
+        ]
+        log.info(
+            "validation failed: %s",
+            ", ".join(f"{f['loc']}({f['type']})" for f in fields),
+            extra={"detail": {**request_info(request), "errors": fields}},
+        )
+        return await request_validation_exception_handler(request, exc)
+
+    @app.exception_handler(StarletteHTTPException)  # I/O 없음 → async
+    async def _http_error(request: Request, exc: StarletteHTTPException) -> Response:
+        # 404·405·413 등 프레임워크가 내는 오류. 존재하지 않는 경로 탐색 같은 시도도 남는다.
+        log.info(
+            "http error: %d %s",
+            exc.status_code,
+            exc.detail,
+            extra={"detail": request_info(request)},
+        )
+        return await http_exception_handler(request, exc)
+
     @app.exception_handler(Exception)  # I/O 없음 → async
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         # 트레이스백은 AccessLogMiddleware가 이미 남겼다. 응답에는 요청 ID만 실어 문의에 쓰게 한다.
         rid = request.scope.get(REQUEST_ID_SCOPE_KEY)
+        log.error(
+            "unhandled %s at %s",
+            type(exc).__name__,
+            origin(exc),
+            extra={"detail": request_info(request)},
+        )
         # 이 응답은 요청 로그 미들웨어 바깥(ServerErrorMiddleware)에서 만들어져 헤더를 직접 단다.
         return JSONResponse(
             status_code=500,
