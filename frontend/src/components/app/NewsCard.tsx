@@ -58,7 +58,7 @@ export function NewsCard({
   return (
     <Card
       title="오늘의 뉴스"
-      description="오늘 시작가에 이미 반영된 뉴스예요. 제목을 누르면 기사를 볼 수 있어요."
+      description="오늘 시작가에 이미 반영된 뉴스입니다. 제목을 누르면 기사를 확인할 수 있습니다."
     >
       <Stack gap={4}>
         {todays.length > 0 ? (

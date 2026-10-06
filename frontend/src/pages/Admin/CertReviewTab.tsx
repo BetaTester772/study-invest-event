@@ -129,7 +129,7 @@ function ReviewModal({
           {pending && (
             <TextArea
               label="반려 사유"
-              hint="반려할 때만 필요해요. 승인할 때는 비워 두세요."
+              hint="반려할 때만 필요합니다. 승인할 때는 비워 두세요."
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value);

@@ -143,7 +143,7 @@ export function CertificationPage() {
     <Container>
       <PageHeader
         title="공부 인증"
-        description={`하루에 한 번, 공부한 모습을 사진 한 장으로 올려요. 승인되면 다음 운영일에 투자금${rewardCash != null ? ` ${formatWon(rewardCash)}` : ''}을 받아요. 인증하지 않아도 거래는 할 수 있지만 그날 보상은 없어요.`}
+        description={`하루에 한 번, 공부한 모습을 사진 한 장으로 올립니다. 승인되면 다음 운영일에 투자금${rewardCash != null ? ` ${formatWon(rewardCash)}` : ''}을 받습니다. 인증하지 않아도 거래는 할 수 있지만 그날 보상은 없습니다.`}
       />
       <Stack gap={8}>
         {event.error && <LoadError error={event.error} onRetry={event.refetch} what="인증 일정" />}
@@ -195,7 +195,7 @@ export function CertificationPage() {
                   maxSize={MAX_SIZE}
                   error={uploadError}
                   disabled={uploading}
-                  hint="JPG, PNG, WEBP, HEIC 사진 한 장, 10MB까지 올릴 수 있어요."
+                  hint="JPG, PNG, WEBP, HEIC 사진 한 장, 10MB까지 올릴 수 있습니다."
                 />
                 <Button size="lg" fullWidth onClick={upload} loading={uploading} disabled={!file}>
                   인증 사진 올리기
@@ -231,7 +231,7 @@ export function CertificationPage() {
         </Grid>
 
         {e && (
-          <Card title="나의 인증 도장판" description="승인된 날에 도장이 찍혀요.">
+          <Card title="나의 인증 도장판" description="승인된 날에 도장이 찍힙니다.">
             <DayStrip {...dayStripWindow(e)} today={e.today} stamped={approvedDays} label="나의 인증 도장판" />
           </Card>
         )}

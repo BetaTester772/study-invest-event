@@ -55,7 +55,7 @@ export function OrderPanel({
         <EmptyState
           compact
           title="로그인하고 주문하세요"
-          description="참가자는 1,000,000원으로 시작해요."
+          description="참가자는 1,000,000원으로 시작합니다."
           action={
             <Stack direction="row" gap={2} wrap>
               <LinkButton to="/login" state={{ from: location.pathname }}>

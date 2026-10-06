@@ -59,7 +59,7 @@ export function PriceTab() {
     <Grid sidebar="minmax(16rem, 22rem)" gap={6}>
       <Card
         title="시작가 직접 정하기"
-        description="아직 공시되지 않은 운영일의 시작가만 바꿀 수 있어요. 사유는 감사 로그에 남아요."
+        description="아직 공시되지 않은 운영일의 시작가만 바꿀 수 있습니다. 사유는 감사 로그에 기록됩니다."
       >
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>

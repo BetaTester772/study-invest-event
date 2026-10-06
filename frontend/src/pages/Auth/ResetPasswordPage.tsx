@@ -125,7 +125,7 @@ export function ResetPasswordPage() {
         title="비밀번호 재설정"
         description={
           step === 'code'
-            ? '학번을 입력하면 가입할 때 등록한 학교 메일로 코드를 보내요. 받은 코드를 확인하면 새 비밀번호를 정할 수 있어요.'
+            ? '학번을 입력하면 가입할 때 등록한 학교 메일로 코드를 보냅니다. 받은 코드를 확인하면 새 비밀번호를 정할 수 있습니다.'
             : '코드를 확인했어요. 새 비밀번호를 정하세요.'
         }
       />
@@ -136,7 +136,7 @@ export function ResetPasswordPage() {
               {errors.form && <Alert tone="danger">{errors.form}</Alert>}
               <TextField
                 label="학번"
-                hint="숫자 10자리. 학교 메일 주소를 입력해도 돼요."
+                hint="숫자 10자리. 학교 메일 주소를 입력해도 됩니다."
                 autoComplete="username"
                 placeholder="2026310000"
                 value={identity}

@@ -53,7 +53,7 @@ export function LoginPage() {
             {error && <Alert tone="danger">{error}</Alert>}
             <TextField
               label="학번"
-              hint="숫자 10자리. 학교 메일 주소로도 로그인할 수 있어요."
+              hint="숫자 10자리. 학교 메일 주소로도 로그인할 수 있습니다."
               placeholder="2026310000"
               autoComplete="username"
               value={identity}

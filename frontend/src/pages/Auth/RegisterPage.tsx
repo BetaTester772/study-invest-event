@@ -109,7 +109,7 @@ export function RegisterPage() {
     <Container size="sm">
       <PageHeader
         title="참가 신청"
-        description="학교 메일과 학번으로 한 사람당 한 계정만 만들 수 있어요. 모두 같은 1,000,000원으로 시작하고, 중간에 들어와도 똑같이 받아요."
+        description="학교 메일과 학번으로 한 사람당 한 계정만 만들 수 있습니다. 모두 같은 1,000,000원으로 시작하며, 중간에 참가해도 동일하게 지급됩니다."
       />
       <Card>
         <form ref={formRef} onSubmit={onSubmit} noValidate>
@@ -137,7 +137,7 @@ export function RegisterPage() {
             />
             <TextField
               label="닉네임"
-              hint="2~20자. 랭킹에는 닉네임만 보여요."
+              hint="2~20자. 랭킹에는 닉네임만 표시됩니다."
               value={form.nickname}
               onChange={(e) => set('nickname', e.target.value)}
               error={errors.nickname}

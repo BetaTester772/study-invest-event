@@ -65,12 +65,12 @@ function Report({ r }: { r: SimulationReport }) {
           : '없음'}
       </Text>
       {r.daily && (
-        <Card title="평소 회차" description="안정기를 뺀 회차의 하루 변동이에요.">
+        <Card title="평소 회차" description="안정기를 뺀 회차의 하루 변동입니다.">
           <DailyStats d={r.daily} targets={{ up: '+50%', down: '-13.3%' }} />
         </Card>
       )}
       {r.calm_daily && calmLabel && (
-        <Card title={calmLabel} description="초반 안정기 상·하한으로 뽑은 하루 변동이에요(기본 -10%~+30%).">
+        <Card title={calmLabel} description="초반 안정기 상·하한으로 뽑은 하루 변동입니다(기본 -10%~+30%).">
           <DailyStats d={r.calm_daily} targets={{ up: '+7.5%', down: '-3.3%' }} />
         </Card>
       )}
@@ -173,7 +173,7 @@ function SimulatorForm({ options }: { options: SimulateOptions }) {
     <Stack gap={6}>
       <Card
         title="코인 가격 경로 시뮬레이션"
-        description="지금 저장된 파라미터로 병더리움 가격 경로를 여러 번 만들어 분포를 확인해요. 초반 안정기 회차도 실제 정산처럼 반영해요."
+        description="지금 저장된 파라미터로 병더리움 가격 경로를 여러 번 만들어 분포를 확인합니다. 초반 안정기 회차도 실제 정산처럼 반영합니다."
       >
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>

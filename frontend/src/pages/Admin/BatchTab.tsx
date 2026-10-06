@@ -175,13 +175,13 @@ export function BatchTab() {
     <Stack gap={6}>
       <Card
         title="배치 실행"
-        description="평소에는 09:00 공시와 18:00 정산이 자동으로 돌아요. 실패했거나 밀렸을 때만 직접 실행하세요."
+        description="평소에는 09:00 공시와 18:00 정산이 자동으로 실행됩니다. 실패했거나 밀렸을 때만 직접 실행하세요."
       >
         <Stack gap={4}>
           <TextField
             label="대상 운영일"
             type="date"
-            hint="비우면 오늘로 실행해요."
+            hint="비우면 오늘로 실행합니다."
             value={day}
             onChange={(e) => setDay(e.target.value)}
           />
@@ -216,7 +216,7 @@ export function BatchTab() {
       {qa.data?.enabled && (
         <Card
           title="QA 도구"
-          description="09:00·18:00을 기다리지 않고 장 열림 → 장 닫힘 → 다음 날 장 열림을 버튼 하나로 순환시켜요. QA 서버에서만 보여요."
+          description="09:00·18:00을 기다리지 않고 장 열림 → 장 닫힘 → 다음 날 장 열림을 버튼 하나로 순환시킵니다. QA 서버에서만 표시됩니다."
           tone="sunken"
         >
           <Stack gap={4}>
@@ -242,7 +242,7 @@ export function BatchTab() {
           <EmptyState
             compact
             title="아직 정산 기록이 없어요"
-            description="첫 운영일 18:00 정산이 끝나면 여기에 쌓여요."
+            description="첫 운영일 18:00 정산이 끝나면 여기에 쌓입니다."
           />
         ) : (
           logs.map((log) => <SettlementCard key={log.id} log={log} />)

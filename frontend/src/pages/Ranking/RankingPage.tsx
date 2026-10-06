@@ -120,7 +120,7 @@ export function RankingPage() {
     <Container>
       <PageHeader
         title="랭킹"
-        description={`${ranking.data?.day ? `${formatDay(ranking.data.day)} 시작가 기준 ` : ''}총자산 순위예요. 수익률 순으로도 볼 수 있어요. 닉네임만 공개되고, 실격자는 빠져요.`}
+        description={`${ranking.data?.day ? `${formatDay(ranking.data.day)} 시작가 기준 ` : ''}총자산 순위입니다. 수익률 순으로도 확인할 수 있습니다. 닉네임만 공개되며, 실격자는 제외됩니다.`}
       />
       <Stack gap={6}>
         {me && (

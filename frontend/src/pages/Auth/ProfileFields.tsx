@@ -38,7 +38,7 @@ export function ProfileFields({
     <>
       <TextField
         label="이름"
-        hint="운영진에게만 보여요."
+        hint="운영진에게만 표시됩니다."
         autoComplete="name"
         value={value.name}
         onChange={(e) => set('name', e.target.value)}
@@ -48,7 +48,7 @@ export function ProfileFields({
       />
       <TextField
         label="학번"
-        hint="숫자 10자리. 한 학번에 한 계정만 만들 수 있어요."
+        hint="숫자 10자리. 한 학번에 한 계정만 만들 수 있습니다."
         inputMode="numeric"
         placeholder="2026310000"
         value={value.student_id}

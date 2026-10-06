@@ -77,7 +77,7 @@ export function VerifyEmailPage() {
     <Container size="sm">
       <PageHeader
         title="학교 메일 인증"
-        description="등록한 학교 메일로 코드를 받아 입력하면 인증돼요. 운영진이 부정 대응으로 '인증된 참가자만 거래'를 켜도 계속 거래할 수 있어요."
+        description="등록한 학교 메일로 코드를 받아 입력하면 인증됩니다. 운영진이 부정 대응으로 '인증된 참가자만 거래'를 켜도 계속 거래할 수 있습니다."
       />
       <Card>
         <form ref={formRef} onSubmit={onSubmit} noValidate>
@@ -86,7 +86,7 @@ export function VerifyEmailPage() {
             {otherEmail ? (
               <SchoolEmailFields
                 send={(address) => meApi.requestEmailCode({ email: address })}
-                hint="인증하면 이 주소가 등록 메일이 돼요. 비밀번호 재설정 코드도 이 주소로 가요."
+                hint="인증하면 이 주소가 등록 메일이 됩니다. 비밀번호 재설정 코드도 이 주소로 발송됩니다."
                 email={email}
                 onEmailChange={setEmail}
                 code={code}

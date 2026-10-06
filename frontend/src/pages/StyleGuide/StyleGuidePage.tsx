@@ -210,7 +210,7 @@ export function StyleGuidePage() {
 
         <Section title="입력">
           <Grid min="15rem" gap={5}>
-            <TextField label="닉네임" placeholder="2~20자" hint="랭킹에 이 이름이 보여요." />
+            <TextField label="닉네임" placeholder="2~20자" hint="랭킹에 이 이름이 표시됩니다." />
             <TextField label="비밀번호" type="password" error="8자 이상 입력하세요." defaultValue="1234" />
             <NumberField
               label="수량"
@@ -219,7 +219,7 @@ export function StyleGuidePage() {
               min={1}
               max={12}
               suffix="주"
-              hint="1~12주까지 살 수 있어요."
+              hint="1~12주까지 매수할 수 있습니다."
               trailing={
                 <Button variant="secondary" onClick={() => setQty(12)}>
                   최대
@@ -409,7 +409,7 @@ export function StyleGuidePage() {
             open={modalOpen}
             onClose={() => setModalOpen(false)}
             title="인증을 반려할까요?"
-            description="반려 사유는 참가자에게 그대로 보여요."
+            description="반려 사유는 참가자에게 그대로 표시됩니다."
             footer={
               <>
                 <Button variant="ghost" onClick={() => setModalOpen(false)}>

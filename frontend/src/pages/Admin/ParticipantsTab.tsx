@@ -79,7 +79,7 @@ function TradingAccessCard({ unverified }: { unverified: number | null }) {
         onClose={() => setConfirmOn(false)}
         size="sm"
         title="인증된 참가자만 거래하게 할까요?"
-        description={`미인증 참가자${unverified != null ? ` ${unverified}명` : ''}의 주문이 바로 거부돼요. 언제든 다시 풀 수 있어요.`}
+        description={`미인증 참가자${unverified != null ? ` ${unverified}명` : ''}의 주문이 바로 거부됩니다. 언제든 다시 해제할 수 있습니다.`}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmOn(false)}>
@@ -211,7 +211,7 @@ export function ParticipantsTab() {
       <TradingAccessCard unverified={unverifiedCount} />
       <Checkbox
         label="미인증 참가자만 보기"
-        hint="학번·이름·학과를 확인한 뒤 '인증 처리'를 누르면 인증된 참가자가 돼요."
+        hint="학번·이름·학과를 확인한 뒤 '인증 처리'를 누르면 인증된 참가자가 됩니다."
         checked={unverifiedOnly}
         onChange={setUnverifiedOnly}
       />
@@ -238,7 +238,7 @@ export function ParticipantsTab() {
         onClose={() => setConfirm(null)}
         size="sm"
         title="실격 처리할까요?"
-        description={confirm ? `${confirm.p.nickname}님은 더 이상 주문할 수 없고 랭킹에서 빠져요.` : undefined}
+        description={confirm ? `${confirm.p.nickname}님은 더 이상 주문할 수 없고 랭킹에서 제외됩니다.` : undefined}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirm(null)}>

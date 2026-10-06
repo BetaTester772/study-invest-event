@@ -48,7 +48,7 @@ function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string |
 
   return (
     <Container size="sm">
-      <PageHeader title="관리자" description="관리자 키를 입력하면 이 탭을 닫을 때까지 기억해요." />
+      <PageHeader title="관리자" description="관리자 키를 입력하면 이 탭을 닫을 때까지 기억합니다." />
       <Card>
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
@@ -104,7 +104,7 @@ export function AdminPage() {
     <Container size="xl">
       <PageHeader
         title="관리자"
-        description="인증 검수, 참가자 관리, 파라미터와 정산을 다뤄요. 모든 조작은 감사 로그에 남아요."
+        description="인증 검수, 참가자 관리, 파라미터와 정산을 다룹니다. 모든 조작은 감사 로그에 기록됩니다."
         actions={
           <Button
             variant="secondary"
