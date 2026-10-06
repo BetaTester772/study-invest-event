@@ -154,6 +154,25 @@ class TestTrading:
         assert client.get("/api/ranking").json()["entries"] == []
 
 
+class TestAdminPositions:
+    def test_buys_sells_and_holdings(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        h = register(client)
+        open_day(client, clock, D1)
+        order(client, h, "SAMSU", "buy", 3)
+        order(client, h, "SAMSU", "sell", 1)
+        order(client, h, "LB", "buy", 2)
+        rows = client.get("/api/admin/positions", headers=admin).json()
+        by = {r["code"]: r for r in rows}
+        assert set(by) == {"SAMSU", "LB"}
+        s = by["SAMSU"]
+        assert (s["quantity"], s["bought_quantity"], s["sold_quantity"]) == (2, 3, 1)
+        assert s["bought_amount"] == 3 * s["price"] and s["value"] == 2 * s["price"]
+        assert by["LB"]["nickname"] == "alice" and by["LB"]["quantity"] == 2
+        assert client.get("/api/admin/positions").status_code == 401
+
+
 class TestSettlement:
     def test_prices_move_inverse_to_crowding(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]

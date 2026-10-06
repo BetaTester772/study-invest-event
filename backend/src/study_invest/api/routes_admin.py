@@ -16,12 +16,16 @@ from sqlalchemy.orm import selectinload
 
 from ..clock import OffsetClock
 from ..event_calendar import to_kst
+from ..instruments import BY_CODE
 from ..models import (
     AuditLog,
     CertStatus,
     NewsKind,
+    Order,
+    OrderStatus,
     Participant,
     SettlementLog,
+    Side,
     StudyCertification,
 )
 from ..params import EventParams
@@ -96,6 +100,58 @@ def participants(s: SessionDep) -> list[schemas.AdminParticipant]:
         select(Participant).options(selectinload(Participant.holdings)).order_by(Participant.id)
     )
     return [_admin_participant(p, prices, counts, rewards) for p in rows]
+
+
+@router.get("/positions", response_model=list[schemas.AdminPosition])
+def positions(s: SessionDep) -> list[schemas.AdminPosition]:
+    """참가자×종목별 누적 매수·매도와 현재 보유. 체결된 주문만 센다."""
+    _, prices = current_prices(s)
+    traded = {
+        (pid, code, side): (qty, amt)
+        for pid, code, side, qty, amt in s.execute(
+            select(
+                Order.participant_id,
+                Order.code,
+                Order.side,
+                func.sum(Order.quantity),
+                func.sum(Order.amount),
+            )
+            .where(Order.status == OrderStatus.FILLED)
+            .group_by(Order.participant_id, Order.code, Order.side)
+        )
+    }
+    out: list[schemas.AdminPosition] = []
+    for p in s.scalars(
+        select(Participant).options(selectinload(Participant.holdings)).order_by(Participant.id)
+    ):
+        held = {h.code: h for h in p.holdings}
+        codes = set(held) | {c for pid, c, _ in traded if pid == p.id}
+        for code in sorted(codes, key=lambda c: list(BY_CODE).index(c) if c in BY_CODE else 99):
+            h = held.get(code)
+            quantity, cost = (h.quantity, h.cost) if h else (0, 0)
+            bought_q, bought_a = traded.get((p.id, code, Side.BUY), (0, 0))
+            sold_q, sold_a = traded.get((p.id, code, Side.SELL), (0, 0))
+            if quantity == 0 and bought_q == 0 and sold_q == 0:
+                continue
+            price = prices.get(code, 0)
+            out.append(
+                schemas.AdminPosition(
+                    participant_id=p.id,
+                    nickname=p.nickname,
+                    status=p.status,
+                    code=code,
+                    name=BY_CODE[code].name if code in BY_CODE else code,
+                    price=price,
+                    quantity=quantity,
+                    cost=cost,
+                    value=quantity * price,
+                    bought_quantity=int(bought_q or 0),
+                    bought_amount=int(bought_a or 0),
+                    sold_quantity=int(sold_q or 0),
+                    sold_amount=int(sold_a or 0),
+                )
+            )
+    return out
 
 
 @router.patch("/participants/{participant_id}", response_model=schemas.AdminParticipant)

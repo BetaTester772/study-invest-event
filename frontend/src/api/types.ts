@@ -350,6 +350,26 @@ export interface AdminParticipant extends Participant {
   approved_certifications: number;
 }
 
+/** 참가자×종목 한 행: 체결 누적 매수·매도와 현재 보유. */
+export interface AdminPosition {
+  participant_id: number;
+  nickname: string;
+  status: ParticipantStatus;
+  code: string;
+  name: string;
+  /** 현재가(최신 공시 시작가). */
+  price: number;
+  quantity: number;
+  /** 보유분 취득 원가. */
+  cost: number;
+  /** 평가액 = 수량 × 현재가. */
+  value: number;
+  bought_quantity: number;
+  bought_amount: number;
+  sold_quantity: number;
+  sold_amount: number;
+}
+
 export interface AdminCertification extends Certification {
   participant_id: number;
   nickname: string;

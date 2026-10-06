@@ -6,12 +6,13 @@ import { BatchTab } from './BatchTab';
 import { CertReviewTab } from './CertReviewTab';
 import { NewsTab } from './NewsTab';
 import { ParamsTab } from './ParamsTab';
+import { PositionsTab } from './PositionsTab';
 import { ParticipantsTab } from './ParticipantsTab';
 import { PriceTab } from './PriceTab';
 import { SimulatorTab } from './SimulatorTab';
 import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
-type AdminTab = 'certs' | 'participants' | 'params' | 'batch' | 'price' | 'news' | 'sim' | 'audit';
+type AdminTab = 'certs' | 'participants' | 'positions' | 'params' | 'batch' | 'price' | 'news' | 'sim' | 'audit';
 
 function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string | null }) {
   const [key, setKey] = useState('');
@@ -124,6 +125,7 @@ export function AdminPage() {
         items={[
           { value: 'certs', label: '인증 검수', content: <CertReviewTab /> },
           { value: 'participants', label: '참가자', content: <ParticipantsTab /> },
+          { value: 'positions', label: '거래·보유', content: <PositionsTab /> },
           { value: 'params', label: '파라미터', content: <ParamsTab /> },
           { value: 'batch', label: '배치·정산', content: <BatchTab /> },
           { value: 'price', label: '가격 개입', content: <PriceTab /> },
