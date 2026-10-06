@@ -17,9 +17,11 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     String,
     TypeDecorator,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -310,7 +312,17 @@ class SettlementLog(Base):
 
 class StudyCertification(Base):
     __tablename__ = "certifications"
-    __table_args__ = (UniqueConstraint("participant_id", "target_date"),)
+    __table_args__ = (
+        # 1인 1일 1회는 반려되지 않은 인증에만 적용한다. 반려된 날짜는 다시 낼 수 있다.
+        Index(
+            "uq_certifications_active_day",
+            "participant_id",
+            "target_date",
+            unique=True,
+            sqlite_where=text("status != 'rejected'"),
+            postgresql_where=text("status != 'rejected'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id"), index=True)

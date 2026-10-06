@@ -220,12 +220,16 @@ class TestCertificationStatus:
             headers=admin,
         )
         st = self.status(client, h)
-        assert (st["can_submit"], st["reason"]) == (False, "ALREADY_CERTIFIED")
-        assert st["existing"]["status"] == "rejected"  # 반려돼도 같은 날은 다시 못 낸다
+        # 반려되면 같은 날짜에 다시 낼 수 있다(반려 이력은 existing으로 남는다)
+        assert (st["can_submit"], st["reason"]) == (True, None)
+        assert st["existing"]["status"] == "rejected"
         again = client.post(
             "/api/me/certifications", headers=h, files={"file": ("b.png", PNG, "image/png")}
         )
-        assert again.json()["detail"]["code"] == st["reason"]  # 화면과 제출이 같은 판단
+        assert again.status_code == 201
+        st = self.status(client, h)
+        assert (st["can_submit"], st["reason"]) == (False, "ALREADY_CERTIFIED")
+        assert st["existing"]["status"] == "pending"
 
         clock.set(D1, time(23, 59, 59))
         assert self.status(client, h)["can_submit"] is False
