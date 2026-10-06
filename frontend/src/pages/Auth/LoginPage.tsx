@@ -72,8 +72,15 @@ export function LoginPage() {
               required
             />
             {turnstile.widget}
-            <Button type="submit" size="lg" fullWidth loading={submitting}>
-              로그인하기
+            {/* 봇 확인을 기다리는 동안은 '처리 중' 스피너 대신 무엇을 기다리는지 보여 준다. */}
+            <Button
+              type="submit"
+              size="lg"
+              fullWidth
+              loading={submitting && !turnstile.waiting}
+              disabled={turnstile.waiting}
+            >
+              {turnstile.waiting ? '보안 확인을 기다리는 중' : '로그인하기'}
             </Button>
             <Text size="sm" tone="muted">
               비밀번호를 잊었나요? <Link to="/reset-password">학교 메일로 재설정하기</Link>

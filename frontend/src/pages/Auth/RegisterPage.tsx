@@ -174,8 +174,15 @@ export function RegisterPage() {
             />
             <PrivacyConsent checked={form.consent} onChange={(v) => set('consent', v)} error={errors.consent} />
             {!requireCode && turnstile.widget}
-            <Button type="submit" size="lg" fullWidth loading={submitting}>
-              참가 신청하기
+            {/* 봇 확인을 기다리는 동안은 '처리 중' 스피너 대신 무엇을 기다리는지 보여 준다. */}
+            <Button
+              type="submit"
+              size="lg"
+              fullWidth
+              loading={submitting && !turnstile.waiting}
+              disabled={turnstile.waiting}
+            >
+              {turnstile.waiting ? '보안 확인을 기다리는 중' : '참가 신청하기'}
             </Button>
             <Text size="sm" tone="muted">
               이미 참가했나요?{' '}
