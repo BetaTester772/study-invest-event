@@ -101,7 +101,7 @@ def submit(
     upload_dir: Path,
     max_bytes: int,
 ) -> StudyCertification:
-    """인증 사진 1장 제출. 1인 1일 1회(반려되면 재제출 가능), 마감 시각 이후는 다음 날짜로 집계한다."""
+    """인증 사진 1장 제출. 1인 1일 1회(반려는 재제출 가능), 마감 이후는 다음 날짜로 집계한다."""
     status = submission_status(s, participant, now, calendar, params)
     if not status.can_submit:
         assert status.reason is not None and status.message is not None
