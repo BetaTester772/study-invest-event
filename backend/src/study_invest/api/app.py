@@ -23,10 +23,12 @@ from ..captcha import CaptchaVerifier, make_captcha
 from ..config import Settings
 from ..db import DatabasePools, create_schema, make_session_factory
 from ..event_calendar import EventCalendar, seconds_until_next_batch
+from ..logging_setup import configure_logging
 from ..mail import Mailer, make_mailer
 from ..services.common import DomainError
 from ..services.market import run_due
 from . import routes_admin, routes_me, routes_public
+from .access_log import REQUEST_ID_SCOPE_KEY, AccessLogMiddleware
 from .deps import AppState
 from .limits import BodySizeLimitMiddleware
 
@@ -77,6 +79,7 @@ def create_app(
     captcha: CaptchaVerifier | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
+    configure_logging(settings.log_level, settings.log_format)
     pools = DatabasePools.create(settings)
     if settings.auto_create_schema:
         create_schema(pools.api)
@@ -150,8 +153,32 @@ def create_app(
 
     @app.exception_handler(DomainError)  # I/O 없음 → async
     async def _domain_error(_: Request, exc: DomainError) -> JSONResponse:
+        # 요청 한 줄(access)에는 상태만 남으므로 어떤 규칙에 걸렸는지(code)를 따로 남긴다.
+        log.log(
+            logging.WARNING if exc.status in (401, 403) else logging.INFO,
+            "domain error: %s (%d)",
+            exc.code,
+            exc.status,
+        )
         return JSONResponse(
             status_code=exc.status, content={"detail": {"code": exc.code, "message": exc.message}}
+        )
+
+    @app.exception_handler(Exception)  # I/O 없음 → async
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        # 트레이스백은 AccessLogMiddleware가 이미 남겼다. 응답에는 요청 ID만 실어 문의에 쓰게 한다.
+        rid = request.scope.get(REQUEST_ID_SCOPE_KEY)
+        # 이 응답은 요청 로그 미들웨어 바깥(ServerErrorMiddleware)에서 만들어져 헤더를 직접 단다.
+        return JSONResponse(
+            status_code=500,
+            headers={"X-Request-ID": str(rid)} if rid else None,
+            content={
+                "detail": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "서버 오류가 발생했습니다. 잠시 후 다시 시도하세요.",
+                    "request_id": rid,
+                }
+            },
         )
 
     # 본문 크기 제한: 업로드 경로만 사진 한도 + multipart 여유, 나머지(JSON)는 1MiB.
@@ -160,6 +187,8 @@ def create_app(
         default_limit=settings.max_json_bytes,
         path_limits={"/api/me/certifications": settings.max_upload_bytes + MULTIPART_OVERHEAD},
     )
+    # 가장 바깥에 둬서 본문 크기 거절(413) 같은 응답도 요청 로그에 남긴다.
+    app.add_middleware(AccessLogMiddleware)
     app.include_router(routes_public.router)
     app.include_router(routes_me.router)
     app.include_router(routes_admin.router)

@@ -34,4 +34,4 @@ USER app
 ENV STUDY_INVEST_UPLOAD_DIR=/data/uploads
 EXPOSE 8000
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["uvicorn", "--factory", "study_invest.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["uvicorn", "--factory", "study_invest.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--no-access-log"]

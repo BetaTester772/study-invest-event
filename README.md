@@ -103,6 +103,7 @@ study-invest purge-personal-info             # 이벤트 종료 후 학교 메�
 | `STUDY_INVEST_BATCH_POOL_SIZE` | `2` | 배치 풀 크기 |
 | `STUDY_INVEST_CPU_WORKERS` | `1` | 시뮬레이터용 프로세스 수(0이면 스레드) |
 | `STUDY_INVEST_LOOP_GUARD` | `warn` | 이벤트 루프에서 SQL 실행 시 `warn`/`raise`/`off` |
+| `STUDY_INVEST_LOG_LEVEL` / `_LOG_FORMAT` | `INFO` / `text` | 앱 로그 레벨(`DEBUG`·`INFO`·`WARNING`·`ERROR`)과 형식(`text`·`json`). 요청마다 `X-Request-ID`를 응답에 싣고 모든 로그 줄에 붙인다. 쿼리 문자열·이메일·비밀번호는 남기지 않는다. 컨테이너는 uvicorn 접속 로그를 끄고(`--no-access-log`) 앱 요청 로그를 쓴다 |
 | `STUDY_INVEST_EVENT_START` / `_EVENT_END` | `2026-10-06` / `2026-10-16` | 이벤트 기간(YYYY-MM-DD, 양 끝 포함). 테스트·QA 서버에서만 바꾼다 |
 | `STUDY_INVEST_TIME_SCALE` / `_TIME_ORIGIN` | `1` / (없음) | 앱 시계 배속과, 이벤트 첫날 00:00이 시작되는 실제 시각(ISO 8601, 시간대 없으면 KST). `24`면 실제 1시간이 하루. 테스트·QA 서버에서만 바꾼다 |
 | `STUDY_INVEST_QA_TOOLS` | `0` | `1`이면 관리자 > 배치·정산에 "지금 가격 변동시키기" 버튼이 생긴다. 18:00·다음 날을 기다리지 않고 최신 공시일을 정산하고 다음 운영일 시작가를 바로 공시한다. 테스트·QA 서버에서만 켠다 |

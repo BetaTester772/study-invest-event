@@ -66,6 +66,15 @@ def _env_flag(env: Mapping[str, str], name: str, default: bool) -> bool:
     raise ValueError(f"{name}은 1 또는 0이어야 합니다: {value!r}")
 
 
+def _env_log_format(value: str) -> Literal["text", "json"]:
+    """STUDY_INVEST_LOG_FORMAT. 비어 있으면 text."""
+    if value in {"", "text"}:
+        return "text"
+    if value == "json":
+        return "json"
+    raise ValueError(f"STUDY_INVEST_LOG_FORMAT은 text 또는 json이어야 합니다: {value!r}")
+
+
 DEFAULT_DATABASE_URL = "postgresql+psycopg://study:study@localhost:5432/study_invest"
 
 
@@ -133,6 +142,10 @@ class Settings:
     qa_tools: bool = False
     """켜면 관리자 화면에 시각과 무관하게 가격을 바로 변동시키는 QA 버튼이 생긴다.
     테스트·QA 서버에서만 켠다. 운영에서 켜면 이벤트 진행이 시계를 앞질러 되돌릴 수 없다."""
+    log_level: str = "INFO"
+    """앱 로그 레벨(DEBUG·INFO·WARNING·ERROR)."""
+    log_format: Literal["text", "json"] = "text"
+    """로그 형식. json이면 한 줄에 JSON 하나(로그 수집기용)."""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -181,6 +194,8 @@ class Settings:
             turnstile_secret_key=env.get("STUDY_INVEST_TURNSTILE_SECRET_KEY", "").strip(),
             qa_unlimited=env.get("STUDY_INVEST_QA_UNLIMITED", "0").lower() in {"1", "true", "on"},
             qa_tools=env.get("STUDY_INVEST_QA_TOOLS", "0").lower() in {"1", "true", "on"},
+            log_level=env.get("STUDY_INVEST_LOG_LEVEL", "").strip().upper() or cls.log_level,
+            log_format=_env_log_format(env.get("STUDY_INVEST_LOG_FORMAT", "").strip().lower()),
         )
 
     @property

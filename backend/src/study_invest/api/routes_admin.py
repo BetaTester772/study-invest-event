@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 from dataclasses import replace
 from datetime import date
 from typing import Annotated
@@ -39,6 +40,8 @@ from ..services.market import BatchResult
 from ..simulator import run as run_simulation
 from . import schemas, views
 from .deps import BatchSessionDep, NowDep, ParamsDep, SessionDep, StateDep, require_admin
+
+log = logging.getLogger("study_invest.admin")
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 
@@ -117,6 +120,7 @@ def patch_participant(
     if body.verified is not None:
         auth.set_verified(s, p, body.verified, now)
     s.commit()
+    log.info("participant patched: id=%d status=%s verified=%s", p.id, body.status, body.verified)
     _, prices = current_prices(s)
     return _admin_participant(p, prices, _cert_counts(s), rewards_received(s, p.id))
 
@@ -149,6 +153,7 @@ def review_certification(
 ) -> schemas.AdminCertification:
     cert = certification.review(s, cert_id, body.approve, body.reason, now)
     s.commit()
+    log.info("certification reviewed: id=%d approve=%s", cert_id, body.approve)
     return views.admin_certification(cert)
 
 
@@ -169,6 +174,7 @@ def update_params(body: schemas.Params, s: SessionDep, now: NowDep) -> schemas.P
         raise DomainError("INVALID_PARAMS", str(exc), 422) from exc
     set_params(s, params, now)
     s.commit()
+    log.info("params updated")
     return schemas.Params.model_validate(params.to_dict())
 
 
@@ -185,6 +191,7 @@ def set_trading_access(
     params_lock(s)
     set_params(s, replace(get_params(s), verified_only_trading=body.verified_only), now)
     s.commit()
+    log.info("trading access: verified_only=%s", body.verified_only)
     return body
 
 
@@ -199,6 +206,7 @@ def manual_price(
 ) -> schemas.PricePoint:
     record = market.set_manual_price(s, day, code, body.price, body.reason, now, state.calendar)
     s.commit()
+    log.info("manual price: %s %s -> %s", day, code, body.price)
     return schemas.PricePoint(
         day=record.day,
         price=record.price,
@@ -239,6 +247,7 @@ def manual_news(
         byline=body.byline,
     )
     s.commit()
+    log.info("manual news set: %s %s", day, code)
     return views.admin_news_item(item, applied=False)
 
 
@@ -246,6 +255,7 @@ def manual_news(
 def remove_news(day: date, code: str, state: StateDep, s: BatchSessionDep, now: NowDep) -> Response:
     news.delete_news(s, day, code, now, state.calendar)
     s.commit()
+    log.info("news removed: %s %s", day, code)
     return Response(status_code=204)
 
 
@@ -260,6 +270,7 @@ def batch_open(
     day = body.day or to_kst(now).date()
     result = market.open_day(s, day, now, state.calendar)
     s.commit()
+    log.info("batch open: %s", day)
     return _batch(result)
 
 
@@ -270,12 +281,14 @@ def batch_settle(
     day = body.day or to_kst(now).date()
     result = market.settle_day(s, day, now, state.calendar, state.rng)
     s.commit()
+    log.info("batch settle: %s", day)
     return _batch(result)
 
 
 @router.post("/batch/run-due", response_model=list[schemas.BatchResult])
 def batch_run_due(state: StateDep, now: NowDep) -> list[schemas.BatchResult]:
     results = market.run_due(state.batch_session_factory, now, state.calendar, state.rng)
+    log.info("batch run-due: %d result(s)", len(results))
     out = []
     for r in results:
         if isinstance(r, BatchResult):
@@ -307,6 +320,7 @@ def qa_next_step(state: StateDep, s: BatchSessionDep, now: NowDep) -> schemas.Ba
         raise DomainError("QA_DISABLED", "이 서버는 QA 도구가 꺼져 있습니다.", 403)
     result, at = market.qa_next_step(s, now, state.calendar, state.rng)
     s.commit()
+    log.warning("qa next-step: %s", result.action)
     if not isinstance(state.clock, OffsetClock):
         state.clock = OffsetClock(state.clock)
     state.clock.jump_to(at)
@@ -320,6 +334,7 @@ def qa_advance_price(state: StateDep, s: BatchSessionDep, now: NowDep) -> schema
         raise DomainError("QA_DISABLED", "이 서버는 QA 도구가 꺼져 있습니다.", 403)
     result = market.advance_price(s, now, state.calendar, state.rng)
     s.commit()
+    log.warning("qa advance-price")
     return _batch(result)
 
 

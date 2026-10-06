@@ -25,6 +25,7 @@ from ..clock import OffsetClock, ScaledClock
 from ..config import Settings
 from ..db import DatabasePools
 from ..event_calendar import EventCalendar
+from ..logging_setup import bind
 from ..mail import Mailer
 from ..models import Participant
 from ..params import EventParams
@@ -137,7 +138,10 @@ TokenDep = Annotated[str | None, Depends(bearer_token)]
 
 def optional_participant(s: SessionDep, token: TokenDep) -> Participant | None:
     # DB 조회 → 동기 def(스레드풀)
-    return auth.participant_by_token(s, token) if token else None
+    participant = auth.participant_by_token(s, token) if token else None
+    if participant is not None:
+        bind(participant_id=participant.id)
+    return participant
 
 
 async def current_participant(
@@ -179,6 +183,7 @@ async def require_admin(
         or not secrets.compare_digest(x_admin_key.encode(), expected.encode())
     ):
         raise DomainError("UNAUTHORIZED", "관리자 키가 올바르지 않습니다.", 401)
+    bind(admin=True)
 
 
 def require_captcha(action: str, *, fail_open: bool = False) -> Callable[..., None]:

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..clock import ScaledClock
 from ..event_calendar import EventCalendar, to_kst
 from ..instruments import BY_CODE, INSTRUMENTS
+from ..logging_setup import bind
 from ..mail import NoMailer
 from ..models import CodePurpose, MarketDay, PriceHistory
 from ..normalize import mask_email
@@ -287,6 +288,8 @@ def register(
         s, email, profile, body.nickname, body.password, now, state.calendar, verified=verify
     )
     s.commit()
+    bind(participant_id=participant.id)
+    log.info("register: verified=%s", verify)
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)
     )
@@ -340,6 +343,8 @@ def reset_password(
     consume_code(s, participant.email_address, body.code, real_now, CodePurpose.RESET_PASSWORD)
     participant, token = auth.reset_password(s, participant, body.password, real_now)
     s.commit()
+    bind(participant_id=participant.id)
+    log.info("password reset")
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)
     )
@@ -353,6 +358,8 @@ def reset_password(
 def login(body: schemas.LoginRequest, s: SessionDep, now: NowDep) -> schemas.AuthResponse:
     participant, token = auth.login(s, body.identity, body.password, now)
     s.commit()
+    bind(participant_id=participant.id)
+    log.info("login")
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)
     )
@@ -363,4 +370,5 @@ def logout(s: SessionDep, token: TokenDep) -> Response:
     if token:
         auth.revoke_token(s, token)
         s.commit()
+        log.info("logout")
     return Response(status_code=204)
