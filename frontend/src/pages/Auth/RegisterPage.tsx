@@ -123,6 +123,7 @@ export function RegisterPage() {
             {errors.form && <Alert tone="danger">{errors.form}</Alert>}
             <SchoolEmailFields
               withCode={requireCode}
+              captchaWaiting={turnstile.waiting}
               send={async (address) => authApi.requestEmailCode({ email: address }, await turnstile.take())}
               hint={
                 requireCode

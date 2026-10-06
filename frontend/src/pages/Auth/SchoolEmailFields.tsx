@@ -87,6 +87,7 @@ function CodeSteps({
   code,
   onCodeChange,
   codeError,
+  captchaWaiting,
 }: {
   state: ReturnType<typeof useCodeRequest>;
   label: string;
@@ -95,12 +96,25 @@ function CodeSteps({
   code: string;
   onCodeChange: (code: string) => void;
   codeError?: string;
+  captchaWaiting?: boolean;
 }) {
   const { sending, sentTo, notice, resendLeft } = state;
   return (
     <>
-      <Button variant="secondary" onClick={onClick} loading={sending} disabled={disabled || resendLeft > 0}>
-        {resendLeft > 0 ? `${resendLeft}초 뒤에 다시 받을 수 있습니다` : sentTo ? '코드 다시 받기' : label}
+      {/* 봇 확인을 기다리는 동안은 '보내는 중' 스피너 대신 무엇을 기다리는지 보여 준다. */}
+      <Button
+        variant="secondary"
+        onClick={onClick}
+        loading={sending && !captchaWaiting}
+        disabled={disabled || resendLeft > 0 || captchaWaiting}
+      >
+        {captchaWaiting
+          ? '보안 확인을 기다리는 중'
+          : resendLeft > 0
+            ? `${resendLeft}초 뒤에 다시 받을 수 있습니다`
+            : sentTo
+              ? '코드 다시 받기'
+              : label}
       </Button>
       {notice && <Alert tone="danger">{notice}</Alert>}
       {sentTo && (
@@ -134,6 +148,8 @@ interface CodeSenderProps {
   code: string;
   onCodeChange: (code: string) => void;
   codeError?: string;
+  /** 요청이 봇 확인(Turnstile) 토큰을 기다리는 중(`useTurnstile().waiting`). */
+  captchaWaiting?: boolean;
 }
 
 /** 주소를 입력받지 않고 코드를 받는다: 등록 메일 인증, 학번으로 비밀번호 재설정. */
@@ -145,6 +161,7 @@ export function CodeSender({
   code,
   onCodeChange,
   codeError: codeErr,
+  captchaWaiting,
 }: CodeSenderProps) {
   const state = useCodeRequest();
   const onClick = async () => {
@@ -160,6 +177,7 @@ export function CodeSender({
         code={code}
         onCodeChange={onCodeChange}
         codeError={codeErr}
+        captchaWaiting={captchaWaiting}
       />
     </Stack>
   );
@@ -178,6 +196,8 @@ interface SchoolEmailFieldsProps {
   /** false면 메일 주소만 받는다(메일 인증 없이 가입하는 운영). */
   withCode?: boolean;
   hint?: string;
+  /** 코드 요청이 봇 확인(Turnstile) 토큰을 기다리는 중(`useTurnstile().waiting`). */
+  captchaWaiting?: boolean;
 }
 
 /** 학교 메일 입력 + 인증 코드 받기 + 코드 입력. 참가 신청과 다른 메일로 인증할 때 쓴다. */
@@ -192,6 +212,7 @@ export function SchoolEmailFields({
   send = (address) => authApi.requestEmailCode({ email: address }),
   withCode = true,
   hint = '@skku.edu 또는 @g.skku.edu. 같은 ID의 두 주소는 한 사람으로 봅니다.',
+  captchaWaiting,
 }: SchoolEmailFieldsProps) {
   const state = useCodeRequest();
 
@@ -237,6 +258,7 @@ export function SchoolEmailFields({
           code={code}
           onCodeChange={onCodeChange}
           codeError={codeErr}
+          captchaWaiting={captchaWaiting}
         />
       )}
     </Stack>
