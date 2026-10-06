@@ -78,11 +78,21 @@ const STOCK_COLUMNS: Column<SettlementStock>[] = [
   },
   { key: 'rate', header: '쏠림 변동률', numeric: true, render: (s) => <PriceChange rate={s.rate} /> },
   {
-    key: 'rate_noise',
-    header: '변동률 잡음',
+    key: 'rate_factor',
+    header: '변동 배율',
     numeric: true,
     hideOnMobile: true,
-    render: (s) => (s.rate_noise == null ? '—' : <PriceChange rate={s.rate_noise} />),
+    render: (s) =>
+      s.rate_factor != null ? (
+        `×${formatNumber(s.rate_factor, 3)}`
+      ) : s.rate_noise != null ? (
+        // 10/6 정산만: 당시 방식(적용률에 1 + ε를 곱함)의 잡음
+        <>
+          ε <PriceChange rate={s.rate_noise} />
+        </>
+      ) : (
+        '—'
+      ),
   },
   {
     key: 'news',

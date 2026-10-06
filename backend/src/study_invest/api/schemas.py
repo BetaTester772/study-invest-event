@@ -473,8 +473,9 @@ class Params(Schema):
     virtual_liquidity: int
     stock_noise_scale: float
     """매수지분 잡음 세기 τ(0~2). 0이면 잡음 없이 당일 매수만으로 변동률을 정한다."""
-    stock_rate_noise: float | None = None
-    """종목별 변동률 잡음 σ(0~0.1). null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
+    stock_rate_jitter: float | None = None
+    """종목별 변동 배율 폭 w(0~0.5). 쏠림 변동률에 U(1 − w, 1 + w) 배율을 곱한다.
+    null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
     news_probability: float
     """정산 때 다음 운영일 무작위 뉴스가 생길 확률(0~1). 0이면 관리자 작성 뉴스만."""
     news_rate_min: float
@@ -541,15 +542,16 @@ class StockSettlement(Schema):
     noise_factor: float | None = None
     """매수지분 잡음 배수 exp(τ·(G − γ)). 잡음 없음(τ = 0)이거나 도입 전 기록이면 None."""
     concentration: float | None
+    rate_factor: float | None = None
+    """종목별 변동 배율 k(클램프 전에 곱함). 배율 없음(w = 0)이거나 도입 전 기록이면 None."""
     rate: float
-    """쏠림 변동률(클램프 뒤, 변동률 잡음·뉴스 제외)."""
+    """쏠림 변동률(배율·클램프 뒤, 뉴스 제외)."""
     rate_noise: float | None = None
-    """종목별 변동률 잡음 ε. 잡음 없음(σ = 0)이거나 도입 전 기록이면 None."""
+    """(10/6 정산 기록 전용) 당시 방식의 변동률 잡음 ε. 적용률에 (1 + ε)로 곱했다."""
     news_rate: float | None = None
     """그날 호재·악재 효과(부호 포함). 없으면 None."""
     total_rate: float | None = None
-    """실제 적용 변동률 (1 + rate)(1 + rate_noise)(1 + news_rate) − 1.
-    뉴스 도입 전 기록은 None(= rate)."""
+    """실제 적용 변동률 (1 + rate)(1 + news_rate) − 1. 뉴스 도입 전 기록은 None(= rate)."""
     old_price: int
     new_price: int
 

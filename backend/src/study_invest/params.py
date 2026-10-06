@@ -42,8 +42,8 @@ CALM_ROUNDS_MAX = 100
 """코인 초반 안정기 회차 수 파라미터의 최대값."""
 STOCK_NOISE_MAX = 2.0
 """주식 매수지분 잡음 세기 τ 파라미터의 최대값."""
-STOCK_RATE_NOISE_MAX = 0.10
-"""주식 종목별 변동률 잡음 σ 파라미터의 최대값(10%p)."""
+STOCK_RATE_JITTER_MAX = 0.50
+"""주식 종목별 변동 배율 폭 w 파라미터의 최대값(배율 0.5~1.5배)."""
 NEWS_RATE_MAX = 1.0
 """호재·악재 효과 크기의 최대값(±100%)."""
 
@@ -88,9 +88,10 @@ class EventParams:
     stock_noise_scale: float = 0.10
     """매수지분 잡음 세기 τ: Bᵢ″ = Bᵢ′ × exp(τ·(Gᵢ − γ)), Gᵢ ~ Gumbel(0, 1). 0이면 잡음 없음
     (변동률이 당일 매수만으로 결정된다). 0.1이면 매수가 전혀 없을 때 종목당 대략 ±5%(5~95%)."""
-    stock_rate_noise: float = 0.02
-    """종목별 변동률 잡음 σ: 적용률 = (1 + 쏠림 변동률)(1 + εᵢ)(1 + 뉴스) − 1, εᵢ = σ·Φ⁻¹(Uᵢ)를
-    ±3σ에서 자른다. 종목마다 따로 뽑으므로 4종목 변동률의 합이 0으로 고정되지 않는다. 0이면 없음."""
+    stock_rate_jitter: float = 0.10
+    """종목별 변동 배율 폭 w: 쏠림 변동률 = clamp(계수 × (1 − rᵢ) × kᵢ, ±30%), kᵢ ~ U(1 − w, 1 + w).
+    0.1이면 원래 움직임의 0.9~1.1배. 종목마다 따로 뽑으므로 4종목 변동률의 합이 0으로 고정되지
+    않는다. 0이면 배율 없음(kᵢ = 1)."""
 
     # 호재·악재 (03-pricing §3)
     news_probability: float = 0.50
@@ -127,7 +128,7 @@ class EventParams:
             "coin_calm_floor": self.coin_calm_floor,
             "stock_sensitivity": self.stock_sensitivity,
             "stock_noise_scale": self.stock_noise_scale,
-            "stock_rate_noise": self.stock_rate_noise,
+            "stock_rate_jitter": self.stock_rate_jitter,
             "news_probability": self.news_probability,
             "news_rate_min": self.news_rate_min,
             "news_rate_max": self.news_rate_max,
@@ -167,8 +168,8 @@ class EventParams:
                 f"stock_noise_scale must be in [0, {STOCK_NOISE_MAX:g}]",
             ),
             (
-                0 <= self.stock_rate_noise <= STOCK_RATE_NOISE_MAX,
-                f"stock_rate_noise must be in [0, {STOCK_RATE_NOISE_MAX:g}]",
+                0 <= self.stock_rate_jitter <= STOCK_RATE_JITTER_MAX,
+                f"stock_rate_jitter must be in [0, {STOCK_RATE_JITTER_MAX:g}]",
             ),
             (
                 price_ok(self.stock_min_price),
