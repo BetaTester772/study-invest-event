@@ -27,8 +27,8 @@ export interface AuthContextValue {
   status: AuthStatus;
   /** 서버에서 받은 프로필. 세션은 있지만 아직 못 받았으면 null. */
   participant: Participant | null;
-  login: (identity: string, password: string) => Promise<Participant>;
-  register: (body: RegisterRequest) => Promise<Participant>;
+  login: (identity: string, password: string, captcha?: string) => Promise<Participant>;
+  register: (body: RegisterRequest, captcha?: string) => Promise<Participant>;
   /** 학교 메일 코드로 비밀번호를 바꾸고 로그인한다. */
   resetPassword: (body: PasswordResetRequest) => Promise<Participant>;
   /** 메일 인증 도입 전에 가입한 계정의 학교 메일 재인증. */
@@ -115,14 +115,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [cancelRetry],
   );
 
-  const login = useCallback(async (identity: string, password: string) => {
-    const res = await authApi.login({ identity, password });
+  const login = useCallback(async (identity: string, password: string, captcha?: string) => {
+    const res = await authApi.login({ identity, password }, captcha);
     startSession(res.token, res.participant);
     return res.participant;
   }, [startSession]);
 
-  const register = useCallback(async (body: RegisterRequest) => {
-    const res = await authApi.register(body);
+  const register = useCallback(async (body: RegisterRequest, captcha?: string) => {
+    const res = await authApi.register(body, captcha);
     startSession(res.token, res.participant);
     return res.participant;
   }, [startSession]);

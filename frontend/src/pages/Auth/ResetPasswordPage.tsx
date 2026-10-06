@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ApiError, authApi } from '../../api';
+import { ApiError, authApi, publicApi, useApi } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
 import { CODE_ERRORS, CodeSender, codeError } from './SchoolEmailFields';
 import { PASSWORD_HINT, WEAK_PASSWORD_MESSAGE } from './password';
 import { useScrollToFormError } from '../../lib/useScrollToFormError';
+import { useTurnstile } from '../../lib/turnstile';
 
 interface Errors {
   identity?: string;
@@ -49,6 +50,9 @@ export function ResetPasswordPage() {
   const [errors, setErrors] = useState<Errors>({});
   const [formRef] = useScrollToFormError(errors);
   const [submitting, setSubmitting] = useState(false);
+  const event = useApi(() => publicApi.event(), []);
+  // 코드 요청(1단계)에만 쓴다.
+  const turnstile = useTurnstile(event.data?.signup.turnstile_site_key, 'password_reset');
 
   /** 코드·학번 오류면 칸 옆에 보여 주고 true. */
   const showCodeStepError = (err: unknown): boolean => {
@@ -146,7 +150,9 @@ export function ResetPasswordPage() {
               />
               <CodeSender
                 label="등록한 메일로 코드 받기"
-                request={() => authApi.requestPasswordResetCode({ identity: identity.trim() })}
+                request={async () =>
+                  authApi.requestPasswordResetCode({ identity: identity.trim() }, await turnstile.take())
+                }
                 validate={() => {
                   const message = identity.trim() ? undefined : '학번을 입력해 주세요.';
                   setErrors((prev) => ({ ...prev, identity: message }));
@@ -163,6 +169,7 @@ export function ResetPasswordPage() {
                 onCodeChange={setCode}
                 codeError={errors.code}
               />
+              {turnstile.widget}
               <Button type="submit" size="lg" fullWidth loading={submitting}>
                 코드 확인
               </Button>

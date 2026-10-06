@@ -53,16 +53,19 @@ export const publicApi = {
 };
 
 export const authApi = {
-  requestEmailCode: (body: EmailCodeRequest) =>
-    request<EmailCodeResponse>('/auth/email-code', { method: 'POST', body }),
-  requestPasswordResetCode: (body: PasswordResetCodeRequest) =>
-    request<EmailCodeResponse>('/auth/password-reset/code', { method: 'POST', body }),
+  // captcha: 봇 확인 토큰(`signup.turnstile_site_key`가 있을 때만 필요). 한 번 쓰면 버린다.
+  requestEmailCode: (body: EmailCodeRequest, captcha?: string) =>
+    request<EmailCodeResponse>('/auth/email-code', { method: 'POST', body, captcha }),
+  requestPasswordResetCode: (body: PasswordResetCodeRequest, captcha?: string) =>
+    request<EmailCodeResponse>('/auth/password-reset/code', { method: 'POST', body, captcha }),
   verifyPasswordResetCode: (body: PasswordResetVerifyRequest) =>
     request<void>('/auth/password-reset/verify', { method: 'POST', body }),
   resetPassword: (body: PasswordResetRequest) =>
     request<AuthResponse>('/auth/password-reset', { method: 'POST', body }),
-  register: (body: RegisterRequest) => request<AuthResponse>('/auth/register', { method: 'POST', body }),
-  login: (body: LoginRequest) => request<AuthResponse>('/auth/login', { method: 'POST', body }),
+  register: (body: RegisterRequest, captcha?: string) =>
+    request<AuthResponse>('/auth/register', { method: 'POST', body, captcha }),
+  login: (body: LoginRequest, captcha?: string) =>
+    request<AuthResponse>('/auth/login', { method: 'POST', body, captcha }),
   logout: () => request<void>('/auth/logout', { method: 'POST', auth: 'participant' }),
 };
 

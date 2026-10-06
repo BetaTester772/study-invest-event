@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 import secrets
 import threading
@@ -19,6 +20,7 @@ from typing import Annotated
 from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..captcha import CaptchaUnavailable, CaptchaVerifier, NoCaptcha
 from ..clock import OffsetClock, ScaledClock
 from ..config import Settings
 from ..db import DatabasePools
@@ -28,6 +30,8 @@ from ..models import Participant
 from ..params import EventParams
 from ..services import auth
 from ..services.common import DomainError, get_params
+
+log = logging.getLogger("study_invest")
 
 MAIL_CONCURRENCY = 8
 """동시 SMTP 발송 상한. 스레드풀(기본 40) 중 이 이상은 메일 대기에 쓰지 않는다."""
@@ -50,6 +54,8 @@ class AppState:
         default_factory=lambda: threading.BoundedSemaphore(MAIL_CONCURRENCY)
     )
     """동시에 SMTP로 보내는 메일 수 상한. 느린 SMTP가 공용 스레드풀을 다 차지하지 않게 한다."""
+    captcha: CaptchaVerifier = field(default_factory=NoCaptcha)
+    """봇 확인(Turnstile). 키가 없으면 NoCaptcha(확인하지 않음)."""
     time_scale: float = 1.0
     """clock의 배속. 스케줄러는 다음 배치까지 남은 시계 초를 이 값으로 나눠 실제로 기다린다."""
     cpu_executor: Executor | None = field(default=None)
@@ -173,3 +179,37 @@ async def require_admin(
         or not secrets.compare_digest(x_admin_key.encode(), expected.encode())
     ):
         raise DomainError("UNAUTHORIZED", "관리자 키가 올바르지 않습니다.", 401)
+
+
+def require_captcha(action: str, *, fail_open: bool = False) -> Callable[..., None]:
+    """봇 확인 의존성. 라우트의 `dependencies=[Depends(...)]`에 넣으면 DB 세션을 열기 전에 돈다
+    (siteverify를 기다리는 동안 api 풀 연결을 잡지 않는다).
+
+    action: 위젯의 action과 같아야 한다(다른 화면에서 받은 토큰 거절).
+    fail_open: siteverify에 닿지 못하면 통과시킨다(로그인처럼 막히면 안 되는 곳). 끄면 503.
+    """
+
+    # siteverify 호출(네트워크 I/O) → 동기 def(스레드풀)
+    def check(state: StateDep, x_turnstile_token: Annotated[str | None, Header()] = None) -> None:
+        captcha = state.captcha
+        if captcha.site_key is None:
+            return
+        try:
+            ok = captcha.verify(x_turnstile_token or "", action)
+        except CaptchaUnavailable:
+            log.warning("봇 확인 서버에 닿지 못함(action=%s, fail_open=%s)", action, fail_open)
+            if fail_open:
+                return
+            raise DomainError(
+                "CAPTCHA_UNAVAILABLE",
+                "지금은 보안 확인을 할 수 없습니다. 잠시 후 다시 시도하세요.",
+                503,
+            ) from None
+        if not ok:
+            raise DomainError(
+                "CAPTCHA_FAILED",
+                "보안 확인에 실패했습니다. 확인이 끝난 뒤 다시 시도하거나 페이지를 새로고침하세요.",
+                403,
+            )
+
+    return check

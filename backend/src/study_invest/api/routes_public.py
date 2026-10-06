@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,16 @@ from ..params import INITIAL_CASH, MARKET_CLOSE, MARKET_OPEN
 from ..services import auth, email_verification, market, news, ranking
 from ..services.common import DomainError, current_prices, get_params, latest_opened_day
 from . import schemas, views
-from .deps import AppState, NowDep, OptionalMeDep, RealNowDep, SessionDep, StateDep, TokenDep
+from .deps import (
+    AppState,
+    NowDep,
+    OptionalMeDep,
+    RealNowDep,
+    SessionDep,
+    StateDep,
+    TokenDep,
+    require_captcha,
+)
 from .email_codes import consume_code
 
 log = logging.getLogger("study_invest")
@@ -106,6 +115,7 @@ def event_info(state: StateDep, s: SessionDep, now: NowDep) -> schemas.EventInfo
         signup=schemas.SignupInfo(
             email_verification=state.settings.email_verification,
             verified_only_trading=params.verified_only_trading,
+            turnstile_site_key=state.captcha.site_key,
         ),
     )
 
@@ -233,7 +243,12 @@ def send_code(
     )
 
 
-@router.post("/auth/email-code", response_model=schemas.EmailCodeResponse, status_code=202)
+@router.post(
+    "/auth/email-code",
+    response_model=schemas.EmailCodeResponse,
+    status_code=202,
+    dependencies=[Depends(require_captcha("register"))],
+)
 def request_email_code(
     body: schemas.EmailCodeRequest,
     state: StateDep,
@@ -246,7 +261,12 @@ def request_email_code(
     return send_code(state, s, body.email, real_now, CodePurpose.VERIFY)
 
 
-@router.post("/auth/register", response_model=schemas.AuthResponse, status_code=201)
+@router.post(
+    "/auth/register",
+    response_model=schemas.AuthResponse,
+    status_code=201,
+    dependencies=[Depends(require_captcha("register"))],
+)
 def register(
     body: schemas.RegisterRequest, state: StateDep, s: SessionDep, now: NowDep, real_now: RealNowDep
 ) -> schemas.AuthResponse:
@@ -272,7 +292,12 @@ def register(
     )
 
 
-@router.post("/auth/password-reset/code", response_model=schemas.EmailCodeResponse, status_code=202)
+@router.post(
+    "/auth/password-reset/code",
+    response_model=schemas.EmailCodeResponse,
+    status_code=202,
+    dependencies=[Depends(require_captcha("password_reset"))],
+)
 def request_password_reset_code(
     body: schemas.PasswordResetCodeRequest, state: StateDep, s: SessionDep, real_now: RealNowDep
 ) -> schemas.EmailCodeResponse:
@@ -320,7 +345,11 @@ def reset_password(
     )
 
 
-@router.post("/auth/login", response_model=schemas.AuthResponse)
+@router.post(
+    "/auth/login",
+    response_model=schemas.AuthResponse,
+    dependencies=[Depends(require_captcha("login", fail_open=True))],
+)
 def login(body: schemas.LoginRequest, s: SessionDep, now: NowDep) -> schemas.AuthResponse:
     participant, token = auth.login(s, body.identity, body.password, now)
     s.commit()

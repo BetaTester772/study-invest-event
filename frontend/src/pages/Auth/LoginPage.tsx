@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ApiError } from '../../api';
+import { ApiError, publicApi, useApi } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
 import { useScrollToFormError } from '../../lib/useScrollToFormError';
+import { useTurnstile } from '../../lib/turnstile';
 
 export function LoginPage() {
   const { login, status } = useAuth();
@@ -16,6 +17,8 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [formRef, scrollToError] = useScrollToFormError(error);
   const [submitting, setSubmitting] = useState(false);
+  const event = useApi(() => publicApi.event(), []);
+  const turnstile = useTurnstile(event.data?.signup.turnstile_site_key, 'login');
 
   if (status === 'authenticated' && !submitting) return <Navigate to={from} replace />;
 
@@ -29,7 +32,7 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const p = await login(identity.trim(), password);
+      const p = await login(identity.trim(), password, await turnstile.take());
       toast.success(`${p.nickname}님, 반가워요`);
       navigate(from, { replace: true });
     } catch (err) {
@@ -68,6 +71,7 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            {turnstile.widget}
             <Button type="submit" size="lg" fullWidth loading={submitting}>
               로그인하기
             </Button>

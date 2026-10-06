@@ -115,6 +115,7 @@ study-invest purge-personal-info             # 이벤트 종료 후 학교 메�
 | `STUDY_INVEST_SMTP_USERNAME` / `_SMTP_PASSWORD` | (없음) | SMTP 로그인. Gmail은 2단계 인증 후 만든 **앱 비밀번호** |
 | `STUDY_INVEST_MAIL_FROM` | (= USERNAME) | 보내는 주소. Gmail SMTP는 로그인한 계정 주소여야 한다 |
 | `STUDY_INVEST_MAIL_DAILY_LIMIT` | `400` | 최근 24시간 인증 메일 상한(넘으면 503). 발송 계정 한도보다 낮게(Gmail 개인 계정 약 500통/일) |
+| `STUDY_INVEST_TURNSTILE_SITE_KEY` / `STUDY_INVEST_TURNSTILE_SECRET_KEY` | (빈 값) | Cloudflare Turnstile 키. 둘 다 있으면 로그인·참가 신청·인증 코드 요청에 봇 확인. 비우면 끔(하나만 있으면 시작 오류). Cloudflare 프록시 없이 DNS만 써도 된다 |
 
 ### 프론트엔드
 

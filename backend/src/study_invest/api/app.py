@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from ..captcha import CaptchaVerifier, make_captcha
 from ..config import Settings
 from ..db import DatabasePools, create_schema, make_session_factory
 from ..event_calendar import EventCalendar, seconds_until_next_batch
@@ -73,6 +74,7 @@ def create_app(
     rng: random.Random | None = None,
     calendar: EventCalendar | None = None,
     mailer: Mailer | None = None,
+    captcha: CaptchaVerifier | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     pools = DatabasePools.create(settings)
@@ -87,6 +89,7 @@ def create_app(
         clock=clock or settings.make_clock(),
         rng=rng or random.SystemRandom(),
         mailer=mailer or make_mailer(settings),
+        captcha=captcha or make_captcha(settings),
         time_scale=settings.time_scale,
     )
 

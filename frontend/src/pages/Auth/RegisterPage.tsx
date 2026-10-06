@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ApiError, publicApi, useApi, type ProfileFields as ProfileFieldsValue } from '../../api';
+import { ApiError, authApi, publicApi, useApi, type ProfileFields as ProfileFieldsValue } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Alert, Button, Card, Container, PageHeader, Stack, Text, TextField, useToast } from '../../components/ui';
 import { EMPTY_PROFILE, ProfileFields, profileErrors, trimProfile, type ProfileErrors } from './ProfileFields';
 import { CODE_ERRORS, PrivacyConsent, SchoolEmailFields, codeError, schoolEmailError } from './SchoolEmailFields';
 import { PASSWORD_HINT, WEAK_PASSWORD_MESSAGE } from './password';
 import { useScrollToFormError } from '../../lib/useScrollToFormError';
+import { useTurnstile } from '../../lib/turnstile';
 
 interface Errors extends ProfileErrors {
   email?: string;
@@ -47,6 +48,8 @@ export function RegisterPage() {
   const event = useApi(() => publicApi.event(), []);
   // 설정을 못 받으면 코드 없는 가입 폼(기본값)을 보여 준다. 서버가 코드를 요구하면 CODE_REQUIRED로 알려 준다.
   const requireCode = event.data?.signup.email_verification ?? false;
+  // 코드 요청과 참가 신청 모두 action 'register'. 토큰은 한 번 쓰면 위젯이 새로 받는다.
+  const turnstile = useTurnstile(event.data?.signup.turnstile_site_key, 'register');
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -74,14 +77,17 @@ export function RegisterPage() {
     if (Object.keys(v).length > 0) return;
     setSubmitting(true);
     try {
-      await register({
-        email: form.email.trim(),
-        ...(requireCode ? { code: form.code } : {}),
-        ...trimProfile(form),
-        nickname: form.nickname.trim(),
-        password: form.password,
-        privacy_consent: form.consent,
-      });
+      await register(
+        {
+          email: form.email.trim(),
+          ...(requireCode ? { code: form.code } : {}),
+          ...trimProfile(form),
+          nickname: form.nickname.trim(),
+          password: form.password,
+          privacy_consent: form.consent,
+        },
+        await turnstile.take(),
+      );
       toast.success('참가 신청을 마쳤어요', '1,000,000원으로 시작해요. 첫 종목을 골라 보세요.');
       navigate(from, { replace: true });
     } catch (err) {
@@ -117,6 +123,7 @@ export function RegisterPage() {
             {errors.form && <Alert tone="danger">{errors.form}</Alert>}
             <SchoolEmailFields
               withCode={requireCode}
+              send={async (address) => authApi.requestEmailCode({ email: address }, await turnstile.take())}
               hint={
                 requireCode
                   ? undefined
@@ -130,6 +137,8 @@ export function RegisterPage() {
               codeError={errors.code}
               onEmailError={(message) => setErrors((prev) => ({ ...prev, email: message }))}
             />
+            {/* 확인이 필요할 때만 보인다. 코드 받기 버튼을 누른 사람이 바로 볼 수 있는 자리에 둔다. */}
+            {requireCode && turnstile.widget}
             <ProfileFields
               value={{ name: form.name, student_id: form.student_id, department: form.department }}
               onChange={(p) => setForm((f) => ({ ...f, ...p }))}
@@ -164,6 +173,7 @@ export function RegisterPage() {
               required
             />
             <PrivacyConsent checked={form.consent} onChange={(v) => set('consent', v)} error={errors.consent} />
+            {!requireCode && turnstile.widget}
             <Button type="submit" size="lg" fullWidth loading={submitting}>
               참가 신청하기
             </Button>

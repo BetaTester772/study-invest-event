@@ -13,17 +13,19 @@ v0.2 (2026-10-01, 규격서 v0.4): 인증 보상을 현금으로(`reward_coin_qu
 - 날짜는 `YYYY-MM-DD`, 시각은 KST 오프셋이 붙은 ISO 8601(`2026-10-06T09:00:00+09:00`).
 - 오류 응답: `{"detail": {"code": "<ERROR_CODE>", "message": "<한국어 설명>"}}`. FastAPI 검증 오류(422)는 기본 형식.
 - 참가자 인증: `Authorization: Bearer <token>`. 관리자 인증: `X-Admin-Key: <key>`.
+- 봇 확인(Cloudflare Turnstile): `EventInfo.signup.turnstile_site_key`가 있으면 로그인·참가 신청·코드 요청(`/api/auth/login`, `/api/auth/register`, `/api/auth/email-code`, `/api/auth/password-reset/code`)에 위젯 토큰을 `X-Turnstile-Token: <token>`으로 보낸다. 위젯 action은 로그인 `login`, 참가 신청과 그 코드 요청 `register`, 재설정 코드 요청 `password_reset`. 토큰은 한 번만 쓸 수 있다(실패한 요청에 쓴 토큰도 다시 못 쓴다). 키가 없으면(null) 확인하지 않는다.
 
 | HTTP | code 예 | 의미 |
 |---|---|---|
 | 401 | `UNAUTHORIZED` | 토큰/관리자 키 없음·불일치 |
 | 400 | `INVALID_CODE`, `CODE_EXPIRED`, `CODE_ATTEMPTS_EXCEEDED` | 메일 인증 코드가 틀림·만료(10분)·5번 틀림 |
-| 403 | `DISQUALIFIED`, `VERIFICATION_REQUIRED` | 실격 참가자 / '인증된 참가자만 거래'가 켜진 동안 미인증 참가자의 주문 |
+| 403 | `DISQUALIFIED`, `VERIFICATION_REQUIRED`, `CAPTCHA_FAILED` | 실격 참가자 / '인증된 참가자만 거래'가 켜진 동안 미인증 참가자의 주문 / 봇 확인 토큰 없음·무효·재사용·action 불일치 |
 | 404 | `NOT_FOUND` | 리소스 없음 |
 | 409 | `CONFLICT` 계열 | 중복 등록, 중복 인증, 배치 순서 위반, 동시 요청 충돌(`CONFLICT`) |
 | 429 | `CODE_RECENTLY_SENT`, `TOO_MANY_CODES` | 인증 코드 재요청 60초 대기 / 메일 하나에 24시간 5통 초과 |
 | 413 | `PAYLOAD_TOO_LARGE` | 요청 본문이 한도 초과(업로드 10MB+여유, 그 외 1MiB). 본문을 받기 전에 거부 |
 | 503 | `DB_BUSY`, `DB_UNAVAILABLE` | api 연결 풀이 가득 참(10초 대기 초과) / DB 연결 불가. `Retry-After: 2` |
+| 503 | `CAPTCHA_UNAVAILABLE` | Cloudflare siteverify에 닿지 못함. 참가 신청·코드 요청만 거절하고 로그인은 통과시킨다 |
 | 503 | `MAIL_SEND_FAILED`, `MAIL_BUSY`, `MAIL_QUOTA_EXCEEDED`, `MAIL_NOT_CONFIGURED` | 인증 메일 발송 실패(코드 기록은 남아 60초 뒤 재요청) / 동시 발송이 꽉 참(코드를 만들기 전 거절, 바로 재요청 가능) / 24시간 발송 상한(`STUDY_INVEST_MAIL_DAILY_LIMIT`) 도달 / SMTP 미설정(코드를 만들기 전 거절) |
 
 ## 공용 타입
@@ -180,6 +182,7 @@ interface EventInfo {
   signup: {
     email_verification: boolean;     // true면 가입 때 학교 메일 코드 필수(STUDY_INVEST_EMAIL_VERIFICATION). 기본 false
     verified_only_trading: boolean;  // true면 인증된 참가자만 주문(관리자 스위치). 기본 false
+    turnstile_site_key: string | null; // Cloudflare Turnstile 사이트 키(STUDY_INVEST_TURNSTILE_SITE_KEY). null이면 봇 확인 없음
   };
 }
 
