@@ -138,7 +138,11 @@ TokenDep = Annotated[str | None, Depends(bearer_token)]
 
 def optional_participant(s: SessionDep, token: TokenDep) -> Participant | None:
     # DB 조회 → 동기 def(스레드풀)
-    participant = auth.participant_by_token(s, token) if token else None
+    if not token:
+        return None
+    # 만료·폐기된 토큰의 요청도 같은 세션 ID로 남아 "왜 갑자기 401인지" 추적할 수 있다.
+    bind(session_id=auth.session_id(token))
+    participant = auth.participant_by_token(s, token)
     if participant is not None:
         bind(participant_id=participant.id)
     return participant

@@ -7,7 +7,7 @@ import logging
 from collections.abc import Iterator
 
 import pytest
-from conftest import ADMIN_KEY, email_code, register_with
+from conftest import ADMIN_KEY, email_code, profile_for, register_with
 from fastapi.testclient import TestClient
 
 from study_invest.config import Settings
@@ -198,3 +198,35 @@ def test_code_errors_log_attempts_and_reason(client: TestClient, logs: ListHandl
     assert ctx["attempts"] == 1
     assert ctx["remaining_attempts"] >= 0
     assert email not in json.dumps(logs.lines, ensure_ascii=False)
+
+
+def test_session_id_ties_login_to_later_requests_and_logout(
+    client: TestClient, logs: ListHandler
+) -> None:
+    email = "sess@skku.edu"
+    r = register_with(client, email, "세션", code=email_code(client, email))
+    assert r.status_code == 201, r.text
+    token = r.json()["token"]
+    sid = find(logs, "register:")["session_id"]
+    assert isinstance(sid, str) and len(sid) == 12
+    assert token not in json.dumps(logs.lines) and sid not in token
+
+    auth = {"Authorization": f"Bearer {token}"}
+    client.get("/api/me", headers=auth)
+    assert find(logs, "GET /api/me")["session_id"] == sid
+    client.post("/api/auth/logout", headers=auth)
+    assert find(logs, "logout")["session_id"] == sid
+
+    # 폐기된 토큰의 요청도 같은 세션 ID로 남고, 참가자는 붙지 않는다.
+    stale_count = len(logs.lines)
+    assert client.get("/api/me", headers=auth).status_code == 401
+    stale = next(ln for ln in logs.lines[stale_count:] if "GET /api/me" in str(ln["message"]))
+    assert stale["session_id"] == sid and "participant_id" not in stale
+
+    # 다시 로그인하면 새 세션 ID가 발급된다.
+    again = client.post(
+        "/api/auth/login",
+        json={"identity": profile_for(email)["student_id"], "password": "tiger-moon-river-42"},
+    )
+    assert again.status_code == 200, again.text
+    assert find(logs, "login")["session_id"] != sid

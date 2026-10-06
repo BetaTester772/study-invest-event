@@ -18,7 +18,8 @@ LOGGER_NAME = "study_invest"
 request_ctx: contextvars.ContextVar[dict[str, object] | None] = contextvars.ContextVar(
     "study_invest_request_ctx", default=None
 )
-"""현재 요청의 가변 컨텍스트(request_id, participant_id, admin). 스레드풀에서도 같은 dict를 본다."""
+"""현재 요청의 가변 컨텍스트(request_id, participant_id, session_id, admin).
+스레드풀에서도 같은 dict를 본다."""
 
 
 def bind(**values: object) -> None:
@@ -33,6 +34,7 @@ class ContextFilter(logging.Filter):
         ctx = request_ctx.get() or {}
         record.request_id = ctx.get("request_id", "-")
         record.participant_id = ctx.get("participant_id")
+        record.session_id = ctx.get("session_id")
         record.admin = bool(ctx.get("admin"))
         return True
 
@@ -47,6 +49,9 @@ class TextFormatter(logging.Formatter):
         participant_id = getattr(record, "participant_id", None)
         if participant_id is not None:
             extra.append(f"participant={participant_id}")
+        session_id = getattr(record, "session_id", None)
+        if session_id is not None:
+            extra.append(f"session={session_id}")
         if getattr(record, "admin", False):
             extra.append("admin")
         text = f"{text} ({', '.join(extra)})" if extra else text
@@ -68,6 +73,9 @@ class JsonFormatter(logging.Formatter):
         participant_id = getattr(record, "participant_id", None)
         if participant_id is not None:
             data["participant_id"] = participant_id
+        session_id = getattr(record, "session_id", None)
+        if session_id is not None:
+            data["session_id"] = session_id
         if getattr(record, "admin", False):
             data["admin"] = True
         detail = getattr(record, "detail", None)

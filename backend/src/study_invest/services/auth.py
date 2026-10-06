@@ -56,6 +56,12 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def session_id(token: str) -> str:
+    """로그 추적용 로그인 세션 ID. 토큰 해시(DB 키)의 앞 12자라 토큰을 복원할 수 없고, 같은
+    토큰이면 항상 같다. 로그인할 때 발급 로그와 이후 모든 요청 로그가 이 값으로 이어진다."""
+    return _token_hash(token)[:12]
+
+
 def issue_token(s: Session, participant: Participant, now: datetime) -> str:
     token = secrets.token_urlsafe(32)
     s.add(AuthSession(token_hash=_token_hash(token), participant_id=participant.id, created_at=now))
