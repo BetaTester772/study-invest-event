@@ -168,6 +168,7 @@ export function ResetPasswordPage() {
                 code={code}
                 onCodeChange={setCode}
                 codeError={errors.code}
+                captchaWaiting={turnstile.waiting}
               />
               {turnstile.widget}
               <Button type="submit" size="lg" fullWidth loading={submitting}>

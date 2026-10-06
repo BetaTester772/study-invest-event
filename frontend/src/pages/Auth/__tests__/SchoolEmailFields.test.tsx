@@ -158,6 +158,13 @@ describe('SchoolEmailFields', () => {
     expect(screen.getByRole('button', { name: /초 뒤에 다시/ })).toBeDisabled();
   });
 
+  it('shows that it waits for the security check instead of a sending spinner', () => {
+    render(<CodeSender request={vi.fn()} code="" onCodeChange={() => {}} captchaWaiting />);
+    const button = screen.getByRole('button', { name: '보안 확인을 기다리는 중' });
+    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('aria-busy', 'true');
+  });
+
   it('does not request when validation fails and shows request errors next to the field', async () => {
     const request = vi.fn().mockRejectedValue(new ApiError(404, 'ACCOUNT_NOT_FOUND', '없는 학번'));
     const onError = vi.fn().mockReturnValue(true);
