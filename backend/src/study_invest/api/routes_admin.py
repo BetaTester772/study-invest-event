@@ -222,8 +222,11 @@ def read_params(s: SessionDep) -> schemas.Params:
 def update_params(body: schemas.Params, s: SessionDep, now: NowDep) -> schemas.Params:
     params_lock(s)
     values = body.model_dump()
+    current = get_params(s)
     if values["verified_only_trading"] is None:  # 파라미터 폼은 이 스위치를 보내지 않는다
-        values["verified_only_trading"] = get_params(s).verified_only_trading
+        values["verified_only_trading"] = current.verified_only_trading
+    if values["stock_rate_noise"] is None:  # 이 값을 모르는 이전 화면이 저장해도 유지
+        values["stock_rate_noise"] = current.stock_rate_noise
     try:
         params = EventParams.from_dict(values)
     except ValueError as exc:

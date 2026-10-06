@@ -78,6 +78,13 @@ const STOCK_COLUMNS: Column<SettlementStock>[] = [
   },
   { key: 'rate', header: '쏠림 변동률', numeric: true, render: (s) => <PriceChange rate={s.rate} /> },
   {
+    key: 'rate_noise',
+    header: '변동률 잡음',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => (s.rate_noise == null ? '—' : <PriceChange rate={s.rate_noise} />),
+  },
+  {
     key: 'news',
     header: '뉴스',
     numeric: true,

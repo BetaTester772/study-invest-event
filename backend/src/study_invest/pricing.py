@@ -10,6 +10,7 @@ import random
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from statistics import NormalDist
 from typing import Literal
 
 from .money import PRICE_UNIT, exact, round_half_up
@@ -79,6 +80,11 @@ def draw_coin(
 EULER_GAMMA = 0.5772156649015329
 """오일러 상수 γ. 표준 Gumbel(0, 1)의 평균이므로, 빼면 평균 0인 잡음이 된다."""
 
+RATE_NOISE_CLIP = 3.0
+"""종목별 변동률 잡음을 자르는 범위(±3σ)."""
+_STANDARD_NORMAL = NormalDist()
+_RATE_NOISE_U = (_STANDARD_NORMAL.cdf(-RATE_NOISE_CLIP), _STANDARD_NORMAL.cdf(RATE_NOISE_CLIP))
+
 
 @dataclass(frozen=True)
 class StockMove:
@@ -92,11 +98,13 @@ class StockMove:
     concentration: Fraction | None
     """쏠림 지수 rᵢ = n·Bᵢ″ / B_total (Bᵢ″ = Bᵢ′ × 잡음 배수). B_total = 0이면 None."""
     rate: Fraction
-    """쏠림 변동률(±30% 클램프 뒤). 뉴스 효과는 포함하지 않는다."""
+    """쏠림 변동률(±30% 클램프 뒤). 변동률 잡음·뉴스 효과는 포함하지 않는다."""
+    rate_noise: float | None
+    """종목별 변동률 잡음 εᵢ. 잡음을 쓰지 않았으면 None."""
     news_rate: Fraction | None
     """그날 호재·악재 효과(부호 포함). 뉴스가 없으면 None."""
     total_rate: Fraction
-    """실제 적용 변동률 = (1 + rate)(1 + news_rate) − 1."""
+    """실제 적용 변동률 = (1 + rate)(1 + rate_noise)(1 + news_rate) − 1."""
     old_price: int
     new_price: int
 
@@ -150,6 +158,24 @@ def draw_stock_noise(
     return {code: math.exp(tau * (gumbel(rng) - EULER_GAMMA)) for code in codes}
 
 
+def draw_stock_rate_noise(
+    codes: Iterable[str], params: EventParams, rng: random.Random
+) -> dict[str, float] | None:
+    """종목별 변동률 잡음 εᵢ = σ·Φ⁻¹(Uᵢ)를 ±3σ에서 잘라 뽑는다. σ = 0이면 None(잡음 없음).
+
+    매수지분 잡음(draw_stock_noise)은 지분만 다시 나눠 4종목 변동률의 합이 0으로 남지만, 이 잡음은
+    종목마다 따로 곱해지므로 시장 전체가 오르거나 내리는 날이 생긴다. 균등난수 하나로 만들어
+    Uᵢ = 0.5이면 εᵢ = 0이다.
+    """
+    sigma = params.stock_rate_noise
+    if sigma == 0:
+        return None
+    lo, hi = _RATE_NOISE_U
+    return {
+        code: sigma * _STANDARD_NORMAL.inv_cdf(min(hi, max(lo, rng.random()))) for code in codes
+    }
+
+
 def stock_rate(concentration: Fraction, sensitivity: float) -> Fraction:
     """변동률 = clamp(계수 × (1 − rᵢ), −30%, +30%)."""
     raw = exact(sensitivity) * (1 - concentration)
@@ -161,11 +187,19 @@ def next_stock_price(price: int, rate: Fraction, min_price: int) -> int:
     return max(min_price, min(round_half_up(Fraction(price) * (1 + rate)), PRICE_MAX))
 
 
-def combined_rate(rate: Fraction, news_rate: Fraction | None) -> Fraction:
-    """쏠림 변동률에 뉴스 효과를 곱으로 얹는다: (1 + rate)(1 + news) − 1. ±30%는 쏠림에만."""
-    if news_rate is None:
-        return rate
-    return (1 + rate) * (1 + news_rate) - 1
+def combined_rate(
+    rate: Fraction, news_rate: Fraction | None, rate_noise: float | None = None
+) -> Fraction:
+    """쏠림 변동률에 변동률 잡음·뉴스 효과를 곱으로 얹는다: (1 + rate)(1 + ε)(1 + news) − 1.
+
+    ±30% 클램프는 쏠림 변동률에만 적용한다.
+    """
+    total = 1 + rate
+    if rate_noise is not None:
+        total *= 1 + exact(rate_noise)
+    if news_rate is not None:
+        total *= 1 + news_rate
+    return total - 1
 
 
 def settle_stocks(
@@ -174,12 +208,14 @@ def settle_stocks(
     params: EventParams,
     noise: Mapping[str, float] | None = None,
     news: Mapping[str, Fraction] | None = None,
+    rate_noise: Mapping[str, float] | None = None,
 ) -> dict[str, StockMove]:
     """주식 전 종목의 다음 시작가를 산출한다. 기준선은 종목 수(4)로 나눈 평균이다.
 
     noise는 draw_stock_noise()가 뽑은 종목별 잡음 배수다. None이면 잡음 없이(τ = 0과 같게)
     당일 매수만으로 결정한다. 호출자가 뽑아 넘기므로 정산 로그에 그대로 남길 수 있다.
     news는 그날 호재·악재의 부호 있는 효과(종목 → 변동률)다. 쏠림 변동률(클램프 뒤)에 곱으로 얹는다.
+    rate_noise는 draw_stock_rate_noise()가 뽑은 종목별 변동률 잡음이다. None이면 없음.
     """
     if not prices:
         return {}
@@ -198,6 +234,12 @@ def settle_stocks(
             raise ValueError(f"noise missing for stocks: {sorted(missing)}")
         if any(not (math.isfinite(f) and f > 0) for f in noise.values()):
             raise ValueError("noise factors must be positive finite numbers")
+    if rate_noise is not None:
+        missing = set(prices) - set(rate_noise)
+        if missing:
+            raise ValueError(f"rate noise missing for stocks: {sorted(missing)}")
+        if any(not (math.isfinite(e) and e > -1) for e in rate_noise.values()):
+            raise ValueError("rate noise must be finite numbers greater than -1")
     adjusted = {code: buy_amounts.get(code, 0) + params.virtual_liquidity for code in prices}
     if any(v < 0 for v in adjusted.values()):
         raise ValueError("buy amounts must be non-negative")
@@ -216,7 +258,8 @@ def settle_stocks(
             concentration = n * weights[code] / total
             rate = stock_rate(concentration, params.stock_sensitivity)
         news_rate = news.get(code) if news else None
-        total_rate = combined_rate(rate, news_rate)
+        eps = None if rate_noise is None else rate_noise[code]
+        total_rate = combined_rate(rate, news_rate, eps)
         moves[code] = StockMove(
             code=code,
             buy_amount=buy_amounts.get(code, 0),
@@ -224,6 +267,7 @@ def settle_stocks(
             noise_factor=None if noise is None else noise[code],
             concentration=concentration,
             rate=rate,
+            rate_noise=eps,
             news_rate=news_rate,
             total_rate=total_rate,
             old_price=price,
