@@ -94,6 +94,8 @@ export interface SignupInfo {
   email_verification: boolean;
   /** true면 인증된 참가자만 주문할 수 있다(관리자가 부정 대응으로 켠다). */
   verified_only_trading: boolean;
+  /** Cloudflare Turnstile 사이트 키. 있으면 로그인·참가 신청·코드 요청에 봇 확인 토큰이 필요하다. */
+  turnstile_site_key?: string | null;
 }
 
 export interface HoldingView {

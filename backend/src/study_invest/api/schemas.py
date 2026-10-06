@@ -97,6 +97,9 @@ class SignupInfo(Schema):
     """true면 가입할 때 학교 메일 인증 코드가 필요하다. false면 메일 주소만 받고 미인증으로 가입."""
     verified_only_trading: bool
     """true면 인증된 참가자만 주문할 수 있다(관리자가 부정 대응으로 켠다)."""
+    turnstile_site_key: str | None = None
+    """Cloudflare Turnstile 사이트 키. 있으면 로그인·참가 신청·코드 요청에 봇 확인 토큰
+    (`X-Turnstile-Token` 헤더)이 필요하다. null이면 봇 확인을 하지 않는다."""
 
 
 class EventInfo(Schema):

@@ -123,6 +123,10 @@ class Settings:
     """보내는 주소. 비우면 smtp_username. Gmail SMTP는 로그인한 계정 주소여야 한다."""
     mail_daily_limit: int = 400
     """최근 24시간 동안 보낼 인증 메일 상한. 넘으면 503. 발송 계정의 하루 한도보다 낮게 둔다."""
+    turnstile_site_key: str = ""
+    turnstile_secret_key: str = field(default="", repr=False)
+    """Cloudflare Turnstile 키. 둘 다 있으면 로그인·참가 신청·코드 요청에서 봇 확인을 한다.
+    둘 다 비우면(기본) 확인하지 않는다. 하나만 있으면 시작할 때 오류."""
     qa_unlimited: bool = False
     """켜면 이벤트 종료일(event_end)을 무시하고 시작일 이후 끝없이 운영한다(QA 무제한 모드).
     공시·정산·회차가 계속 이어져 가격 추세를 길게 볼 수 있다. 테스트·QA 서버에서만 켠다."""
@@ -173,6 +177,8 @@ class Settings:
             mail_daily_limit=int(
                 env.get("STUDY_INVEST_MAIL_DAILY_LIMIT", "").strip() or cls.mail_daily_limit
             ),
+            turnstile_site_key=env.get("STUDY_INVEST_TURNSTILE_SITE_KEY", "").strip(),
+            turnstile_secret_key=env.get("STUDY_INVEST_TURNSTILE_SECRET_KEY", "").strip(),
             qa_unlimited=env.get("STUDY_INVEST_QA_UNLIMITED", "0").lower() in {"1", "true", "on"},
             qa_tools=env.get("STUDY_INVEST_QA_TOOLS", "0").lower() in {"1", "true", "on"},
         )

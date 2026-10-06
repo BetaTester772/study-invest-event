@@ -726,7 +726,11 @@ class TestSignupWithoutCode:
         )
         assert mailer.sent == []
         info = client.get("/api/event").json()["signup"]
-        assert info == {"email_verification": False, "verified_only_trading": False}
+        assert info == {
+            "email_verification": False,
+            "verified_only_trading": False,
+            "turnstile_site_key": None,
+        }
         # 메일은 여전히 학교 메일만, 1인 1계정
         r = client.post(
             "/api/auth/register",
