@@ -32,7 +32,7 @@ from ..params import KST, MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
 from ..pricing import (
     draw_coin,
     draw_stock_noise,
-    draw_stock_rate_noise,
+    draw_stock_rate_factor,
     is_calm_round,
     settle_stocks,
 )
@@ -189,15 +189,15 @@ def settle_day(
     if calendar.round_of(effective) is not None:
         news.create_random_news(s, effective, now, params, rng)
     applied_news = news.news_on(s, effective)
-    # 종목별 변동률 잡음은 뉴스 뒤에 뽑는다(기존 코인·지분 잡음·뉴스 난수의 순서를 바꾸지 않는다).
-    rate_noise = draw_stock_rate_noise(stock_codes, params, rng)
+    # 종목별 변동 배율은 뉴스 뒤에 뽑는다(기존 코인·지분 잡음·뉴스 난수의 순서를 바꾸지 않는다).
+    rate_factor = draw_stock_rate_factor(stock_codes, params, rng)
     stock_moves = settle_stocks(
         {code: prices[code] for code in stock_codes},
         {c: a for c, a in amounts.items() if c in stock_codes},
         params,
         noise=noise,
         news=news.news_rates(applied_news),
-        rate_noise=rate_noise,
+        rate_factor=rate_factor,
     )
 
     new_prices = {code: m.new_price for code, m in stock_moves.items()}
@@ -231,8 +231,8 @@ def settle_day(
             "adjusted_amount": m.adjusted_amount,
             "noise_factor": m.noise_factor,
             "concentration": None if m.concentration is None else float(m.concentration),
+            "rate_factor": m.rate_factor,
             "rate": float(m.rate),
-            "rate_noise": m.rate_noise,
             "news_rate": None if m.news_rate is None else float(m.news_rate),
             "total_rate": float(m.total_rate),
             "old_price": m.old_price,

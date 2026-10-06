@@ -266,7 +266,7 @@ interface AdminCertification extends Certification {
 }
 // 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_cash 0~100,000,000,
 // virtual_liquidity 0~10^15, coin_cap·coin_calm_cap (0, 10], coin_floor·coin_calm_floor (-1, 0),
-// coin_calm_rounds 0~100, stock_noise_scale 0~2, stock_rate_noise 0~0.1, news_probability 0~1, news_rate_min·max (0, 1],
+// coin_calm_rounds 0~100, stock_noise_scale 0~2, stock_rate_jitter 0~0.5, news_probability 0~1, news_rate_min·max (0, 1],
 // 실수 파라미터는 유한값만(NaN·Infinity는 422).
 interface Params {
   coin_p_up: number; coin_up_exp: number; coin_down_exp: number;
@@ -275,7 +275,7 @@ interface Params {
   coin_calm_cap: number; coin_calm_floor: number;   // 안정기 상·하한(0.3, -0.1)
   stock_sensitivity: number; stock_min_price: number; virtual_liquidity: number;
   stock_noise_scale: number;             // 매수지분 Gumbel 잡음 세기 τ(기본 0.1, 0이면 잡음 없음)
-  stock_rate_noise?: number | null;      // 종목별 변동률 잡음 σ(기본 0.02, 0이면 없음). PUT에서 생략·null이면 현재 값 유지
+  stock_rate_jitter?: number | null;     // 종목별 변동 배율 폭 w(기본 0.1 → 0.9~1.1배, 0이면 없음). PUT에서 생략·null이면 현재 값 유지
   news_probability: number;              // 정산 때 다음 운영일 무작위 뉴스 확률(기본 0.5)
   news_rate_min: number; news_rate_max: number;   // 무작위 뉴스 효과 범위(기본 0.1~0.2)
   daily_buy_limit_ratio: number;
@@ -288,10 +288,11 @@ interface SettlementLog {
   stocks: { code: string; buy_amount: number; adjusted_amount: number;
             noise_factor: number | null;   // 매수지분 잡음 배수 exp(τ·(G−γ)). τ=0·도입 전 기록은 null
             concentration: number | null;
-            rate: number;                  // 쏠림 변동률(클램프 뒤, 변동률 잡음·뉴스 제외)
-            rate_noise: number | null;     // 종목별 변동률 잡음 ε. σ=0·도입 전 기록은 null
+            rate_factor?: number | null;   // 종목별 변동 배율 k(클램프 전에 곱함). w=0·도입 전 기록은 null
+            rate: number;                  // 쏠림 변동률(배율·클램프 뒤, 뉴스 제외)
+            rate_noise?: number | null;    // 10/6 정산만: 당시 방식의 변동률 잡음 ε(적용률에 1+ε로 곱함)
             news_rate: number | null;      // 그날 뉴스 효과(부호 포함). 없으면 null
-            total_rate: number | null;     // 적용 변동률 (1+rate)(1+rate_noise)(1+news_rate)−1. 뉴스 도입 전 기록은 null
+            total_rate: number | null;     // 적용 변동률 (1+rate)(1+news_rate)−1. 뉴스 도입 전 기록은 null
             old_price: number; new_price: number }[];
   coin: { p: number; x: number; direction: "up" | "down"; rate: number; old_price: number; new_price: number;
           calm: boolean };   // 초반 안정기 상·하한으로 뽑았는지(v0.4 전 기록은 false)

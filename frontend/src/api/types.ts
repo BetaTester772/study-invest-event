@@ -393,8 +393,8 @@ export interface Params {
   virtual_liquidity: number;
   /** 매수지분 잡음 세기 τ (0~2). 0이면 잡음 없음. */
   stock_noise_scale: number;
-  /** 종목별 변동률 잡음 σ (0~0.1). 0이면 잡음 없음. */
-  stock_rate_noise: number;
+  /** 종목별 변동 배율 폭 w (0~0.5). 쏠림 변동률에 U(1−w, 1+w) 배율을 곱한다. 0이면 없음. */
+  stock_rate_jitter: number;
   /** 정산 때 다음 운영일 무작위 뉴스가 생길 확률(0~1). */
   news_probability: number;
   /** 무작위 뉴스 효과 크기 범위(0~1]. */
@@ -418,13 +418,15 @@ export interface SettlementStock {
   /** Gumbel noise multiplier on the buy share; null when noise is off or for older logs. */
   noise_factor: number | null;
   concentration: number | null;
-  /** Crowding rate after the ±30% clamp, before rate noise and news. */
+  /** Per-stock rate multiplier k (applied before the clamp); null when off or for older logs. */
+  rate_factor?: number | null;
+  /** Crowding rate after the multiplier and the ±30% clamp, before news. */
   rate: number;
-  /** Per-stock rate noise ε; null when off or for older logs. */
-  rate_noise: number | null;
+  /** Rate noise ε from the 10/6 settlement only (earlier scheme, multiplied as 1 + ε). */
+  rate_noise?: number | null;
   /** Signed news effect that day; null when there was none. */
   news_rate: number | null;
-  /** Applied rate (1 + rate)(1 + rate_noise)(1 + news_rate) − 1; null for logs older than the news feature. */
+  /** Applied rate (1 + rate)(1 + news_rate) − 1; null for logs older than the news feature. */
   total_rate: number | null;
   old_price: number;
   new_price: number;

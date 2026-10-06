@@ -75,9 +75,9 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
     group: 'stock',
   },
   {
-    key: 'stock_rate_noise',
-    label: '종목별 변동률 잡음 σ',
-    hint: '0~0.1. 종목마다 변동률에 따로 곱해 시장 전체가 오르내리는 날이 생깁니다. 0이면 없음. 기본 0.02 (±2%p 안팎)',
+    key: 'stock_rate_jitter',
+    label: '종목별 변동 배율 폭',
+    hint: '0~0.5. 종목마다 쏠림 변동률에 (1 − 폭)~(1 + 폭)배를 곱합니다. 0이면 없음. 기본 0.1 (0.9~1.1배)',
     kind: 'float',
     group: 'stock',
   },

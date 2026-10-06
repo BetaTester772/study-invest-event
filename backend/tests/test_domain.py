@@ -20,7 +20,7 @@ from study_invest.params import (
     KST,
     REWARD_CASH_MAX,
     STOCK_NOISE_MAX,
-    STOCK_RATE_NOISE_MAX,
+    STOCK_RATE_JITTER_MAX,
     EventParams,
 )
 from study_invest.pricing import (
@@ -30,7 +30,7 @@ from study_invest.pricing import (
     draw_coin,
     draw_news,
     draw_stock_noise,
-    draw_stock_rate_noise,
+    draw_stock_rate_factor,
     gumbel,
     is_calm_round,
     next_coin_price,
@@ -295,8 +295,8 @@ class TestStockNoise:
         assert sd == pytest.approx(tau * math.pi / math.sqrt(6), abs=0.01)
 
 
-class TestStockRateNoise:
-    """03-pricing §2.6: 종목별 변동률 잡음 εᵢ = σ·Φ⁻¹(Uᵢ)(±3σ에서 자름)을 쏠림 변동률에 곱한다."""
+class TestStockRateFactor:
+    """03-pricing §2.6: 종목별 변동 배율 kᵢ ~ U(1 − w, 1 + w)를 쏠림 변동률(클램프 전)에 곱한다."""
 
     buys: ClassVar[dict[str, int]] = TestStockNoise.buys
 
@@ -309,60 +309,65 @@ class TestStockRateNoise:
             return self.u
 
     def test_default_and_range(self) -> None:
-        assert P.stock_rate_noise == 0.02
-        EventParams(stock_rate_noise=0)
-        EventParams(stock_rate_noise=STOCK_RATE_NOISE_MAX)
-        for bad in (-0.01, STOCK_RATE_NOISE_MAX + 0.01, float("nan")):
+        assert P.stock_rate_jitter == 0.10
+        EventParams(stock_rate_jitter=0)
+        EventParams(stock_rate_jitter=STOCK_RATE_JITTER_MAX)
+        for bad in (-0.01, STOCK_RATE_JITTER_MAX + 0.01, float("nan")):
             with pytest.raises(ValueError):
-                EventParams(stock_rate_noise=bad)
+                EventParams(stock_rate_jitter=bad)
 
     def test_draw(self) -> None:
-        off = replace(P, stock_rate_noise=0)
-        assert draw_stock_rate_noise(PRICES, off, random.Random(1)) is None
-        # 균등난수 0.5(테스트 StubRandom 기본값)면 ε = 0 → 기존 정산 결과가 그대로다
-        assert draw_stock_rate_noise(PRICES, P, self.Fixed(0.5)) == dict.fromkeys(PRICES, 0.0)
-        low = draw_stock_rate_noise(PRICES, P, self.Fixed(0.0))  # U=0도 ±3σ에서 잘린다
-        high = draw_stock_rate_noise(PRICES, P, self.Fixed(1.0))
-        assert low is not None and high is not None
-        assert all(v == pytest.approx(-0.06) for v in low.values())
-        assert all(v == pytest.approx(0.06) for v in high.values())
+        off = replace(P, stock_rate_jitter=0)
+        assert draw_stock_rate_factor(PRICES, off, random.Random(1)) is None
+        # 균등난수 0.5(테스트 StubRandom 기본값)면 k = 1 → 기존 정산 결과가 그대로다
+        assert draw_stock_rate_factor(PRICES, P, self.Fixed(0.5)) == dict.fromkeys(PRICES, 1.0)
+        assert draw_stock_rate_factor(PRICES, P, self.Fixed(0.0)) == dict.fromkeys(PRICES, 0.9)
+        high = draw_stock_rate_factor(PRICES, P, self.Fixed(1.0))
+        assert high is not None and all(k == pytest.approx(1.1) for k in high.values())
 
-    def test_statistics(self) -> None:
-        """평균 ≈ 0, 표준편차 ≈ σ × 0.987(±3σ에서 자른 정규분포), 절댓값 ≤ 3σ."""
+    def test_range_in_practice(self) -> None:
         rng = random.Random(2026)
-        values = [
-            v for _ in range(5_000) for v in (draw_stock_rate_noise(PRICES, P, rng) or {}).values()
+        ks = [
+            k for _ in range(5_000) for k in (draw_stock_rate_factor(PRICES, P, rng) or {}).values()
         ]
-        mean = sum(values) / len(values)
-        sd = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
-        assert abs(mean) < 0.001
-        assert sd == pytest.approx(0.02 * 0.987, rel=0.03)
-        assert max(abs(v) for v in values) <= 0.06 + 1e-12
+        assert min(ks) >= 0.9 and max(ks) <= 1.1
+        assert sum(ks) / len(ks) == pytest.approx(1.0, abs=0.002)
 
-    def test_applied_after_clamp_with_news(self) -> None:
-        """SAMSU: 쏠림 -30%(클램프) × 잡음 +5% × 호재 +15% → 0.7 × 1.05 × 1.15 − 1 = -15.475%."""
-        eps = {"SAMSU": 0.05, "SKLOW": 0.0, "MIRAE": -0.02, "LB": 0.0}
-        moves = settle_stocks(
-            PRICES, self.buys, P0, rate_noise=eps, news={"SAMSU": Fraction(15, 100)}
-        )
-        samsu, mirae = moves["SAMSU"], moves["MIRAE"]
-        assert samsu.rate == Fraction(-3, 10) and samsu.rate_noise == 0.05
-        assert samsu.total_rate == Fraction(-15475, 100000)
-        assert mirae.total_rate == Fraction(112, 100) * Fraction(98, 100) - 1  # +9.76%
-        # 쏠림 변동률의 합은 여전히 0이지만, 적용 변동률의 합은 0이 아니다
-        assert sum(m.rate for m in moves.values()) == 0
-        assert sum(m.total_rate for m in moves.values()) != 0
+    def test_scales_rate_before_clamp(self) -> None:
+        """§2.4: SKLOW -6% × 1.1 = -6.6%, MIRAE +12% × 0.9 = +10.8%.
 
-    def test_without_noise_matches_before(self) -> None:
-        moves = settle_stocks(PRICES, self.buys, P0)
-        assert all(m.rate_noise is None and m.total_rate == m.rate for m in moves.values())
+        SAMSU -30% × 1.1 = -33%는 ±30% 제한으로 다시 -30%.
+        """
+        k = {"SAMSU": 1.1, "SKLOW": 1.1, "MIRAE": 0.9, "LB": 1.0}
+        moves = settle_stocks(PRICES, self.buys, P0, rate_factor=k)
+        assert moves["SKLOW"].rate == Fraction(-66, 1000)
+        assert moves["MIRAE"].rate == Fraction(108, 1000)
+        assert moves["SAMSU"].rate == Fraction(-3, 10)  # ±30% 제한은 배율 뒤에도 지킨다
+        assert moves["LB"].rate == Fraction(24, 100)
+        assert moves["SKLOW"].rate_factor == 1.1
+        # 쏠림만으로는 합이 0이지만, 배율이 종목마다 달라 합이 0으로 고정되지 않는다
+        assert sum(m.rate for m in settle_stocks(PRICES, self.buys, P0).values()) == 0
+        assert sum(m.rate for m in moves.values()) != 0
+
+    def test_news_multiplies_after_scaled_rate(self) -> None:
+        k = dict.fromkeys(PRICES, 0.9)
+        moves = settle_stocks(PRICES, self.buys, P0, rate_factor=k, news={"MIRAE": Fraction(1, 10)})
+        mirae = moves["MIRAE"]
+        assert mirae.rate == Fraction(108, 1000)
+        assert mirae.total_rate == Fraction(1108, 1000) * Fraction(11, 10) - 1
+
+    def test_without_factor_matches_before(self) -> None:
+        plain = settle_stocks(PRICES, self.buys, P0)
+        ones = settle_stocks(PRICES, self.buys, P0, rate_factor=dict.fromkeys(PRICES, 1.0))
+        assert all(m.rate_factor is None for m in plain.values())
+        assert [m.new_price for m in ones.values()] == [m.new_price for m in plain.values()]
 
     def test_validation(self) -> None:
         with pytest.raises(ValueError):
-            settle_stocks(PRICES, {}, P, rate_noise={"SAMSU": 0.0})  # 종목 누락
-        for bad in (-1.0, float("nan"), float("inf")):
+            settle_stocks(PRICES, {}, P, rate_factor={"SAMSU": 1.0})  # 종목 누락
+        for bad in (0.0, -1.0, float("nan"), float("inf")):
             with pytest.raises(ValueError):
-                settle_stocks(PRICES, {}, P, rate_noise=dict.fromkeys(PRICES, bad))
+                settle_stocks(PRICES, {}, P, rate_factor=dict.fromkeys(PRICES, bad))
 
 
 class StubHalf(random.Random):
@@ -397,8 +402,6 @@ class TestNews:
     def test_combined_rate(self) -> None:
         assert combined_rate(Fraction(1, 10), None) == Fraction(1, 10)
         assert combined_rate(Fraction(1, 10), Fraction(-1, 5)) == Fraction(-12, 100)
-        assert combined_rate(Fraction(1, 10), None, 0.0) == Fraction(1, 10)
-        assert combined_rate(Fraction(1, 10), None, -0.1) == Fraction(-1, 100)
 
     def test_news_multiplies_after_clamp(self) -> None:
         """SAMSU는 쏠림으로 -30%(클램프)인데 호재 +15%가 그 위에 곱해져 -19.5%가 된다."""
