@@ -140,7 +140,7 @@ export function useTurnstile(siteKey: string | null | undefined, action: string)
       <div ref={setContainer} />
       {loadError && (
         <Text size="sm" tone="danger" role="alert">
-          보안 확인을 불러오지 못했어요. 광고 차단기를 끄거나 다른 브라우저에서 다시 시도해 주세요.
+          보안 확인을 불러오지 못했습니다. 광고 차단기를 끄거나 다른 브라우저에서 다시 시도해 주세요.
         </Text>
       )}
     </div>

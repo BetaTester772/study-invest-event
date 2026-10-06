@@ -36,10 +36,10 @@ function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string |
       adminKeyStore.set(null);
       setError(
         err instanceof ApiError && err.status === 401
-          ? '관리자 키가 맞지 않아요. 다시 확인해 주세요.'
+          ? '관리자 키가 맞지 않습니다. 다시 확인해 주세요.'
           : err instanceof ApiError
             ? err.message
-            : '확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+            : '확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     } finally {
       setChecking(false);
@@ -48,7 +48,7 @@ function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string |
 
   return (
     <Container size="sm">
-      <PageHeader title="관리자" description="관리자 키를 입력하면 이 탭을 닫을 때까지 기억해요." />
+      <PageHeader title="관리자" description="관리자 키를 입력하면 이 탭을 닫을 때까지 기억합니다." />
       <Card>
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
@@ -82,7 +82,7 @@ export function AdminPage() {
       onUnauthorized((mode) => {
         if (mode !== 'admin') return;
         adminKeyStore.set(null);
-        setNotice('관리자 키가 만료되었거나 바뀌었어요. 다시 입력해 주세요.');
+        setNotice('관리자 키가 만료되었거나 바뀌었습니다. 다시 입력해 주세요.');
         setUnlocked(false);
       }),
     [],
@@ -104,7 +104,7 @@ export function AdminPage() {
     <Container size="xl">
       <PageHeader
         title="관리자"
-        description="인증 검수, 참가자 관리, 파라미터와 정산을 다뤄요. 모든 조작은 감사 로그에 남아요."
+        description="인증 검수, 참가자 관리, 파라미터와 정산을 다룹니다. 모든 조작은 감사 로그에 기록됩니다."
         actions={
           <Button
             variant="secondary"

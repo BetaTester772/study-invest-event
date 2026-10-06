@@ -13,10 +13,10 @@ export function schoolEmailError(email: string): string | undefined {
   if (!value) return '학교 메일을 입력해 주세요.';
   const domain = value.slice(value.lastIndexOf('@') + 1);
   if (!value.includes('@') || (domain !== 'skku.edu' && domain !== 'g.skku.edu')) {
-    return '학교 메일(@skku.edu 또는 @g.skku.edu)만 쓸 수 있어요.';
+    return '학교 메일(@skku.edu 또는 @g.skku.edu)만 쓸 수 있습니다.';
   }
   if (!SCHOOL_EMAIL.test(value) || value.includes('..')) {
-    return '메일 주소를 다시 확인해 주세요. +가 들어간 별칭 주소는 쓸 수 없어요.';
+    return '메일 주소를 다시 확인해 주세요. +가 들어간 별칭 주소는 쓸 수 없습니다.';
   }
   return undefined;
 }
@@ -31,9 +31,9 @@ export function codeError(code: string): string | undefined {
 }
 
 const REQUEST_ERRORS: Record<string, string> = {
-  EMAIL_DOMAIN_NOT_ALLOWED: '학교 메일(@skku.edu 또는 @g.skku.edu)만 쓸 수 있어요.',
-  INVALID_EMAIL: '메일 주소를 다시 확인해 주세요. +가 들어간 별칭 주소는 쓸 수 없어요.',
-  EMAIL_TAKEN: '이미 참가한 학교 메일이에요. @skku.edu와 @g.skku.edu는 같은 계정으로 봐요.',
+  EMAIL_DOMAIN_NOT_ALLOWED: '학교 메일(@skku.edu 또는 @g.skku.edu)만 쓸 수 있습니다.',
+  INVALID_EMAIL: '메일 주소를 다시 확인해 주세요. +가 들어간 별칭 주소는 쓸 수 없습니다.',
+  EMAIL_TAKEN: '이미 참가한 학교 메일입니다. @skku.edu와 @g.skku.edu는 같은 계정으로 봅니다.',
 };
 
 /** 코드 확인 단계(가입·인증·재설정 제출)에서 나오는 오류 중 코드 칸에 보여 줄 것. */
@@ -63,7 +63,7 @@ function useCodeRequest() {
       return true;
     } catch (err) {
       if (!onError?.(err)) {
-        setNotice(err instanceof ApiError ? err.message : '인증 메일을 보내지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+        setNotice(err instanceof ApiError ? err.message : '인증 메일을 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요.');
       }
       return false;
     } finally {
@@ -100,12 +100,12 @@ function CodeSteps({
   return (
     <>
       <Button variant="secondary" onClick={onClick} loading={sending} disabled={disabled || resendLeft > 0}>
-        {resendLeft > 0 ? `${resendLeft}초 뒤에 다시 받을 수 있어요` : sentTo ? '코드 다시 받기' : label}
+        {resendLeft > 0 ? `${resendLeft}초 뒤에 다시 받을 수 있습니다` : sentTo ? '코드 다시 받기' : label}
       </Button>
       {notice && <Alert tone="danger">{notice}</Alert>}
       {sentTo && (
         <Alert tone="info">
-          {sentTo}(으)로 인증 코드를 보냈어요. 10분 안에 입력해 주세요. 메일이 안 보이면 스팸함도 확인해 주세요.
+          {sentTo}(으)로 인증 코드를 보냈습니다. 10분 안에 입력해 주세요. 메일이 안 보이면 스팸함도 확인해 주세요.
         </Alert>
       )}
       <TextField
@@ -191,7 +191,7 @@ export function SchoolEmailFields({
   onEmailError,
   send = (address) => authApi.requestEmailCode({ email: address }),
   withCode = true,
-  hint = '@skku.edu 또는 @g.skku.edu. 같은 ID의 두 주소는 한 사람으로 봐요.',
+  hint = '@skku.edu 또는 @g.skku.edu. 같은 ID의 두 주소는 한 사람으로 봅니다.',
 }: SchoolEmailFieldsProps) {
   const state = useCodeRequest();
 
@@ -263,12 +263,12 @@ export function PrivacyConsent({
           <li>수집 항목: 학교 메일 주소, 이름, 학번, 학과</li>
           <li>이용 목적: 본인 확인, 1인 1계정(중복 가입 방지), 비밀번호 재설정</li>
           <li>보유 기간: 이벤트가 끝나면 지체 없이 파기해요</li>
-          <li>랭킹에는 닉네임만 보이고, 메일·이름·학번·학과는 운영진만 봐요.</li>
-          <li>동의하지 않을 수 있어요. 다만 동의하지 않으면 이벤트에 참가할 수 없어요.</li>
+          <li>랭킹에는 닉네임만 보이고, 메일·이름·학번·학과는 운영진만 봅니다.</li>
+          <li>동의하지 않을 수 있습니다. 다만 동의하지 않으면 이벤트에 참가할 수 없습니다.</li>
         </ul>
       </Text>
       <Checkbox
-        label="개인정보(학교 메일·이름·학번·학과) 수집·이용에 동의해요 (필수)"
+        label="개인정보(학교 메일·이름·학번·학과) 수집·이용에 동의합니다 (필수)"
         checked={checked}
         onChange={onChange}
         aria-invalid={error ? true : undefined}

@@ -11,14 +11,14 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   {
     key: 'coin_up_exp',
     label: '코인 상승폭 지수',
-    hint: '기본 2. 낮추면 큰 상승이 잦아져요.',
+    hint: '기본 2. 낮추면 큰 상승이 잦아집니다.',
     kind: 'float',
     group: 'coin',
   },
   {
     key: 'coin_down_exp',
     label: '코인 하락폭 지수',
-    hint: '기본 2. 높이면 소폭 하락에 몰려요.',
+    hint: '기본 2. 높이면 소폭 하락에 몰립니다.',
     kind: 'float',
     group: 'coin',
   },
@@ -63,7 +63,7 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   {
     key: 'virtual_liquidity',
     label: '가상 유동성 L(원)',
-    hint: '종목마다 매수금액에 더해요. 예: 5000000',
+    hint: '종목마다 매수금액에 더합니다. 예: 5000000',
     kind: 'int',
     group: 'stock',
   },
@@ -117,21 +117,21 @@ const GROUPS: { id: string; title: string; description: string }[] = [
     id: 'coin',
     title: '병더리움 가격',
     description:
-      '매일 18:00 정산에서 코인 변동률을 뽑는 분포예요. 초반 안정기 회차는 평소보다 좁은 안정기 상·하한을 써요.',
+      '매일 18:00 정산에서 코인 변동률을 뽑는 분포입니다. 초반 안정기 회차는 평소보다 좁은 안정기 상·하한을 씁니다.',
   },
   {
     id: 'stock',
     title: '주식 가격',
     description:
-      '종목별 매수 쏠림을 변동률로 바꾸는 방식이에요. 잡음 세기는 매수지분에 작은 무작위 배수를 곱해 주문이 없어도 가격이 조금씩 움직이게 해요.',
+      '종목별 매수 쏠림을 변동률로 바꾸는 방식입니다. 잡음 세기는 매수지분에 작은 무작위 배수를 곱해 주문이 없어도 가격이 조금씩 움직이게 합니다.',
   },
   {
     id: 'news',
     title: '호재·악재',
     description:
-      '18:00 정산 때 다음 운영일 뉴스를 무작위로 뽑아 그 정산에서 바로 반영해요. 참가자는 반영된 시작가와 함께 다음 날 09:00에 봐요. 호재·악재는 반반, 종목은 주식 4종목 중 균등이고, 효과 크기는 하한~상한 사이에서 1% 단위로 뽑아요. 직접 쓰는 뉴스는 호재·악재 탭에서요.',
+      '18:00 정산 때 다음 운영일 뉴스를 무작위로 뽑아 그 정산에서 바로 반영합니다. 참가자는 반영된 시작가와 함께 다음 날 09:00에 확인합니다. 호재·악재는 반반, 종목은 주식 4종목 중 균등이고, 효과 크기는 하한~상한 사이에서 1% 단위로 뽑습니다. 직접 쓰는 뉴스는 호재·악재 탭에서 작성하세요.',
   },
-  { id: 'trade', title: '거래와 인증', description: '주문 한도, 인증 보상과 마감이에요.' },
+  { id: 'trade', title: '거래와 인증', description: '주문 한도, 인증 보상과 마감입니다.' },
 ];
 
 type Draft = Record<keyof Params, string>;
@@ -190,9 +190,9 @@ export function ParamsTab() {
     try {
       const saved = await adminApi.updateParams(parsed);
       params.setData(saved);
-      toast.success('파라미터를 저장했어요', '다음 정산부터 적용돼요.');
+      toast.success('파라미터를 저장했습니다', '다음 정산부터 적용됩니다.');
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : '저장하지 못했어요.');
+      setSaveError(err instanceof ApiError ? err.message : '저장하지 못했습니다.');
     } finally {
       setSaving(false);
     }
@@ -202,7 +202,7 @@ export function ParamsTab() {
     <form ref={formRef} onSubmit={save} noValidate>
       <Stack gap={5}>
         {saveError && (
-          <Alert tone="danger" title="파라미터를 저장하지 못했어요">
+          <Alert tone="danger" title="파라미터를 저장하지 못했습니다">
             {saveError}
           </Alert>
         )}

@@ -39,11 +39,11 @@ function TradingAccessCard({ unverified }: { unverified: number | null }) {
     try {
       access.setData(await adminApi.setTradingAccess({ verified_only: verifiedOnly }));
       toast.success(
-        verifiedOnly ? '인증된 참가자만 거래할 수 있어요' : '모든 참가자가 다시 거래할 수 있어요',
-        verifiedOnly ? '미인증 참가자의 주문은 거부돼요. 화면에 인증 안내가 떠요.' : undefined,
+        verifiedOnly ? '인증된 참가자만 거래할 수 있습니다' : '모든 참가자가 다시 거래할 수 있습니다',
+        verifiedOnly ? '미인증 참가자의 주문은 거부됩니다. 화면에 인증 안내가 표시됩니다.' : undefined,
       );
     } catch (err) {
-      toast.error('바꾸지 못했어요', err instanceof ApiError ? err.message : undefined);
+      toast.error('바꾸지 못했습니다', err instanceof ApiError ? err.message : undefined);
     } finally {
       setSaving(false);
       setConfirmOn(false);
@@ -60,8 +60,8 @@ function TradingAccessCard({ unverified }: { unverified: number | null }) {
             <Badge tone={on ? 'warning' : 'neutral'}>{access.loading ? '확인 중' : on ? '켜짐' : '꺼짐'}</Badge>
           </Text>
           <Text size="sm" tone="muted">
-            평소에는 꺼 두세요. 켜면 미인증 참가자는 주문할 수 없어요(시세·자산 보기와 공부 인증은 그대로). 참가자는
-            등록한 학교 메일로 코드를 받아 스스로 인증하거나, 아래 목록에서 관리자가 인증 처리할 수 있어요.
+            평소에는 꺼 두세요. 켜면 미인증 참가자는 주문할 수 없습니다(시세·자산 보기와 공부 인증은 그대로). 참가자는
+            등록한 학교 메일로 코드를 받아 스스로 인증하거나, 아래 목록에서 관리자가 인증 처리할 수 있습니다.
             {unverified != null && ` 지금 미인증 참가자 ${unverified}명.`}
           </Text>
         </Stack>
@@ -78,8 +78,8 @@ function TradingAccessCard({ unverified }: { unverified: number | null }) {
         open={confirmOn}
         onClose={() => setConfirmOn(false)}
         size="sm"
-        title="인증된 참가자만 거래하게 할까요?"
-        description={`미인증 참가자${unverified != null ? ` ${unverified}명` : ''}의 주문이 바로 거부돼요. 언제든 다시 풀 수 있어요.`}
+        title="인증된 참가자만 거래하게 하시겠습니까?"
+        description={`미인증 참가자${unverified != null ? ` ${unverified}명` : ''}의 주문이 바로 거부됩니다. 언제든 다시 해제할 수 있습니다.`}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmOn(false)}>
@@ -111,9 +111,9 @@ export function ParticipantsTab() {
     try {
       const updated = await adminApi.setParticipantVerified(p.id, verified);
       participants.setData((prev) => (prev ?? []).map((x) => (x.id === updated.id ? updated : x)));
-      toast.success(verified ? `${p.nickname}님을 인증 처리했어요` : `${p.nickname}님의 인증을 취소했어요`);
+      toast.success(verified ? `${p.nickname}님을 인증 처리했습니다` : `${p.nickname}님의 인증을 취소했습니다`);
     } catch (err) {
-      toast.error('인증 상태를 바꾸지 못했어요', err instanceof ApiError ? err.message : undefined);
+      toast.error('인증 상태를 바꾸지 못했습니다', err instanceof ApiError ? err.message : undefined);
     } finally {
       setVerifying(null);
     }
@@ -124,9 +124,9 @@ export function ParticipantsTab() {
     try {
       const updated = await adminApi.setParticipantStatus(p.id, status);
       participants.setData((prev) => (prev ?? []).map((x) => (x.id === updated.id ? updated : x)));
-      toast.success('참가자 상태를 바꿨어요', `${p.nickname}님은 이제 ${PARTICIPANT_STATUS_LABEL[status]} 상태예요.`);
+      toast.success('참가자 상태를 바꿨습니다', `${p.nickname}님은 이제 ${PARTICIPANT_STATUS_LABEL[status]} 상태입니다.`);
     } catch (err) {
-      toast.error('상태를 바꾸지 못했어요', err instanceof ApiError ? err.message : undefined);
+      toast.error('상태를 바꾸지 못했습니다', err instanceof ApiError ? err.message : undefined);
     } finally {
       setSaving(null);
       setConfirm(null);
@@ -211,13 +211,13 @@ export function ParticipantsTab() {
       <TradingAccessCard unverified={unverifiedCount} />
       <Checkbox
         label="미인증 참가자만 보기"
-        hint="학번·이름·학과를 확인한 뒤 '인증 처리'를 누르면 인증된 참가자가 돼요."
+        hint="학번·이름·학과를 확인한 뒤 '인증 처리'를 누르면 인증된 참가자가 됩니다."
         checked={unverifiedOnly}
         onChange={setUnverifiedOnly}
       />
       <Text size="sm" tone="muted">
-        실격 처리한 참가자는 주문할 수 없고 랭킹에서 빠져요. 경고는 표시만 바뀌어요. 수익률은 투입 원금(시드 + 받은 인증
-        보상) 대비 손익이에요.
+        실격 처리한 참가자는 주문할 수 없고 랭킹에서 제외됩니다. 경고는 표시만 바뀝니다. 수익률은 투입 원금(시드 + 받은 인증
+        보상) 대비 손익입니다.
       </Text>
       <Card padding={participants.error ? 'md' : 'none'}>
         {participants.error ? (
@@ -229,7 +229,7 @@ export function ParticipantsTab() {
             rows={rows}
             rowKey={(p) => p.id}
             loading={participants.loading}
-            empty="아직 참가자가 없어요."
+            empty="아직 참가자가 없습니다."
           />
         )}
       </Card>
@@ -237,8 +237,8 @@ export function ParticipantsTab() {
         open={confirm != null}
         onClose={() => setConfirm(null)}
         size="sm"
-        title="실격 처리할까요?"
-        description={confirm ? `${confirm.p.nickname}님은 더 이상 주문할 수 없고 랭킹에서 빠져요.` : undefined}
+        title="실격 처리하시겠습니까?"
+        description={confirm ? `${confirm.p.nickname}님은 더 이상 주문할 수 없고 랭킹에서 제외됩니다.` : undefined}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirm(null)}>

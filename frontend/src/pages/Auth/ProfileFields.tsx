@@ -11,11 +11,11 @@ export function profileErrors(p: Profile): ProfileErrors {
   const errors: ProfileErrors = {};
   const name = p.name.trim();
   if (!name) errors.name = '이름을 입력해 주세요.';
-  else if (name.length > 30) errors.name = '이름은 30자까지 쓸 수 있어요.';
+  else if (name.length > 30) errors.name = '이름은 30자까지 쓸 수 있습니다.';
   if (!/^\d{10}$/.test(p.student_id.trim())) errors.student_id = '학번 10자리 숫자를 입력해 주세요.';
   const department = p.department.trim();
   if (!department) errors.department = '학과를 입력해 주세요.';
-  else if (department.length > 50) errors.department = '학과는 50자까지 쓸 수 있어요.';
+  else if (department.length > 50) errors.department = '학과는 50자까지 쓸 수 있습니다.';
   return errors;
 }
 
@@ -38,7 +38,7 @@ export function ProfileFields({
     <>
       <TextField
         label="이름"
-        hint="운영진에게만 보여요."
+        hint="운영진에게만 표시됩니다."
         autoComplete="name"
         value={value.name}
         onChange={(e) => set('name', e.target.value)}
@@ -48,7 +48,7 @@ export function ProfileFields({
       />
       <TextField
         label="학번"
-        hint="숫자 10자리. 한 학번에 한 계정만 만들 수 있어요."
+        hint="숫자 10자리. 한 학번에 한 계정만 만들 수 있습니다."
         inputMode="numeric"
         placeholder="2026310000"
         value={value.student_id}

@@ -120,7 +120,7 @@ export function RankingPage() {
     <Container>
       <PageHeader
         title="랭킹"
-        description={`${ranking.data?.day ? `${formatDay(ranking.data.day)} 시작가 기준 ` : ''}총자산 순위예요. 수익률 순으로도 볼 수 있어요. 닉네임만 공개되고, 실격자는 빠져요.`}
+        description={`${ranking.data?.day ? `${formatDay(ranking.data.day)} 시작가 기준 ` : ''}총자산 순위입니다. 수익률 순으로도 확인할 수 있습니다. 닉네임만 공개되며, 실격자는 제외됩니다.`}
       />
       <Stack gap={6}>
         {me && (
@@ -143,7 +143,7 @@ export function RankingPage() {
             <Stat
               label="연속 인증"
               value={me.streak > 0 ? `${me.streak}일째` : '—'}
-              sub={me.streak > 0 ? `인증 ${me.certified_days}일, 오늘도 이어가 보세요` : '오늘 인증하면 1일째가 돼요'}
+              sub={me.streak > 0 ? `인증 ${me.certified_days}일, 오늘도 이어가 보세요` : '오늘 인증하면 1일째가 됩니다'}
             />
           </StatGroup>
         )}
@@ -161,17 +161,17 @@ export function RankingPage() {
               rowKey={(r) => r.nickname}
               isRowHighlighted={(r) => Boolean(r.is_me)}
               loading={ranking.loading}
-              empty="아직 순위가 없어요. 첫 참가자가 되어 보세요."
+              empty="아직 순위가 없습니다. 첫 참가자가 되어 보세요."
             />
           )}
         </Card>
         <Stack gap={2}>
           <Text size="sm" tone="muted">
-            수익률은 각자 넣은 투입 원금(시드 1,000,000원 + 받은 인증 보상) 대비 투자 손익이에요. 인증 보상은 손익이
-            아니라 원금으로 쳐서, 보상을 받았다고 수익률이 오르지는 않아요.
+            수익률은 각자 넣은 투입 원금(시드 1,000,000원 + 받은 인증 보상) 대비 투자 손익입니다. 인증 보상은 손익이
+            아니라 원금으로 쳐서, 보상을 받았다고 수익률이 오르지는 않습니다.
           </Text>
           <Text size="sm" tone="muted">
-            동점이면 같은 순위를 받아요(1, 2, 2, 4위). 연속은 오늘까지 끊기지 않고 인증한 날 수예요.
+            동점이면 같은 순위를 받습니다(1, 2, 2, 4위). 연속은 오늘까지 끊기지 않고 인증한 날 수입니다.
           </Text>
         </Stack>
       </Stack>

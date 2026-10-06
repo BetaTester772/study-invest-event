@@ -72,8 +72,8 @@ function NotFound() {
   return (
     <Container padTop>
       <EmptyState
-        title="없는 페이지예요"
-        description="주소가 바뀌었거나 잘못 입력됐어요. 시세판에서 다시 시작하세요."
+        title="없는 페이지입니다"
+        description="주소가 바뀌었거나 잘못 입력됐습니다. 시세판에서 다시 시작하세요."
         action={<LinkButton to="/">시세판으로 가기</LinkButton>}
       />
     </Container>

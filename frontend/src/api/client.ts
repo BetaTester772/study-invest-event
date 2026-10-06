@@ -50,19 +50,19 @@ export function onUnauthorized(listener: UnauthorizedListener): () => void {
 }
 
 const STATUS_MESSAGES: Record<number, string> = {
-  400: '요청이 올바르지 않아요.',
-  401: '로그인이 필요해요. 다시 로그인해 주세요.',
-  403: '이 작업을 할 수 있는 권한이 없어요.',
-  404: '찾는 항목이 없어요.',
-  409: '이미 처리된 요청이에요.',
+  400: '요청이 올바르지 않습니다.',
+  401: '로그인이 필요합니다. 다시 로그인해 주세요.',
+  403: '이 작업을 할 수 있는 권한이 없습니다.',
+  404: '찾는 항목이 없습니다.',
+  409: '이미 처리된 요청입니다.',
   422: '입력한 값을 다시 확인해 주세요.',
   429: '요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요.',
-  500: '서버에서 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.',
+  500: '서버에서 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.',
 };
 
 /** Turn any error body into (code, message). Exported for tests. */
 export function parseErrorBody(status: number, body: unknown): { code: string; message: string } {
-  const fallback = STATUS_MESSAGES[status] ?? `요청을 처리하지 못했어요. (HTTP ${status})`;
+  const fallback = STATUS_MESSAGES[status] ?? `요청을 처리하지 못했습니다. (HTTP ${status})`;
   const detail = (body as ApiErrorBody | null)?.detail;
   if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
     return { code: detail.code ?? `HTTP_${status}`, message: detail.message ?? fallback };
@@ -125,7 +125,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     res = await fetch(buildUrl(path, query), { method, headers, body: payload, signal });
   } catch (err) {
     if ((err as Error)?.name === 'AbortError') throw err;
-    throw new ApiError(0, 'NETWORK_ERROR', '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.');
+    throw new ApiError(0, 'NETWORK_ERROR', '서버에 연결하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.');
   }
 
   if (!res.ok) {

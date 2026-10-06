@@ -100,7 +100,7 @@ export function LineChart({
   if (!first || !last) {
     return (
       <div ref={wrapRef} className={cx(styles.wrap, styles.empty, className)} style={{ height }}>
-        아직 가격 이력이 없어요.
+        아직 가격 이력이 없습니다.
       </div>
     );
   }

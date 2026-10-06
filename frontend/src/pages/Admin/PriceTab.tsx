@@ -46,10 +46,10 @@ export function PriceTab() {
     try {
       const point = await adminApi.overridePrice(day, code, { price, reason: reason.trim() });
       setResult({ code, point });
-      toast.success('시작가를 바꿨어요', `${selected?.name ?? code}, ${formatDay(point.day)}`);
+      toast.success('시작가를 바꿨습니다', `${selected?.name ?? code}, ${formatDay(point.day)}`);
       setReason('');
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : '가격을 바꾸지 못했어요.');
+      setFormError(err instanceof ApiError ? err.message : '가격을 바꾸지 못했습니다.');
     } finally {
       setSaving(false);
     }
@@ -59,12 +59,12 @@ export function PriceTab() {
     <Grid sidebar="minmax(16rem, 22rem)" gap={6}>
       <Card
         title="시작가 직접 정하기"
-        description="아직 공시되지 않은 운영일의 시작가만 바꿀 수 있어요. 사유는 감사 로그에 남아요."
+        description="아직 공시되지 않은 운영일의 시작가만 바꿀 수 있습니다. 사유는 감사 로그에 기록됩니다."
       >
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
             {formError && (
-              <Alert tone="danger" title="가격을 바꾸지 못했어요">
+              <Alert tone="danger" title="가격을 바꾸지 못했습니다">
                 {formError}
               </Alert>
             )}
@@ -100,8 +100,8 @@ export function PriceTab() {
               suffix="원"
               hint={
                 selected
-                  ? `현재 공시가 ${selected.price.toLocaleString('ko-KR')}원. 10원 단위로 반올림돼요.`
-                  : '10원 단위로 반올림돼요.'
+                  ? `현재 공시가 ${selected.price.toLocaleString('ko-KR')}원. 10원 단위로 반올림됩니다.`
+                  : '10원 단위로 반올림됩니다.'
               }
               error={errors.price}
               required
@@ -133,7 +133,7 @@ export function PriceTab() {
             ]}
           />
         ) : (
-          <Alert>아직 이번 접속에서 바꾼 가격이 없어요.</Alert>
+          <Alert>아직 이번 접속에서 바꾼 가격이 없습니다.</Alert>
         )}
       </Card>
     </Grid>

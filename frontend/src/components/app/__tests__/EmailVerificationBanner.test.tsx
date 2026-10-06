@@ -33,7 +33,7 @@ describe('EmailVerificationBanner', () => {
 
   it('asks unverified participants to verify only while the admin switch is on', async () => {
     renderWith(ME, true);
-    expect(await screen.findByText('지금은 인증된 참가자만 거래할 수 있어요')).toBeInTheDocument();
+    expect(await screen.findByText('지금은 인증된 참가자만 거래할 수 있습니다')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '인증하기' })).toHaveAttribute('href', '/verify-email');
   });
 

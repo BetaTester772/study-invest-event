@@ -43,7 +43,7 @@ export function MarketPage() {
                 시세판
               </Text>
               <Text size="sm" tone="muted">
-                {priceDay ? `${formatDay(priceDay)} 시작가예요.` : '1일차 시작가예요.'}
+                {priceDay ? `${formatDay(priceDay)} 시작가입니다.` : '1일차 시작가입니다.'}
               </Text>
             </Stack>
             {status === 'anonymous' && (

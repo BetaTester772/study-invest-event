@@ -115,7 +115,7 @@ export function PortfolioPage() {
     <Container>
       <PageHeader
         title="내 자산"
-        description={p?.day ? `${formatDay(p.day)} 시작가로 평가한 금액이에요.` : '오늘 시작가로 평가한 금액이에요.'}
+        description={p?.day ? `${formatDay(p.day)} 시작가로 평가한 금액입니다.` : '오늘 시작가로 평가한 금액입니다.'}
       />
       <Stack gap={8}>
         {portfolio.error ? (
@@ -137,7 +137,7 @@ export function PortfolioPage() {
                   </>
                 }
               />
-              <Stat label="현금" value={<Money value={p.cash} />} sub="주문에 바로 쓸 수 있어요" />
+              <Stat label="현금" value={<Money value={p.cash} />} sub="주문에 바로 쓸 수 있습니다" />
               <Stat
                 label="평가손익"
                 value={<Money value={totalProfit} sign colorize />}
@@ -159,8 +159,8 @@ export function PortfolioPage() {
             </StatGroup>
             <Text size="sm" tone="muted">
               투입 원금 <Money value={p.principal} />은 시드 <Money value={p.initial_cash} />에 지금까지 받은 인증 보상{' '}
-              <Money value={p.rewards_received} />을 더한 금액이에요. 수익률은 이 원금 대비 손익이라 인증 보상은 손익에
-              들어가지 않아요.
+              <Money value={p.rewards_received} />을 더한 금액입니다. 수익률은 이 원금 대비 손익이라 인증 보상은 손익에
+              들어가지 않습니다.
             </Text>
           </Stack>
         )}
@@ -169,8 +169,8 @@ export function PortfolioPage() {
           {p && p.holdings.length === 0 ? (
             <EmptyState
               compact
-              title="아직 가진 종목이 없어요"
-              description="시세판에서 종목을 골라 첫 주문을 넣어 보세요. 공부를 인증하면 투자금도 더 받아요."
+              title="아직 가진 종목이 없습니다"
+              description="시세판에서 종목을 골라 첫 주문을 넣어 보세요. 공부를 인증하면 투자금을 더 받을 수 있습니다."
               action={<LinkButton to="/">시세판에서 종목 고르기</LinkButton>}
             />
           ) : (
@@ -184,7 +184,7 @@ export function PortfolioPage() {
           )}
         </Card>
 
-        <Card title="최근 주문" description="거부된 주문도 사유와 함께 남아요." padding={orders.error ? 'md' : 'none'}>
+        <Card title="최근 주문" description="거부된 주문도 사유와 함께 기록됩니다." padding={orders.error ? 'md' : 'none'}>
           {orders.error ? (
             <LoadError error={orders.error} onRetry={orders.refetch} what="주문 내역" />
           ) : (
@@ -194,7 +194,7 @@ export function PortfolioPage() {
               rows={orders.data ?? []}
               rowKey={(o) => o.id}
               loading={orders.loading}
-              empty="아직 주문 내역이 없어요. 시세판에서 종목을 골라 주문해 보세요."
+              empty="아직 주문 내역이 없습니다. 시세판에서 종목을 골라 주문해 보세요."
             />
           )}
         </Card>
