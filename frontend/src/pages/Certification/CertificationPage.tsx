@@ -44,7 +44,7 @@ function CertImageModal({ cert, onClose }: { cert: Certification | null; onClose
     >
       {image.loading && <Spinner label="사진을 불러오는 중" />}
       {image.error && (
-        <Alert tone="danger" title="사진을 불러오지 못했어요">
+        <Alert tone="danger" title="사진을 불러오지 못했습니다">
           {image.error.message}
         </Alert>
       )}
@@ -60,7 +60,7 @@ function rewardText(c: Certification, rewardCash: number | undefined, lastDay: s
     return `${what} (${formatDateTime(c.rewarded_at)})`;
   }
   // 보상은 다음 운영일 09:00에 주므로 마지막 운영일 인증분은 지급일이 없다(인증 일수에는 들어간다).
-  if (c.status !== 'rejected' && c.target_date === lastDay) return '마지막 날 인증은 보상이 없어요';
+  if (c.status !== 'rejected' && c.target_date === lastDay) return '마지막 날 인증은 보상이 없습니다';
   if (c.status === 'approved')
     return rewardCash != null
       ? `다음 운영일 09:00에 ${formatWon(rewardCash)} 지급 예정`
@@ -91,7 +91,7 @@ export function CertificationPage() {
     setUploadError(null);
     try {
       const created = await meApi.uploadCertification(file);
-      toast.success('인증 사진을 올렸어요', `${formatDay(created.target_date)} 인증으로 검수를 기다려요.`);
+      toast.success('인증 사진을 올렸습니다', `${formatDay(created.target_date)} 인증으로 검수를 기다립니다.`);
       setFile(null);
       certs.setData((prev) => [created, ...(prev ?? [])]);
       void certs.refetch();
@@ -99,7 +99,7 @@ export function CertificationPage() {
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '잠시 뒤 다시 시도해 주세요.';
       setUploadError(msg);
-      toast.error('인증 사진을 올리지 못했어요', msg);
+      toast.error('인증 사진을 올리지 못했습니다', msg);
       void status.refetch();
     } finally {
       setUploading(false);
@@ -143,7 +143,7 @@ export function CertificationPage() {
     <Container>
       <PageHeader
         title="공부 인증"
-        description={`하루에 한 번, 공부한 모습을 사진 한 장으로 올려요. 승인되면 다음 운영일에 투자금${rewardCash != null ? ` ${formatWon(rewardCash)}` : ''}을 받아요. 인증하지 않아도 거래는 할 수 있지만 그날 보상은 없어요.`}
+        description={`하루에 한 번, 공부한 모습을 사진 한 장으로 올립니다. 승인되면 다음 운영일에 투자금${rewardCash != null ? ` ${formatWon(rewardCash)}` : ''}을 받습니다. 인증하지 않아도 거래는 할 수 있지만 그날 보상은 없습니다.`}
       />
       <Stack gap={8}>
         {event.error && <LoadError error={event.error} onRetry={event.refetch} what="인증 일정" />}
@@ -154,11 +154,11 @@ export function CertificationPage() {
             ) : !e || !st ? (
               <Skeleton lines={4} />
             ) : st.reason === 'OUTSIDE_EVENT' ? (
-              <Alert title="지금은 인증 기간이 아니에요">
-                인증은 {formatDay(e.start)}부터 {e.end ? `${formatDay(e.end)}까지` : '기간 제한 없이'} 받아요.
+              <Alert title="지금은 인증 기간이 아닙니다">
+                인증은 {formatDay(e.start)}부터 {e.end ? `${formatDay(e.end)}까지` : '기간 제한 없이'} 받습니다.
               </Alert>
             ) : st.reason === 'DISQUALIFIED' ? (
-              <Alert tone="danger" title="인증을 올릴 수 없어요">
+              <Alert tone="danger" title="인증을 올릴 수 없습니다">
                 {st.message}
               </Alert>
             ) : st.existing ? (
@@ -167,22 +167,22 @@ export function CertificationPage() {
                   tone={
                     st.existing.status === 'approved' ? 'success' : st.existing.status === 'rejected' ? 'warning' : 'info'
                   }
-                  title={`${formatDay(st.existing.target_date)} 인증은 이미 올렸어요`}
+                  title={`${formatDay(st.existing.target_date)} 인증은 이미 올렸습니다`}
                 >
                   {st.existing.status === 'approved'
-                    ? `승인됐어요. ${rewardText(st.existing, rewardCash, e.end ?? undefined)}.`
+                    ? `승인됐습니다. ${rewardText(st.existing, rewardCash, e.end ?? undefined)}.`
                     : st.existing.status === 'rejected'
-                      ? `반려됐어요(${st.existing.reject_reason ?? '사유 없음'}). 인증은 하루 한 번이라 이 날짜는 다시 올릴 수 없어요.`
-                      : '검수를 기다리는 중이에요. 결과는 아래 목록에서 볼 수 있어요.'}
+                      ? `반려됐습니다(${st.existing.reject_reason ?? '사유 없음'}). 인증은 하루 한 번이라 이 날짜는 다시 올릴 수 없습니다.`
+                      : '검수를 기다리는 중입니다. 결과는 아래 목록에서 확인할 수 있습니다.'}
                 </Alert>
                 <Text size="sm" tone="muted">
-                  오늘 {st.cutoff}이 지나면 다음 날짜 인증을 올릴 수 있어요.
+                  오늘 {st.cutoff}이 지나면 다음 날짜 인증을 올릴 수 있습니다.
                 </Text>
               </Stack>
             ) : (
               <Stack gap={4}>
                 <Text>
-                  지금 올리면 <Highlight>{formatDay(target)}</Highlight> 인증으로 들어가요.
+                  지금 올리면 <Highlight>{formatDay(target)}</Highlight> 인증으로 들어갑니다.
                 </Text>
                 <FileDropzone
                   label="인증 사진"
@@ -195,7 +195,7 @@ export function CertificationPage() {
                   maxSize={MAX_SIZE}
                   error={uploadError}
                   disabled={uploading}
-                  hint="JPG, PNG, WEBP, HEIC 사진 한 장, 10MB까지 올릴 수 있어요."
+                  hint="JPG, PNG, WEBP, HEIC 사진 한 장, 10MB까지 올릴 수 있습니다."
                 />
                 <Button size="lg" fullWidth onClick={upload} loading={uploading} disabled={!file}>
                   인증 사진 올리기
@@ -218,12 +218,12 @@ export function CertificationPage() {
               )}
               <Stack gap={2}>
                 <Text size="sm" tone="muted">
-                  승인되면 다음 운영일 09:00에 현금으로 받아서 그날 장중에 바로 주문할 수 있어요. 받은 보상은 투입
-                  원금에 더해져서 수익률에서는 손익으로 치지 않아요. 마지막 날 인증은 다음 운영일이 없어 보상이 없지만
-                  인증 일수에는 들어가요.
+                  승인되면 다음 운영일 09:00에 현금으로 받아서 그날 장중에 바로 주문할 수 있습니다. 받은 보상은 투입
+                  원금에 더해져서 수익률에서는 손익으로 치지 않습니다. 마지막 날 인증은 다음 운영일이 없어 보상이 없지만
+                  인증 일수에는 들어갑니다.
                 </Text>
                 <Text size="sm" tone="muted">
-                  마감 시각이 지나서 올린 사진은 다음 날짜 인증으로 집계돼요. 같은 사진을 다시 쓰면 반려될 수 있어요.
+                  마감 시각이 지나서 올린 사진은 다음 날짜 인증으로 집계됩니다. 같은 사진을 다시 쓰면 반려될 수 있습니다.
                 </Text>
               </Stack>
             </Stack>
@@ -231,7 +231,7 @@ export function CertificationPage() {
         </Grid>
 
         {e && (
-          <Card title="나의 인증 도장판" description="승인된 날에 도장이 찍혀요.">
+          <Card title="나의 인증 도장판" description="승인된 날에 도장이 찍힙니다.">
             <DayStrip {...dayStripWindow(e)} today={e.today} stamped={approvedDays} label="나의 인증 도장판" />
           </Card>
         )}
@@ -246,7 +246,7 @@ export function CertificationPage() {
               rows={certs.data ?? []}
               rowKey={(c) => c.id}
               loading={certs.loading}
-              empty="아직 올린 인증이 없어요. 오늘 공부한 사진으로 첫 도장을 받아 보세요."
+              empty="아직 올린 인증이 없습니다. 오늘 공부한 사진으로 첫 도장을 받아 보세요."
             />
           )}
         </Card>

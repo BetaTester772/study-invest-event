@@ -151,7 +151,7 @@ export function StyleGuidePage() {
             </Text>
             <Text>
               본문은 IBM Plex Sans KR입니다. 오늘 공부를 인증하면 <Highlight>다음 운영일 09:00</Highlight>에 투자금을
-              받아요.
+              받습니다.
             </Text>
             <Text tone="muted" size="sm">
               보조 설명은 연필색으로 작게 씁니다.
@@ -210,7 +210,7 @@ export function StyleGuidePage() {
 
         <Section title="입력">
           <Grid min="15rem" gap={5}>
-            <TextField label="닉네임" placeholder="2~20자" hint="랭킹에 이 이름이 보여요." />
+            <TextField label="닉네임" placeholder="2~20자" hint="랭킹에 이 이름이 표시됩니다." />
             <TextField label="비밀번호" type="password" error="8자 이상 입력하세요." defaultValue="1234" />
             <NumberField
               label="수량"
@@ -219,7 +219,7 @@ export function StyleGuidePage() {
               min={1}
               max={12}
               suffix="주"
-              hint="1~12주까지 살 수 있어요."
+              hint="1~12주까지 매수할 수 있습니다."
               trailing={
                 <Button variant="secondary" onClick={() => setQty(12)}>
                   최대
@@ -344,7 +344,7 @@ export function StyleGuidePage() {
                 columns={RANK_COLUMNS}
                 rows={[]}
                 rowKey={(r) => r.nickname}
-                empty="아직 순위가 없어요."
+                empty="아직 순위가 없습니다."
               />
             </Card>
             <Card padding="none">
@@ -363,34 +363,34 @@ export function StyleGuidePage() {
 
         <Section title="알림">
           <Stack gap={3}>
-            <Alert title="장이 닫혀 있어요">09:00에 다시 열려요. 그때 주문할 수 있어요.</Alert>
-            <Alert tone="success" title="인증 사진을 올렸어요">
-              검수가 끝나면 결과를 여기서 볼 수 있어요.
+            <Alert title="장이 닫혀 있습니다">09:00에 다시 열립니다. 그때 주문할 수 있습니다.</Alert>
+            <Alert tone="success" title="인증 사진을 올렸습니다">
+              검수가 끝나면 결과를 여기서 확인할 수 있습니다.
             </Alert>
-            <Alert tone="warning" title="같은 사진으로 보여요">
-              인증 #12와 이미지가 같아요.
+            <Alert tone="warning" title="같은 사진으로 보입니다">
+              인증 #12와 이미지가 같습니다.
             </Alert>
             <Alert
               tone="danger"
-              title="주문하지 못했어요"
+              title="주문하지 못했습니다"
               action={
                 <Button size="sm" variant="secondary">
                   다시 시도
                 </Button>
               }
             >
-              현금이 부족해요. 수량을 줄여 주세요.
+              현금이 부족합니다. 수량을 줄여 주세요.
             </Alert>
             <Stack direction="row" gap={2} wrap>
               <Button
                 variant="secondary"
-                onClick={() => toast.success('체결됐어요', '삼수전자 3주를 225,000원에 샀어요.')}
+                onClick={() => toast.success('체결됐습니다', '삼수전자 3주를 225,000원에 샀습니다.')}
               >
                 성공 토스트
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => toast.error('주문하지 못했어요', '오늘 이 종목 매수 한도를 넘었어요.')}
+                onClick={() => toast.error('주문하지 못했습니다', '오늘 이 종목 매수 한도를 넘었습니다.')}
               >
                 오류 토스트
               </Button>
@@ -408,8 +408,8 @@ export function StyleGuidePage() {
           <Modal
             open={modalOpen}
             onClose={() => setModalOpen(false)}
-            title="인증을 반려할까요?"
-            description="반려 사유는 참가자에게 그대로 보여요."
+            title="인증을 반려하시겠습니까?"
+            description="반려 사유는 참가자에게 그대로 표시됩니다."
             footer={
               <>
                 <Button variant="ghost" onClick={() => setModalOpen(false)}>
@@ -448,7 +448,7 @@ export function StyleGuidePage() {
               <Skeleton width="8rem" height="2rem" />
             </Stack>
             <EmptyState
-              title="아직 주문이 없어요"
+              title="아직 주문이 없습니다"
               description="시세판에서 종목을 골라 첫 주문을 넣어 보세요."
               action={<LinkButton to="/">시세판 보기</LinkButton>}
             />

@@ -60,13 +60,13 @@ export function NewsTab() {
         body: body.trim() || null,
         byline: byline.trim() || null,
       });
-      toast.success('뉴스를 저장했어요', `${saved.name}, ${formatDay(saved.day)} ${NEWS_KIND_LABEL[saved.kind]}`);
+      toast.success('뉴스를 저장했습니다', `${saved.name}, ${formatDay(saved.day)} ${NEWS_KIND_LABEL[saved.kind]}`);
       setHeadline('');
       setSubtitle('');
       setBody('');
       void list.refetch();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : '뉴스를 저장하지 못했어요.');
+      setFormError(err instanceof ApiError ? err.message : '뉴스를 저장하지 못했습니다.');
     } finally {
       setSaving(false);
     }
@@ -75,10 +75,10 @@ export function NewsTab() {
   const remove = async (item: AdminNewsItem) => {
     try {
       await adminApi.deleteNews(item.day, item.code);
-      toast.success('뉴스를 지웠어요', item.headline);
+      toast.success('뉴스를 지웠습니다', item.headline);
       void list.refetch();
     } catch (err) {
-      toast.error('뉴스를 지우지 못했어요', err instanceof ApiError ? err.message : undefined);
+      toast.error('뉴스를 지우지 못했습니다', err instanceof ApiError ? err.message : undefined);
     }
   };
 
@@ -117,12 +117,12 @@ export function NewsTab() {
     <Stack gap={6}>
       <Card
         title="호재·악재 쓰기"
-        description="전날 18:00 정산 전까지 쓸 수 있어요. 그 정산에서 그 종목 변동률에 곱해져 발표일 시작가에 반영되고, 09:00 공시와 함께 참가자에게 보여요. 같은 날·같은 종목에 이미 뉴스가 있으면 덮어써요. 첫 운영일은 앞선 정산이 없어 쓸 수 없어요."
+        description="전날 18:00 정산 전까지 작성할 수 있습니다. 그 정산에서 해당 종목 변동률에 곱해져 발표일 시작가에 반영되며, 09:00 공시와 함께 참가자에게 표시됩니다. 같은 날·같은 종목에 이미 뉴스가 있으면 덮어씁니다. 첫 운영일은 앞선 정산이 없어 작성할 수 없습니다."
       >
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
             {formError && (
-              <Alert tone="danger" title="뉴스를 저장하지 못했어요">
+              <Alert tone="danger" title="뉴스를 저장하지 못했습니다">
                 {formError}
               </Alert>
             )}
@@ -203,7 +203,7 @@ export function NewsTab() {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               maxLength={600}
-              hint="2~3문장. 비우면 참가자에게 제목만 보여요. 변동률 숫자는 쓰지 마세요(크기는 위에서 정한 값이 배지로 보여요)."
+              hint="2~3문장. 비우면 참가자에게 제목만 표시됩니다. 변동률 숫자는 쓰지 마세요(크기는 위에서 정한 값이 배지로 표시됩니다)."
               placeholder="기사체로 적어 주세요. 예: 삼수전자가 차세대 반도체 양산 라인의 수율 안정화에 성공했다고 밝혔다."
             />
             <Stack direction="row" justify="end">
@@ -214,7 +214,7 @@ export function NewsTab() {
           </Stack>
         </form>
       </Card>
-      <Card title="뉴스 목록" description="미래 날짜의 뉴스도 보여요. 참가자에게는 그날 09:00 공시 뒤에만 보여요." padding="none">
+      <Card title="뉴스 목록" description="미래 날짜의 뉴스도 표시됩니다. 참가자에게는 그날 09:00 공시 뒤에만 표시됩니다." padding="none">
         {list.error ? (
           <LoadError error={list.error} onRetry={list.refetch} what="뉴스 목록" />
         ) : (
@@ -224,7 +224,7 @@ export function NewsTab() {
             rows={list.data ?? []}
             rowKey={(n) => n.id}
             loading={list.loading}
-            empty="아직 뉴스가 없어요. 무작위 뉴스는 전날 18:00 정산 때 생기고 그 자리에서 반영돼요."
+            empty="아직 뉴스가 없습니다. 무작위 뉴스는 전날 18:00 정산 때 생기고 그 자리에서 반영됩니다."
           />
         )}
       </Card>

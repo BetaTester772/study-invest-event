@@ -10,9 +10,9 @@ afterEach(() => {
 
 describe('parseErrorBody', () => {
   it('reads {detail:{code,message}}', () => {
-    expect(parseErrorBody(409, { detail: { code: 'ALREADY_CERTIFIED', message: '이미 인증했어요' } })).toEqual({
+    expect(parseErrorBody(409, { detail: { code: 'ALREADY_CERTIFIED', message: '이미 인증했습니다' } })).toEqual({
       code: 'ALREADY_CERTIFIED',
-      message: '이미 인증했어요',
+      message: '이미 인증했습니다',
     });
   });
 
@@ -52,7 +52,7 @@ describe('request', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ detail: { code: 'INVALID_CREDENTIALS', message: '틀렸어요' } }), {
+        new Response(JSON.stringify({ detail: { code: 'INVALID_CREDENTIALS', message: '틀렸습니다' } }), {
           status: 401,
         }),
       ),
@@ -61,7 +61,7 @@ describe('request', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(401);
     expect(err.code).toBe('INVALID_CREDENTIALS');
-    expect(err.message).toBe('틀렸어요');
+    expect(err.message).toBe('틀렸습니다');
   });
 
   it('maps network failures to NETWORK_ERROR', async () => {

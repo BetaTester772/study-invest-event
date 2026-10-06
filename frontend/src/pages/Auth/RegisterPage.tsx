@@ -36,9 +36,9 @@ export function validateRegister(f: RegisterForm, requireCode = true): Errors {
   if (code) errors.code = code;
   const nick = f.nickname.trim();
   if (nick.length < 2 || nick.length > 20) errors.nickname = '닉네임은 2~20자로 정해 주세요.';
-  if (f.password.length < 8) errors.password = '비밀번호는 8자 이상이어야 해요.';
-  if (f.confirm !== f.password) errors.confirm = '비밀번호가 서로 달라요. 같은 비밀번호를 한 번 더 입력해 주세요.';
-  if (!f.consent) errors.consent = '개인정보 수집·이용에 동의해야 참가할 수 있어요.';
+  if (f.password.length < 8) errors.password = '비밀번호는 8자 이상이어야 합니다.';
+  if (f.confirm !== f.password) errors.confirm = '비밀번호가 서로 다릅니다. 같은 비밀번호를 한 번 더 입력해 주세요.';
+  if (!f.consent) errors.consent = '개인정보 수집·이용에 동의해야 참가할 수 있습니다.';
   return errors;
 }
 
@@ -82,23 +82,23 @@ export function RegisterPage() {
         password: form.password,
         privacy_consent: form.consent,
       });
-      toast.success('참가 신청을 마쳤어요', '1,000,000원으로 시작해요. 첫 종목을 골라 보세요.');
+      toast.success('참가 신청을 마쳤습니다', '1,000,000원으로 시작합니다. 첫 종목을 골라 보세요.');
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'EMAIL_TAKEN') {
-        setErrors({ email: '이미 참가한 학교 메일이에요. 로그인해 주세요.' });
+        setErrors({ email: '이미 참가한 학교 메일입니다. 로그인해 주세요.' });
       } else if (err instanceof ApiError && (CODE_ERRORS.has(err.code) || err.code === 'CODE_REQUIRED')) {
         if (err.code === 'CODE_REQUIRED') event.refetch();
         setErrors({ code: err.message });
       } else if (err instanceof ApiError && err.code === 'WEAK_PASSWORD') {
         setErrors({ password: WEAK_PASSWORD_MESSAGE });
       } else if (err instanceof ApiError && err.code === 'STUDENT_ID_TAKEN') {
-        setErrors({ student_id: '이미 다른 계정에 등록된 학번이에요. 본인 학번이 맞다면 운영진에게 문의해 주세요.' });
+        setErrors({ student_id: '이미 다른 계정에 등록된 학번입니다. 본인 학번이 맞다면 운영진에게 문의해 주세요.' });
       } else if (err instanceof ApiError && err.code === 'NICKNAME_TAKEN') {
-        setErrors({ nickname: '다른 참가자가 쓰는 닉네임이에요. 다른 닉네임을 골라 주세요.' });
+        setErrors({ nickname: '다른 참가자가 쓰는 닉네임입니다. 다른 닉네임을 골라 주세요.' });
       } else {
         setErrors({
-          form: err instanceof ApiError ? err.message : '참가 신청을 하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+          form: err instanceof ApiError ? err.message : '참가 신청을 하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
         });
       }
       setSubmitting(false);
@@ -109,7 +109,7 @@ export function RegisterPage() {
     <Container size="sm">
       <PageHeader
         title="참가 신청"
-        description="학교 메일과 학번으로 한 사람당 한 계정만 만들 수 있어요. 모두 같은 1,000,000원으로 시작하고, 중간에 들어와도 똑같이 받아요."
+        description="학교 메일과 학번으로 한 사람당 한 계정만 만들 수 있습니다. 모두 같은 1,000,000원으로 시작하며, 중간에 참가해도 동일하게 지급됩니다."
       />
       <Card>
         <form ref={formRef} onSubmit={onSubmit} noValidate>
@@ -120,7 +120,7 @@ export function RegisterPage() {
               hint={
                 requireCode
                   ? undefined
-                  : '@skku.edu 또는 @g.skku.edu. 비밀번호를 잊었을 때 재설정 코드를 받는 주소예요.'
+                  : '@skku.edu 또는 @g.skku.edu. 비밀번호를 잊었을 때 재설정 코드를 받는 주소입니다.'
               }
               email={form.email}
               onEmailChange={(v) => set('email', v)}
@@ -137,7 +137,7 @@ export function RegisterPage() {
             />
             <TextField
               label="닉네임"
-              hint="2~20자. 랭킹에는 닉네임만 보여요."
+              hint="2~20자. 랭킹에는 닉네임만 표시됩니다."
               value={form.nickname}
               onChange={(e) => set('nickname', e.target.value)}
               error={errors.nickname}

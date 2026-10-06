@@ -71,10 +71,10 @@ export function InstrumentPage() {
   if (instruments.data && !instrument) {
     return (
       <Container>
-        <PageHeader title="종목을 찾을 수 없어요" back={back} />
+        <PageHeader title="종목을 찾을 수 없습니다" back={back} />
         <EmptyState
-          title={`'${code}' 종목은 없어요`}
-          description="주소가 바뀌었을 수 있어요. 시세판에서 종목을 다시 골라 주세요."
+          title={`'${code}' 종목은 없습니다`}
+          description="주소가 바뀌었을 수 있습니다. 시세판에서 종목을 다시 골라 주세요."
           action={<LinkButton to="/">시세판 보기</LinkButton>}
         />
       </Container>
@@ -105,7 +105,7 @@ export function InstrumentPage() {
                     {instrument.news.headline}
                     <Text as="span" size="sm" tone="muted">
                       {' '}
-                      · 오늘 시작가에 반영됐어요.
+                      · 오늘 시작가에 반영됐습니다.
                     </Text>
                   </Text>
                   {instrument.news.subtitle && (
@@ -155,7 +155,7 @@ export function InstrumentPage() {
               rows={rows}
               rowKey={(p) => p.day}
               loading={history.loading}
-              empty="아직 공시된 가격이 없어요. 첫 운영일 09:00에 공시돼요."
+              empty="아직 공시된 가격이 없습니다. 첫 운영일 09:00에 공시됩니다."
             />
           </Card>
         </Stack>

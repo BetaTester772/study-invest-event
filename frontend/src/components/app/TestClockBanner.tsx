@@ -13,10 +13,10 @@ export function TestClockNotice({ clock }: { clock: ClockInfo }) {
     .filter((u): u is { label: string; at: string } => u.at !== null)
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   return (
-    <Alert title={`QA 테스트 시계예요. 실제 ${formatDayLength(clock.scale)}이 이벤트 하루예요.`}>
-      화면의 날짜와 시각은 테스트 시계 기준이에요.{' '}
+    <Alert title={`QA 테스트 시계입니다. 실제 ${formatDayLength(clock.scale)}이 이벤트 하루입니다.`}>
+      화면의 날짜와 시각은 테스트 시계 기준입니다.{' '}
       {upcoming.length === 0 ? (
-        '테스트 시계로 이벤트 기간이 끝났어요.'
+        '테스트 시계로 이벤트 기간이 끝났습니다.'
       ) : (
         <>
           실제 시각으로{' '}
@@ -26,7 +26,7 @@ export function TestClockNotice({ clock }: { clock: ClockInfo }) {
               {u.label} <strong>{formatClockTime(u.at)}</strong>
             </span>
           ))}
-          이에요.
+          입니다.
         </>
       )}
     </Alert>
@@ -36,8 +36,8 @@ export function TestClockNotice({ clock }: { clock: ClockInfo }) {
 /** QA unlimited mode: the event has no end date. */
 export function UnlimitedNotice() {
   return (
-    <Alert title="QA 무제한 모드예요.">
-      이벤트 종료일 없이 매일 공시·정산이 이어져요. 실제 이벤트 기간과 상관없이 가격 추세를 길게 볼 수 있어요.
+    <Alert title="QA 무제한 모드입니다.">
+      이벤트 종료일 없이 매일 공시·정산이 이어집니다. 실제 이벤트 기간과 상관없이 가격 추세를 길게 확인할 수 있습니다.
     </Alert>
   );
 }

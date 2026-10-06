@@ -30,15 +30,15 @@ export function LoginPage() {
     setError(null);
     try {
       const p = await login(identity.trim(), password);
-      toast.success(`${p.nickname}님, 반가워요`);
+      toast.success(`${p.nickname}님, 반갑습니다`);
       navigate(from, { replace: true });
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === 'INVALID_CREDENTIALS'
-          ? '학번이나 비밀번호가 맞지 않아요. 다시 확인해 주세요.'
+          ? '학번이나 비밀번호가 맞지 않습니다. 다시 확인해 주세요.'
           : err instanceof ApiError
             ? err.message
-            : '로그인하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+            : '로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
       setSubmitting(false);
     }
@@ -53,7 +53,7 @@ export function LoginPage() {
             {error && <Alert tone="danger">{error}</Alert>}
             <TextField
               label="학번"
-              hint="숫자 10자리. 학교 메일 주소로도 로그인할 수 있어요."
+              hint="숫자 10자리. 학교 메일 주소로도 로그인할 수 있습니다."
               placeholder="2026310000"
               autoComplete="username"
               value={identity}

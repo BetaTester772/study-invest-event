@@ -66,7 +66,7 @@ export function AuditTab() {
             rowKey={(a) => a.id}
             loading={audit.loading}
             dense
-            empty="아직 기록이 없어요."
+            empty="아직 기록이 없습니다."
           />
         )}
       </Card>

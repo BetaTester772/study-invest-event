@@ -39,7 +39,7 @@ export function Table<T>({
   columns,
   rows,
   rowKey,
-  empty = '표시할 내용이 없어요.',
+  empty = '표시할 내용이 없습니다.',
   caption,
   hideCaption = true,
   isRowHighlighted,

@@ -31,10 +31,10 @@ export function MarketStatus({ event, stamped }: { event: EventInfo; stamped?: s
           <Text size="sm" tone="muted">
             오늘은 {formatDay(event.today)}
             {s.dayNumber == null
-              ? '이에요.'
+              ? '입니다.'
               : unlimited
-                ? `, ${s.dayNumber}일째 날이에요.`
-                : `, ${event.operating_days.length}일 중 ${s.dayNumber}일째 날이에요.`}
+                ? `, ${s.dayNumber}일째 날입니다.`
+                : `, ${event.operating_days.length}일 중 ${s.dayNumber}일째 날입니다.`}
           </Text>
         </Stack>
         <DayStrip {...dayStripWindow(event)} today={event.today} stamped={stamped} label="이벤트 운영일" />

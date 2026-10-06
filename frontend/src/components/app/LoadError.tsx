@@ -7,7 +7,7 @@ export function LoadError({ error, onRetry, what = '정보' }: { error: ApiError
   return (
     <Alert
       tone="danger"
-      title={`${withObjectParticle(what)} 불러오지 못했어요`}
+      title={`${withObjectParticle(what)} 불러오지 못했습니다`}
       action={
         onRetry && (
           <Button size="sm" variant="secondary" onClick={onRetry}>

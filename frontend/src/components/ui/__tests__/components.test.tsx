@@ -79,9 +79,9 @@ describe('Table', () => {
   ];
 
   it('shows the empty state when there are no rows', () => {
-    render(<Table columns={columns} rows={[]} rowKey={(_, i) => i} empty="아직 주문이 없어요." />);
-    expect(screen.getByText('아직 주문이 없어요.')).toBeInTheDocument();
-    expect(screen.getByText('아직 주문이 없어요.').closest('td')).toHaveAttribute('colspan', '2');
+    render(<Table columns={columns} rows={[]} rowKey={(_, i) => i} empty="아직 주문이 없습니다." />);
+    expect(screen.getByText('아직 주문이 없습니다.')).toBeInTheDocument();
+    expect(screen.getByText('아직 주문이 없습니다.').closest('td')).toHaveAttribute('colspan', '2');
   });
 
   it('renders rows, right-aligns numeric columns and highlights rows', () => {
@@ -247,7 +247,7 @@ describe('Toast', () => {
     vi.useFakeTimers();
     function Trigger() {
       const toast = useToast();
-      return <button onClick={() => toast.success('체결됐어요', '삼수전자 3주')}>알림</button>;
+      return <button onClick={() => toast.success('체결됐습니다', '삼수전자 3주')}>알림</button>;
     }
     render(
       <ToastProvider>
@@ -255,11 +255,11 @@ describe('Toast', () => {
       </ToastProvider>,
     );
     fireEvent.click(screen.getByRole('button', { name: '알림' }));
-    expect(screen.getByText('체결됐어요')).toBeInTheDocument();
+    expect(screen.getByText('체결됐습니다')).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(5000);
     });
-    expect(screen.queryByText('체결됐어요')).not.toBeInTheDocument();
+    expect(screen.queryByText('체결됐습니다')).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 });
@@ -281,7 +281,7 @@ describe('FileDropzone', () => {
     const big = new File(['01234567890123'], 'big.png', { type: 'image/png' });
     await userEvent.upload(input, big);
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('사진이 너무 커요');
+    expect(screen.getByRole('alert')).toHaveTextContent('사진이 너무 큽니다');
   });
 
   it('accepts a valid file', async () => {

@@ -17,15 +17,15 @@ export function EmailVerificationBanner() {
     <Container padTop>
       <Alert
         tone="warning"
-        title="지금은 인증된 참가자만 거래할 수 있어요"
+        title="지금은 인증된 참가자만 거래할 수 있습니다"
         action={
           <LinkButton to="/verify-email" size="sm" state={{ from: `${location.pathname}${location.search}` }}>
             인증하기
           </LinkButton>
         }
       >
-        가입할 때 등록한 학교 메일로 코드를 받아 인증하면 바로 다시 거래할 수 있어요. 시세·내 자산 보기와 공부 인증은
-        그대로 쓸 수 있어요.
+        가입할 때 등록한 학교 메일로 코드를 받아 인증하면 바로 다시 거래할 수 있습니다. 시세·내 자산 보기와 공부 인증은
+        그대로 쓸 수 있습니다.
       </Alert>
     </Container>
   );

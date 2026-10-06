@@ -22,7 +22,7 @@ export interface UseApiOptions {
 
 function toApiError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
-  return new ApiError(0, 'UNKNOWN', err instanceof Error ? err.message : '알 수 없는 오류가 생겼어요.');
+  return new ApiError(0, 'UNKNOWN', err instanceof Error ? err.message : '알 수 없는 오류가 생겼습니다.');
 }
 
 /** 두 의존성 목록이 같은지(Object.is로 항목별 비교, React 의존성 규칙과 같음). */
