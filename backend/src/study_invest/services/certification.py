@@ -59,7 +59,7 @@ class SubmissionStatus:
     message: str | None
     http_status: int
     existing: StudyCertification | None
-    """집계 날짜에 이미 낸 인증(상태 무관). 1인 1일 1회라 반려돼도 다시 낼 수 없다."""
+    """집계 날짜에 가장 최근에 낸 인증(상태 무관). 반려됐다면 다시 낼 수 있다."""
 
 
 def submission_status(
@@ -75,6 +75,7 @@ def submission_status(
             StudyCertification.participant_id == participant.id,
             StudyCertification.target_date == target,
         )
+        .order_by(StudyCertification.id.desc())
     ).first()
 
     def blocked(reason: BlockReason, message: str, status: int) -> SubmissionStatus:
@@ -84,9 +85,9 @@ def submission_status(
         return blocked("DISQUALIFIED", "실격 처리된 참가자는 인증할 수 없습니다.", 403)
     if not calendar.is_operating_day(target):
         return blocked("OUTSIDE_EVENT", f"{target}는 이벤트 기간이 아닙니다.", 422)
-    if existing is not None:
+    if existing is not None and existing.status is not CertStatus.REJECTED:
         return blocked("ALREADY_CERTIFIED", f"{target} 인증은 이미 제출했습니다(1일 1회).", 409)
-    return SubmissionStatus(target, True, None, None, 200, None)
+    return SubmissionStatus(target, True, None, None, 200, existing)
 
 
 def submit(
@@ -99,7 +100,7 @@ def submit(
     upload_dir: Path,
     max_bytes: int,
 ) -> StudyCertification:
-    """인증 사진 1장 제출. 1인 1일 1회, 마감 시각 이후는 다음 날짜로 집계한다."""
+    """인증 사진 1장 제출. 1인 1일 1회(반려되면 같은 날 다시 제출 가능), 마감 시각 이후는 다음 날짜로 집계한다."""
     status = submission_status(s, participant, now, calendar, params)
     if not status.can_submit:
         assert status.reason is not None and status.message is not None

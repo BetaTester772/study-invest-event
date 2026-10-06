@@ -161,7 +161,7 @@ export function CertificationPage() {
               <Alert tone="danger" title="인증을 올릴 수 없습니다">
                 {st.message}
               </Alert>
-            ) : st.existing ? (
+            ) : st.existing && !st.can_submit ? (
               <Stack gap={4}>
                 <Alert
                   tone={
@@ -171,9 +171,7 @@ export function CertificationPage() {
                 >
                   {st.existing.status === 'approved'
                     ? `승인됐습니다. ${rewardText(st.existing, rewardCash, e.end ?? undefined)}.`
-                    : st.existing.status === 'rejected'
-                      ? `반려됐습니다(${st.existing.reject_reason ?? '사유 없음'}). 인증은 하루 한 번이라 이 날짜는 다시 올릴 수 없습니다.`
-                      : '검수를 기다리는 중입니다. 결과는 아래 목록에서 확인할 수 있습니다.'}
+                    : '검수를 기다리는 중입니다. 결과는 아래 목록에서 확인할 수 있습니다.'}
                 </Alert>
                 <Text size="sm" tone="muted">
                   오늘 {st.cutoff}이 지나면 다음 날짜 인증을 올릴 수 있습니다.
@@ -181,6 +179,11 @@ export function CertificationPage() {
               </Stack>
             ) : (
               <Stack gap={4}>
+                {st.existing?.status === 'rejected' && (
+                  <Alert tone="warning" title="이전 인증이 반려됐습니다">
+                    {st.existing.reject_reason ?? '사유 없음'}. 같은 날짜 인증을 다시 올릴 수 있습니다.
+                  </Alert>
+                )}
                 <Text>
                   지금 올리면 <Highlight>{formatDay(target)}</Highlight> 인증으로 들어갑니다.
                 </Text>
