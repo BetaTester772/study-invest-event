@@ -25,6 +25,7 @@ from ..clock import OffsetClock, ScaledClock
 from ..config import Settings
 from ..db import DatabasePools
 from ..event_calendar import EventCalendar
+from ..logging_setup import bind
 from ..mail import Mailer
 from ..models import Participant
 from ..params import EventParams
@@ -137,7 +138,14 @@ TokenDep = Annotated[str | None, Depends(bearer_token)]
 
 def optional_participant(s: SessionDep, token: TokenDep) -> Participant | None:
     # DB 조회 → 동기 def(스레드풀)
-    return auth.participant_by_token(s, token) if token else None
+    if not token:
+        return None
+    # 만료·폐기된 토큰의 요청도 같은 세션 ID로 남아 "왜 갑자기 401인지" 추적할 수 있다.
+    bind(session_id=auth.session_id(token))
+    participant = auth.participant_by_token(s, token)
+    if participant is not None:
+        bind(participant_id=participant.id)
+    return participant
 
 
 async def current_participant(
@@ -179,6 +187,7 @@ async def require_admin(
         or not secrets.compare_digest(x_admin_key.encode(), expected.encode())
     ):
         raise DomainError("UNAUTHORIZED", "관리자 키가 올바르지 않습니다.", 401)
+    bind(admin=True)
 
 
 def require_captcha(action: str, *, fail_open: bool = False) -> Callable[..., None]:
@@ -204,12 +213,14 @@ def require_captcha(action: str, *, fail_open: bool = False) -> Callable[..., No
                 "CAPTCHA_UNAVAILABLE",
                 "지금은 보안 확인을 할 수 없습니다. 잠시 후 다시 시도하세요.",
                 503,
+                context={"action": action},
             ) from None
         if not ok:
             raise DomainError(
                 "CAPTCHA_FAILED",
                 "보안 확인에 실패했습니다. 확인이 끝난 뒤 다시 시도하거나 페이지를 새로고침하세요.",
                 403,
+                context={"action": action, "token_present": bool(x_turnstile_token)},
             )
 
     return check

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..clock import ScaledClock
 from ..event_calendar import EventCalendar, to_kst
 from ..instruments import BY_CODE, INSTRUMENTS
+from ..logging_setup import bind
 from ..mail import NoMailer
 from ..models import CodePurpose, MarketDay, PriceHistory
 from ..normalize import mask_email
@@ -230,7 +231,13 @@ def send_code(
         except Exception as exc:
             # 코드 기록은 지우지 않는다: 재요청 대기·한도에 계속 센다. 연결 종료 중 오류처럼
             # 메일이 실제로 갔을 수도 있으니 코드도 그대로 유효하다.
-            log.exception("인증 메일 발송 실패")
+            log.exception(
+                "인증 메일 발송 실패: purpose=%s to=%s mailer=%s error=%s",
+                purpose.value,
+                mask_email(email.address),
+                type(state.mailer).__name__,
+                type(exc).__name__,
+            )
             raise DomainError(
                 "MAIL_SEND_FAILED", "인증 메일을 보내지 못했습니다. 1분 뒤 다시 시도하세요.", 503
             ) from exc
@@ -287,6 +294,8 @@ def register(
         s, email, profile, body.nickname, body.password, now, state.calendar, verified=verify
     )
     s.commit()
+    bind(participant_id=participant.id, session_id=auth.session_id(token))
+    log.info("register: verified=%s", verify)
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)
     )
@@ -340,6 +349,8 @@ def reset_password(
     consume_code(s, participant.email_address, body.code, real_now, CodePurpose.RESET_PASSWORD)
     participant, token = auth.reset_password(s, participant, body.password, real_now)
     s.commit()
+    bind(participant_id=participant.id, session_id=auth.session_id(token))
+    log.info("password reset")
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)
     )
@@ -353,6 +364,8 @@ def reset_password(
 def login(body: schemas.LoginRequest, s: SessionDep, now: NowDep) -> schemas.AuthResponse:
     participant, token = auth.login(s, body.identity, body.password, now)
     s.commit()
+    bind(participant_id=participant.id, session_id=auth.session_id(token))
+    log.info("login")
     return schemas.AuthResponse(
         token=token, participant=schemas.Participant.model_validate(participant)
     )
@@ -361,6 +374,8 @@ def login(body: schemas.LoginRequest, s: SessionDep, now: NowDep) -> schemas.Aut
 @router.post("/auth/logout", status_code=204)
 def logout(s: SessionDep, token: TokenDep) -> Response:
     if token:
+        bind(session_id=auth.session_id(token))
         auth.revoke_token(s, token)
         s.commit()
+        log.info("logout")
     return Response(status_code=204)

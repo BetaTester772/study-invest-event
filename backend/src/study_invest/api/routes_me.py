@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile
@@ -28,6 +29,8 @@ from .deps import (
 )
 from .email_codes import consume_code
 from .routes_public import send_code
+
+log = logging.getLogger("study_invest.me")
 
 router = APIRouter(prefix="/api/me")
 
@@ -106,6 +109,7 @@ def verify_email(
     email = consume_code(s, raw_email, body.code, real_now)
     auth.verify_email(s, participant, email, profile, real_now)
     s.commit()
+    log.info("email verified")
     return schemas.Participant.model_validate(participant)
 
 
@@ -139,6 +143,17 @@ def place_order(
         s, participant, body.code, body.side, body.quantity, now, state.calendar, get_params(s)
     )
     s.commit()
+    log.log(
+        logging.WARNING if order.reject_reason else logging.INFO,
+        "order %s: id=%s %s %s x%d price=%s reject_reason=%s",
+        order.status.value,
+        order.id,
+        body.side,
+        body.code,
+        body.quantity,
+        order.price,
+        order.reject_reason.value if order.reject_reason else None,
+    )
     return views.order(order)
 
 
@@ -183,6 +198,7 @@ def submit_certification(
         s, participant, data, now, state.calendar, get_params(s), state.settings.upload_dir, limit
     )
     s.commit()
+    log.info("certification submitted: id=%s date=%s", cert.id, cert.target_date)
     return views.certification(cert)
 
 

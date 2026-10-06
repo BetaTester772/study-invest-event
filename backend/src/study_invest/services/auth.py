@@ -19,6 +19,7 @@ from ..models import AuthSession, Participant, VerifyMethod
 from ..normalize import (
     SchoolEmail,
     SchoolEmailError,
+    mask_value,
     normalize_identity,
     normalize_nickname,
     normalize_student_id,
@@ -55,6 +56,12 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def session_id(token: str) -> str:
+    """로그 추적용 로그인 세션 ID. 토큰 해시(DB 키)의 앞 12자라 토큰을 복원할 수 없고, 같은
+    토큰이면 항상 같다. 로그인할 때 발급 로그와 이후 모든 요청 로그가 이 값으로 이어진다."""
+    return _token_hash(token)[:12]
+
+
 def issue_token(s: Session, participant: Participant, now: datetime) -> str:
     token = secrets.token_urlsafe(32)
     s.add(AuthSession(token_hash=_token_hash(token), participant_id=participant.id, created_at=now))
@@ -87,6 +94,7 @@ def ensure_strong_password(password: str, *personal: str | None) -> None:
             "WEAK_PASSWORD",
             "너무 쉬운 비밀번호입니다. 흔한 단어·연속된 숫자·학번·이름을 피하고 더 길게 정하세요.",
             422,
+            context={"password_length": len(password), "min_score": MIN_PASSWORD_SCORE},
         )
 
 
@@ -127,11 +135,12 @@ class Profile:
     department: str
 
 
-def _student_id_taken() -> DomainError:
+def _student_id_taken(student_id: str = "") -> DomainError:
     return DomainError(
         "STUDENT_ID_TAKEN",
         "이미 다른 계정에 등록된 학번입니다. 1인 1계정만 허용됩니다."
         " 본인 학번이 맞다면 운영진에게 문의하세요.",
+        context={"student_id": mask_value(student_id)},
     )
 
 
@@ -140,7 +149,7 @@ def ensure_student_id_free(s: Session, student_id: str, exclude_id: int | None =
     if exclude_id is not None:
         query = query.where(Participant.id != exclude_id)
     if s.scalar(query):
-        raise _student_id_taken()
+        raise _student_id_taken(student_id)
 
 
 def _ensure_unique(
@@ -159,7 +168,9 @@ def _ensure_unique(
     if nickname is not None and s.scalar(
         select(Participant.id).where(Participant.nickname == nickname)
     ):
-        raise DomainError("NICKNAME_TAKEN", "이미 사용 중인 닉네임입니다.")
+        raise DomainError(
+            "NICKNAME_TAKEN", "이미 사용 중인 닉네임입니다.", context={"nickname": nickname}
+        )
 
 
 def register(
@@ -204,7 +215,9 @@ def register(
     except IntegrityError as exc:
         _ensure_unique(s, email, profile, nickname)
         raise DomainError(
-            "CONFLICT", "같은 요청이 동시에 처리되어 충돌했습니다. 다시 시도하세요."
+            "CONFLICT",
+            "같은 요청이 동시에 처리되어 충돌했습니다. 다시 시도하세요.",
+            context={"during": "register", "db_error": type(exc.orig).__name__},
         ) from exc
     audit(s, now, f"participant:{participant.id}", "participant.register", nickname=nickname)
     return participant, issue_token(s, participant, now)
@@ -246,8 +259,10 @@ def verify_email(
                 Participant.email == email.canonical, Participant.id != participant.id
             )
         ):
-            raise email_taken() from exc
-        raise _student_id_taken() from exc
+            raise email_taken(email) from exc
+        raise _student_id_taken(
+            profile.student_id if profile else participant.student_id or ""
+        ) from exc
     audit(s, now, f"participant:{participant.id}", "participant.verify_email")
 
 
@@ -292,7 +307,9 @@ def login(s: Session, identity: str, password: str, now: datetime) -> tuple[Part
     입력에 맞는 계정을 학번 → 학교 메일 → 예전 식별자 순으로 찾고, 비밀번호가 맞는 첫 계정으로
     로그인한다(예전 식별자가 다른 사람의 학번과 같은 숫자여도 각자 로그인할 수 있다).
     """
+    candidates = 0
     for participant in _accounts(s, identity):
+        candidates += 1
         stored = participant.password_hash
         if not verify_password(password, stored):
             continue
@@ -308,7 +325,16 @@ def login(s: Session, identity: str, password: str, now: datetime) -> tuple[Part
         if current.password_hash != stored:
             continue
         return current, issue_token(s, current, now)
-    raise DomainError("INVALID_CREDENTIALS", "학번 또는 비밀번호가 올바르지 않습니다.", 401)
+    raise DomainError(
+        "INVALID_CREDENTIALS",
+        "학번 또는 비밀번호가 올바르지 않습니다.",
+        401,
+        context={
+            "why": "wrong_password" if candidates else "no_such_account",
+            "identity": mask_value(identity),
+            "matched_accounts": candidates,
+        },
+    )
 
 
 def account_for_reset(s: Session, identity: str) -> Participant:
@@ -325,6 +351,7 @@ def account_for_reset(s: Session, identity: str) -> Participant:
         "이 학번으로 가입했거나 학교 메일을 등록한 계정이 없습니다. 학번을 확인하거나 운영진에게"
         " 문의하세요.",
         404,
+        context={"identity": mask_value(identity)},
     )
 
 

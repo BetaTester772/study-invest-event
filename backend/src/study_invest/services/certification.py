@@ -105,15 +105,32 @@ def submit(
     status = submission_status(s, participant, now, calendar, params)
     if not status.can_submit:
         assert status.reason is not None and status.message is not None
-        raise DomainError(status.reason, status.message, status.http_status)
+        raise DomainError(
+            status.reason,
+            status.message,
+            status.http_status,
+            context={
+                "target_date": status.target_date,
+                "existing_cert_id": status.existing.id if status.existing else None,
+                "existing_status": status.existing.status.value if status.existing else None,
+            },
+        )
     target = status.target_date
     if not data or len(data) > max_bytes:
         raise DomainError(
-            "INVALID_IMAGE", f"사진은 {max_bytes // (1024 * 1024)}MB 이하여야 합니다.", 422
+            "INVALID_IMAGE",
+            f"사진은 {max_bytes // (1024 * 1024)}MB 이하여야 합니다.",
+            422,
+            context={"why": "empty" if not data else "too_large", "bytes": len(data)},
         )
     content_type = sniff_image(data)
     if content_type is None:
-        raise DomainError("INVALID_IMAGE", "JPEG·PNG·WEBP·HEIC 사진만 올릴 수 있습니다.", 422)
+        raise DomainError(
+            "INVALID_IMAGE",
+            "JPEG·PNG·WEBP·HEIC 사진만 올릴 수 있습니다.",
+            422,
+            context={"why": "unsupported_type", "bytes": len(data), "head": data[:8].hex()},
+        )
 
     digest = hashlib.sha256(data).hexdigest()
     duplicate_of = s.scalar(
@@ -139,7 +156,9 @@ def submit(
             s.add(cert)
     except IntegrityError as exc:
         raise DomainError(
-            "ALREADY_CERTIFIED", f"{target} 인증은 이미 제출했습니다(1일 1회)."
+            "ALREADY_CERTIFIED",
+            f"{target} 인증은 이미 제출했습니다(1일 1회).",
+            context={"target_date": target, "during": "concurrent_submit"},
         ) from exc
     upload_dir.mkdir(parents=True, exist_ok=True)
     path = upload_dir / filename
@@ -162,9 +181,15 @@ def review(
 ) -> StudyCertification:
     cert = s.get(StudyCertification, cert_id)
     if cert is None:
-        raise DomainError("NOT_FOUND", "인증을 찾을 수 없습니다.", 404)
+        raise DomainError(
+            "NOT_FOUND", "인증을 찾을 수 없습니다.", 404, context={"cert_id": cert_id}
+        )
     if cert.status is not CertStatus.PENDING:
-        raise DomainError("ALREADY_REVIEWED", "이미 검수한 인증입니다.")
+        raise DomainError(
+            "ALREADY_REVIEWED",
+            "이미 검수한 인증입니다.",
+            context={"cert_id": cert_id, "status": cert.status.value},
+        )
     reason = (reason or "").strip()
     if not approve and not reason:
         raise DomainError("REASON_REQUIRED", "반려 사유를 입력하세요.", 422)
