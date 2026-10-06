@@ -9,9 +9,11 @@ import queue as queue_module
 import threading
 import time
 from collections.abc import Iterator
+from typing import cast
 
 import pytest
 from conftest import ADMIN_KEY, email_code, profile_for, register_with
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from study_invest.config import Settings
@@ -115,11 +117,12 @@ def test_unhandled_exception_logged_with_traceback_and_request_id() -> None:
 
 
 def test_app_returns_request_id_on_500(client: TestClient) -> None:
-    app = client.app
+    app = cast(FastAPI, client.app)
 
-    @app.get("/api/_boom")  # type: ignore[attr-defined]
     def boom() -> None:
         raise RuntimeError("kaboom")
+
+    app.add_api_route("/api/_boom", boom)
 
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.get("/api/_boom")
@@ -172,7 +175,7 @@ def test_login_failure_logs_reason_without_leaking_identity(
     r = client.post("/api/auth/login", json={"identity": "2026123456", "password": "pw-12345678"})
     assert r.status_code == 401
     d = _detail(logs, "domain error: INVALID_CREDENTIALS")
-    assert d["origin"].startswith("services/auth.py")  # type: ignore[union-attr]
+    assert str(d["origin"]).startswith("services/auth.py")
     ctx = d["context"]
     assert isinstance(ctx, dict)
     assert ctx["why"] == "no_such_account"
