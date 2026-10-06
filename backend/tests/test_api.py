@@ -208,6 +208,9 @@ class TestSettlement:
         factors = [x["noise_factor"] for x in logs[0]["stocks"]]
         assert len(set(factors)) == 1 and 0.97 < factors[0] < 1.0
         assert logs[0]["params"]["stock_noise_scale"] == 0.1
+        # 종목별 변동률 잡음은 뉴스 뒤에 뽑는다. 0.5면 ε = 0이라 가격이 그대로다.
+        assert [x["rate_noise"] for x in logs[0]["stocks"]] == [0.0] * 4
+        assert logs[0]["params"]["stock_rate_noise"] == 0.02
 
     def test_stock_noise_can_be_turned_off(
         self, client: TestClient, clock: Clock, admin: dict[str, str]
@@ -219,6 +222,28 @@ class TestSettlement:
         settle_day(client, clock, D1)
         logs = client.get("/api/admin/settlements", headers=admin).json()
         assert all(x["noise_factor"] is None and x["rate"] == 0 for x in logs[0]["stocks"])
+
+    def test_stock_rate_noise_param(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        assert params["stock_rate_noise"] == 0.02
+        r = client.put("/api/admin/params", json=dict(params, stock_rate_noise=0.05), headers=admin)
+        assert r.status_code == 200 and r.json()["stock_rate_noise"] == 0.05
+        # 이 값을 모르는 이전 화면이 보내지 않아도 저장된 값을 유지한다
+        legacy = {k: v for k, v in params.items() if k != "stock_rate_noise"}
+        r = client.put("/api/admin/params", json=dict(legacy, news_probability=0.6), headers=admin)
+        assert r.status_code == 200 and r.json()["stock_rate_noise"] == 0.05
+        bad = client.put(
+            "/api/admin/params", json=dict(params, stock_rate_noise=0.2), headers=admin
+        )
+        assert bad.status_code == 422
+        # 0이면 잡음 없음
+        client.put("/api/admin/params", json=dict(params, stock_rate_noise=0), headers=admin)
+        open_day(client, clock, D1)
+        settle_day(client, clock, D1)
+        logs = client.get("/api/admin/settlements", headers=admin).json()
+        assert all(x["rate_noise"] is None for x in logs[0]["stocks"])
 
     def test_coin_is_calm_for_first_three_rounds(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
