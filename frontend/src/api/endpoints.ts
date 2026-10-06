@@ -3,6 +3,7 @@ import type {
   AdminCertification,
   AdminNewsItem,
   AdminParticipant,
+  AdminPosition,
   AuditEntry,
   AuthResponse,
   BatchResult,
@@ -96,6 +97,7 @@ export const adminApi = {
     request<AdminParticipant>(`/admin/participants/${id}`, { method: 'PATCH', auth: 'admin', body: { status } }),
   setParticipantVerified: (id: number, verified: boolean) =>
     request<AdminParticipant>(`/admin/participants/${id}`, { method: 'PATCH', auth: 'admin', body: { verified } }),
+  positions: () => request<AdminPosition[]>('/admin/positions', { auth: 'admin' }),
   tradingAccess: () => request<TradingAccess>('/admin/trading-access', { auth: 'admin' }),
   setTradingAccess: (body: TradingAccess) =>
     request<TradingAccess>('/admin/trading-access', { method: 'PUT', auth: 'admin', body }),

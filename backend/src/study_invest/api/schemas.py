@@ -415,6 +415,29 @@ class AdminParticipant(Participant):
     approved_certifications: int
 
 
+class AdminPosition(Schema):
+    """참가자 한 명의 한 종목 거래·보유 현황. 산 적이 있거나 지금 들고 있으면 한 행."""
+
+    participant_id: int
+    nickname: str
+    status: ParticipantStatus
+    code: str
+    name: str
+    price: int
+    """현재가(최신 공시 시작가)."""
+    quantity: int
+    """현재 보유 수량."""
+    cost: int
+    """보유분 취득 원가."""
+    value: int
+    """평가액 = 수량 × 현재가."""
+    bought_quantity: int
+    bought_amount: int
+    sold_quantity: int
+    sold_amount: int
+    """체결된 주문의 누적 매수·매도(수량, 금액)."""
+
+
 class ParticipantPatch(BaseModel):
     """바꿀 항목만 보낸다."""
 
