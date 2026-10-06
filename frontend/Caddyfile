@@ -34,7 +34,12 @@
 		# 경로별 한도(JSON 1MiB, 사진 업로드 등)는 백엔드가 정한다. 백엔드는 한도를 넘는
 		# Content-Length를 보면 본문을 읽지 않고 413을 보낸 뒤 연결을 닫는다. 본문을 먼저 흘려
 		# 보내면 그 연결이 끊겨 502가 되므로, 100-continue로 백엔드가 받겠다고 할 때만 본문을 보낸다.
+		# 백엔드 컨테이너를 교체하는 동안 연결이 안 되면(dial 실패) 502를 바로 내지 않고
+		# 최대 10초까지 250ms 간격으로 다시 시도한다. 요청이 백엔드에 닿기 전에 실패한
+		# 경우만 재시도하므로 POST도 중복 실행되지 않는다. 앞단의 재시도 한도(15초)보다 짧게 둔다.
 		reverse_proxy backend:8000 {
+			lb_try_duration 10s
+			lb_try_interval 250ms
 			header_up Expect 100-continue
 			transport http {
 				expect_continue_timeout 5s
