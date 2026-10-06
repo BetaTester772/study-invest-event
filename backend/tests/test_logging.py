@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import logging.handlers
+import queue as queue_module
+import threading
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -11,7 +15,13 @@ from conftest import ADMIN_KEY, email_code, profile_for, register_with
 from fastapi.testclient import TestClient
 
 from study_invest.config import Settings
-from study_invest.logging_setup import ContextFilter, JsonFormatter, configure_logging
+from study_invest.logging_setup import (
+    ContextFilter,
+    DrainingListener,
+    JsonFormatter,
+    NonBlockingQueueHandler,
+    configure_logging,
+)
 
 
 class ListHandler(logging.Handler):
@@ -230,3 +240,66 @@ def test_session_id_ties_login_to_later_requests_and_logout(
     )
     assert again.status_code == 200, again.text
     assert find(logs, "login")["session_id"] != sid
+
+
+class BlockedSink(logging.Handler):
+    """출력이 막힌 상황(가득 찬 파이프)을 흉내 낸다. release()하기 전에는 emit이 돌아오지 않는다."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.gate = threading.Event()
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.gate.wait(timeout=10)
+        self.messages.append(record.getMessage())
+
+
+def test_blocked_log_output_does_not_block_callers_and_drops_when_full() -> None:
+    q: queue_module.Queue[logging.LogRecord] = queue_module.Queue(5)
+    handler = NonBlockingQueueHandler(q)
+    sink = BlockedSink()
+    handler.listener = DrainingListener(q, sink)
+    handler.listener.start()
+    logger = logging.getLogger("study_invest.test_blocked")
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    try:
+        started = time.perf_counter()
+        for i in range(200):
+            logger.info("line %d", i)
+        elapsed = time.perf_counter() - started
+        assert elapsed < 0.5  # 출력이 막혀 있어도 호출은 바로 돌아온다
+        assert handler.dropped > 0
+        sink.gate.set()
+    finally:
+        handler.listener.stop()
+        logger.removeHandler(handler)
+    assert any(m == "line 0" for m in sink.messages)
+    assert len(sink.messages) < 200  # 넘친 로그는 버려졌다
+
+
+def test_exc_info_and_context_survive_the_queue(client: TestClient) -> None:
+    q: queue_module.Queue[logging.LogRecord] = queue_module.Queue()
+    handler = NonBlockingQueueHandler(q)
+    handler.addFilter(ContextFilter())
+    out = ListHandler()
+    out.filters.clear()  # 출력 스레드에는 요청 컨텍스트가 없다(필터는 큐 앞에서 이미 돌았다)
+    handler.listener = DrainingListener(q, out)
+    handler.listener.start()
+    logger = logging.getLogger("study_invest")
+    logger.addHandler(handler)
+    try:
+        client.get("/api/me")  # 401: 요청 컨텍스트가 있는 요청
+        try:
+            raise RuntimeError("queued boom")
+        except RuntimeError:
+            logger.exception("with traceback")
+    finally:
+        handler.listener.stop()
+        logger.removeHandler(handler)
+    tb = next(line for line in out.lines if line["message"] == "with traceback")
+    assert "queued boom" in str(tb["exc"])
+    # 요청 컨텍스트는 호출한 스레드에서 붙은 뒤 큐를 건넌다(출력 스레드에는 contextvar가 없다).
+    me = next(line for line in out.lines if "GET /api/me" in str(line["message"]))
+    assert me["request_id"] != "-"

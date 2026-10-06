@@ -6,9 +6,14 @@
 
 from __future__ import annotations
 
+import atexit
+import contextlib
 import contextvars
+import copy
 import json
 import logging
+import logging.handlers
+import queue as queue_module
 import sys
 from datetime import UTC, datetime
 from typing import Literal
@@ -90,20 +95,89 @@ class JsonFormatter(logging.Formatter):
 
 
 _HANDLER_MARK = "_study_invest_handler"
+QUEUE_SIZE = 10_000
+"""대기 로그 상한. 출력이 이보다 오래 막히면 새 로그를 버리고(요청은 계속 처리) 개수를 센다."""
 
 
-def configure_logging(level: str = "INFO", fmt: Literal["text", "json"] = "text") -> None:
-    """앱 로거를 설정한다. 여러 번 불러도 핸들러는 하나만 남는다."""
-    resolved = logging.getLevelName(level.upper())
-    if not isinstance(resolved, int):
-        raise ValueError(f"STUDY_INVEST_LOG_LEVEL이 올바르지 않습니다: {level!r}")
+class NonBlockingQueueHandler(logging.handlers.QueueHandler):
+    """로그를 큐에 넣기만 한다(호출한 스레드·이벤트 루프는 출력을 기다리지 않는다).
+
+    - 컨텍스트 필터(요청 ID 등)는 호출한 스레드에서 돌아야 하므로 이 핸들러에 붙인다.
+    - 큐가 가득 차면 버리고, 다시 들어갈 수 있을 때 버린 개수를 한 줄로 남긴다.
+    """
+
+    def __init__(self, queue: queue_module.Queue[logging.LogRecord]) -> None:
+        super().__init__(queue)
+        self.dropped = 0
+        self.listener: DrainingListener | None = None
+
+    def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
+        # 기본 구현은 exc_info를 지워 JSON 포맷터가 트레이스백을 못 쓴다. 인자만 미리 합치고
+        # 나머지(exc_info, detail, fields)는 그대로 둔다. 서식은 출력 스레드에서 처리한다.
+        record = copy.copy(record)
+        record.msg = record.getMessage()
+        record.args = None
+        return record
+
+    def enqueue(self, record: logging.LogRecord) -> None:
+        try:
+            self.queue.put_nowait(record)
+        except queue_module.Full:
+            self.dropped += 1
+            return
+        if self.dropped:
+            dropped, self.dropped = self.dropped, 0
+            notice = logging.LogRecord(
+                LOGGER_NAME,
+                logging.WARNING,
+                __file__,
+                0,
+                f"log queue full: dropped {dropped}",
+                None,
+                None,
+            )
+            with contextlib.suppress(queue_module.Full):
+                self.queue.put_nowait(notice)
+
+
+class DrainingListener(logging.handlers.QueueListener):
+    """종료 신호를 큐가 가득 차 있어도 넣을 수 있게 한다(기본 구현은 가득 차면 예외로 실패)."""
+
+    def enqueue_sentinel(self) -> None:
+        self.queue.put(self._sentinel, timeout=5)  # type: ignore[attr-defined]
+
+
+def shutdown_logging() -> None:
+    """대기 중인 로그를 모두 내보내고 출력 스레드를 멈춘다(종료·재설정 때)."""
     logger = logging.getLogger(LOGGER_NAME)
     for h in list(logger.handlers):
         if getattr(h, _HANDLER_MARK, False):
             logger.removeHandler(h)
-    handler = logging.StreamHandler(sys.stderr)
+            listener = getattr(h, "listener", None)
+            if listener is not None:
+                listener.stop()  # 큐를 비운 뒤 멈춘다
+
+
+def configure_logging(level: str = "INFO", fmt: Literal["text", "json"] = "text") -> None:
+    """앱 로거를 설정한다. 여러 번 불러도 핸들러는 하나만 남는다.
+
+    출력(stderr)은 별도 스레드가 맡는다. 파이프가 막혀도 요청 처리는 멈추지 않는다.
+    """
+    resolved = logging.getLevelName(level.upper())
+    if not isinstance(resolved, int):
+        raise ValueError(f"STUDY_INVEST_LOG_LEVEL이 올바르지 않습니다: {level!r}")
+    shutdown_logging()
+    logger = logging.getLogger(LOGGER_NAME)
+    sink = logging.StreamHandler(sys.stderr)
+    sink.setFormatter(JsonFormatter() if fmt == "json" else TextFormatter())
+    q: queue_module.Queue[logging.LogRecord] = queue_module.Queue(QUEUE_SIZE)
+    handler = NonBlockingQueueHandler(q)
     setattr(handler, _HANDLER_MARK, True)
     handler.addFilter(ContextFilter())
-    handler.setFormatter(JsonFormatter() if fmt == "json" else TextFormatter())
+    handler.listener = DrainingListener(q, sink, respect_handler_level=False)
+    handler.listener.start()
     logger.addHandler(handler)
     logger.setLevel(resolved)
+
+
+atexit.register(shutdown_logging)
