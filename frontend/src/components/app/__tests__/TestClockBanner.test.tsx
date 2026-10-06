@@ -15,19 +15,19 @@ afterEach(() => vi.restoreAllMocks());
 describe('TestClockNotice', () => {
   it('lists the upcoming real times, soonest first', () => {
     const { container } = render(<TestClockNotice clock={clock} />);
-    expect(screen.getByText('QA 테스트 시계예요. 실제 1시간이 이벤트 하루예요.')).toBeInTheDocument();
-    expect(container).toHaveTextContent('실제 시각으로 다음 장 마감(18:00) 13:45:00, 다음 공시(09:00) 14:22:30이에요.');
+    expect(screen.getByText('QA 테스트 시계입니다. 실제 1시간이 이벤트 하루입니다.')).toBeInTheDocument();
+    expect(container).toHaveTextContent('실제 시각으로 다음 장 마감(18:00) 13:45:00, 다음 공시(09:00) 14:22:30입니다.');
   });
 
   it('shows only what is left on the last day', () => {
     const { container } = render(<TestClockNotice clock={{ ...clock, next_open_at: null }} />);
-    expect(container).toHaveTextContent('실제 시각으로 다음 장 마감(18:00) 13:45:00이에요.');
+    expect(container).toHaveTextContent('실제 시각으로 다음 장 마감(18:00) 13:45:00입니다.');
     expect(container).not.toHaveTextContent('다음 공시');
   });
 
   it('says the event is over when nothing is left', () => {
     render(<TestClockNotice clock={{ ...clock, next_open_at: null, next_close_at: null }} />);
-    expect(screen.getByText(/테스트 시계로 이벤트 기간이 끝났어요/)).toBeInTheDocument();
+    expect(screen.getByText(/테스트 시계로 이벤트 기간이 끝났습니다/)).toBeInTheDocument();
   });
 });
 
@@ -42,7 +42,7 @@ describe('TestClockBanner', () => {
   it('renders the unlimited-mode notice when the event has no end', async () => {
     vi.spyOn(publicApi, 'event').mockResolvedValue({ clock: null, end: null } as EventInfo);
     render(<TestClockBanner />);
-    expect(await screen.findByText('QA 무제한 모드예요.')).toBeInTheDocument();
+    expect(await screen.findByText('QA 무제한 모드입니다.')).toBeInTheDocument();
   });
 
   it('renders the notice under a test clock', async () => {

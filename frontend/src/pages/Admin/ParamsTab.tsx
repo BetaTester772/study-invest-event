@@ -190,9 +190,9 @@ export function ParamsTab() {
     try {
       const saved = await adminApi.updateParams(parsed);
       params.setData(saved);
-      toast.success('파라미터를 저장했어요', '다음 정산부터 적용돼요.');
+      toast.success('파라미터를 저장했습니다', '다음 정산부터 적용됩니다.');
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : '저장하지 못했어요.');
+      setSaveError(err instanceof ApiError ? err.message : '저장하지 못했습니다.');
     } finally {
       setSaving(false);
     }
@@ -202,7 +202,7 @@ export function ParamsTab() {
     <form ref={formRef} onSubmit={save} noValidate>
       <Stack gap={5}>
         {saveError && (
-          <Alert tone="danger" title="파라미터를 저장하지 못했어요">
+          <Alert tone="danger" title="파라미터를 저장하지 못했습니다">
             {saveError}
           </Alert>
         )}

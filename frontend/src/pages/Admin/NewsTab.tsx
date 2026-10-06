@@ -60,13 +60,13 @@ export function NewsTab() {
         body: body.trim() || null,
         byline: byline.trim() || null,
       });
-      toast.success('뉴스를 저장했어요', `${saved.name}, ${formatDay(saved.day)} ${NEWS_KIND_LABEL[saved.kind]}`);
+      toast.success('뉴스를 저장했습니다', `${saved.name}, ${formatDay(saved.day)} ${NEWS_KIND_LABEL[saved.kind]}`);
       setHeadline('');
       setSubtitle('');
       setBody('');
       void list.refetch();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : '뉴스를 저장하지 못했어요.');
+      setFormError(err instanceof ApiError ? err.message : '뉴스를 저장하지 못했습니다.');
     } finally {
       setSaving(false);
     }
@@ -75,10 +75,10 @@ export function NewsTab() {
   const remove = async (item: AdminNewsItem) => {
     try {
       await adminApi.deleteNews(item.day, item.code);
-      toast.success('뉴스를 지웠어요', item.headline);
+      toast.success('뉴스를 지웠습니다', item.headline);
       void list.refetch();
     } catch (err) {
-      toast.error('뉴스를 지우지 못했어요', err instanceof ApiError ? err.message : undefined);
+      toast.error('뉴스를 지우지 못했습니다', err instanceof ApiError ? err.message : undefined);
     }
   };
 
@@ -122,7 +122,7 @@ export function NewsTab() {
         <form ref={formRef} onSubmit={submit} noValidate>
           <Stack gap={4}>
             {formError && (
-              <Alert tone="danger" title="뉴스를 저장하지 못했어요">
+              <Alert tone="danger" title="뉴스를 저장하지 못했습니다">
                 {formError}
               </Alert>
             )}
@@ -224,7 +224,7 @@ export function NewsTab() {
             rows={list.data ?? []}
             rowKey={(n) => n.id}
             loading={list.loading}
-            empty="아직 뉴스가 없어요. 무작위 뉴스는 전날 18:00 정산 때 생기고 그 자리에서 반영돼요."
+            empty="아직 뉴스가 없습니다. 무작위 뉴스는 전날 18:00 정산 때 생기고 그 자리에서 반영됩니다."
           />
         )}
       </Card>

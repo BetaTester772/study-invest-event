@@ -53,20 +53,20 @@ function ReviewModal({
   const review = async (approve: boolean) => {
     if (!cert) return;
     if (!approve && !reason.trim()) {
-      setReasonError('반려 사유를 적어 주세요. 참가자에게 그대로 보여요.');
+      setReasonError('반려 사유를 적어 주세요. 참가자에게 그대로 표시됩니다.');
       return;
     }
     setBusy(approve ? 'approve' : 'reject');
     try {
       await adminApi.review(cert.id, approve ? { approve } : { approve, reason: reason.trim() });
       toast.success(
-        approve ? '인증을 승인했어요' : '인증을 반려했어요',
+        approve ? '인증을 승인했습니다' : '인증을 반려했습니다',
         `${cert.nickname}, ${formatDay(cert.target_date)}`,
       );
       onDone();
       close();
     } catch (err) {
-      toast.error('검수하지 못했어요', err instanceof ApiError ? err.message : undefined);
+      toast.error('검수하지 못했습니다', err instanceof ApiError ? err.message : undefined);
       if (err instanceof ApiError && err.code === 'ALREADY_REVIEWED') {
         onDone();
         close();
@@ -105,17 +105,17 @@ function ReviewModal({
       {cert && (
         <Stack gap={4}>
           {cert.duplicate_of != null && (
-            <Alert tone="warning" title="같은 사진으로 보여요">
-              인증 #{cert.duplicate_of}와 이미지 해시가 같아요. 재사용한 사진인지 확인해 주세요.
+            <Alert tone="warning" title="같은 사진으로 보입니다">
+              인증 #{cert.duplicate_of}와 이미지 해시가 같습니다. 재사용한 사진인지 확인해 주세요.
             </Alert>
           )}
           {image.loading && <Spinner label="사진을 불러오는 중" />}
           {image.error && (
-            <Alert tone="danger" title="사진을 불러오지 못했어요">
+            <Alert tone="danger" title="사진을 불러오지 못했습니다">
               {image.error.message}
             </Alert>
           )}
-          {!cert.image_url && <Alert title="사진이 삭제됐어요" />}
+          {!cert.image_url && <Alert title="사진이 삭제됐습니다" />}
           {image.url && <img src={image.url} alt={`${cert.nickname}의 공부 인증 사진`} />}
           <KeyValueList
             items={[
@@ -215,8 +215,8 @@ export function CertReviewTab() {
             loading={certs.loading}
             empty={
               filter === 'pending'
-                ? '검수할 인증이 없어요. 새 인증이 올라오면 여기에 보여요.'
-                : '해당하는 인증이 없어요.'
+                ? '검수할 인증이 없습니다. 새 인증이 올라오면 여기에 표시됩니다.'
+                : '해당하는 인증이 없습니다.'
             }
           />
         )}

@@ -79,11 +79,11 @@ export function FileDropzone({
   const pick = (file: File | undefined | null) => {
     if (!file) return;
     if (!matchesAccept(file, accept)) {
-      setLocalError('이 형식은 올릴 수 없어요. JPG, PNG, WEBP, HEIC 사진을 골라 주세요.');
+      setLocalError('이 형식은 올릴 수 없습니다. JPG, PNG, WEBP, HEIC 사진을 골라 주세요.');
       return;
     }
     if (maxSize && file.size > maxSize) {
-      setLocalError(`사진이 너무 커요(${formatBytes(file.size)}). ${formatBytes(maxSize)} 이하로 줄여서 올려 주세요.`);
+      setLocalError(`사진이 너무 큽니다(${formatBytes(file.size)}). ${formatBytes(maxSize)} 이하로 줄여서 올려 주세요.`);
       return;
     }
     setLocalError(null);

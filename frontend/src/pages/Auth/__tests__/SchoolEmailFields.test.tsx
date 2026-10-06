@@ -57,7 +57,7 @@ describe('validateRegister', () => {
     const errors = validateRegister({ ...ok, name: ' ', student_id: '202131012', department: '' });
     expect(Object.keys(errors).sort()).toEqual(['department', 'name', 'student_id']);
     expect(profileErrors({ name: '가'.repeat(31), student_id: '20213101234', department: 'x' })).toEqual({
-      name: '이름은 30자까지 쓸 수 있어요.',
+      name: '이름은 30자까지 쓸 수 있습니다.',
       student_id: '학번 10자리 숫자를 입력해 주세요.',
     });
   });
@@ -113,7 +113,7 @@ describe('SchoolEmailFields', () => {
     await userEvent.type(screen.getByLabelText(/학교 메일/), 'Kim@SKKU.edu');
     await userEvent.click(screen.getByRole('button', { name: '인증 코드 받기' }));
     expect(request).toHaveBeenCalledWith({ email: 'Kim@SKKU.edu' });
-    expect(await screen.findByText(/kim@skku.edu\(으\)로 인증 코드를 보냈어요/)).toBeInTheDocument();
+    expect(await screen.findByText(/kim@skku.edu\(으\)로 인증 코드를 보냈습니다/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /초 뒤에 다시/ })).toBeDisabled();
   });
 
@@ -154,7 +154,7 @@ describe('SchoolEmailFields', () => {
     expect(screen.queryByLabelText(/학교 메일/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '등록한 메일로 코드 받기' }));
     expect(request).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/k\*\*\*@skku.edu\(으\)로 인증 코드를 보냈어요/)).toBeInTheDocument();
+    expect(await screen.findByText(/k\*\*\*@skku.edu\(으\)로 인증 코드를 보냈습니다/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /초 뒤에 다시/ })).toBeDisabled();
   });
 
@@ -188,10 +188,10 @@ describe('SchoolEmailFields', () => {
         onCodeChange={() => {}}
         onEmailError={() => {}}
         withCode={false}
-        hint="재설정 코드를 받는 주소예요."
+        hint="재설정 코드를 받는 주소입니다."
       />,
     );
-    expect(screen.getByText('재설정 코드를 받는 주소예요.')).toBeInTheDocument();
+    expect(screen.getByText('재설정 코드를 받는 주소입니다.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '인증 코드 받기' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/인증 코드/)).not.toBeInTheDocument();
   });
@@ -201,6 +201,6 @@ describe('SchoolEmailFields', () => {
     render(<Harness />);
     await userEvent.type(screen.getByLabelText(/학교 메일/), 'kim@skku.edu');
     await userEvent.click(screen.getByRole('button', { name: '인증 코드 받기' }));
-    await waitFor(() => expect(screen.getByText(/이미 참가한 학교 메일이에요/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/이미 참가한 학교 메일입니다/)).toBeInTheDocument());
   });
 });

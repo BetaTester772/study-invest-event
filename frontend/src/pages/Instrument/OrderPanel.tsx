@@ -101,10 +101,10 @@ export function OrderPanel({
 
   let blocker: string | null = null;
   if (maxQty < 1) {
-    if (side === 'sell') blocker = '아직 이 종목을 갖고 있지 않아요. 먼저 매수해 보세요.';
+    if (side === 'sell') blocker = '아직 이 종목을 갖고 있지 않습니다. 먼저 매수해 보세요.';
     else if (remainingLimit < price)
-      blocker = `오늘 이 종목의 매수 한도(총자산의 ${formatPercent(portfolio.buy_limit.ratio, { digits: 0 })})를 다 썼어요. 내일 다시 살 수 있어요.`;
-    else blocker = `현금이 부족해서 1${unit}도 살 수 없어요. 가진 종목을 팔면 현금이 생겨요.`;
+      blocker = `오늘 이 종목의 매수 한도(총자산의 ${formatPercent(portfolio.buy_limit.ratio, { digits: 0 })})를 다 썼습니다. 내일 다시 살 수 있습니다.`;
+    else blocker = `현금이 부족해서 1${unit}도 살 수 없습니다. 가진 종목을 팔면 현금이 생깁니다.`;
   }
 
   const details: KeyValueItem[] = [{ label: '주문 가격(오늘 시작가)', value: <Money value={price} /> }];
@@ -136,16 +136,16 @@ export function OrderPanel({
         const amount = order.amount ?? (order.price ?? price) * order.quantity;
         toast.show({
           tone: side === 'buy' ? 'up' : 'down',
-          title: `${verb} 체결됐어요`,
-          description: `${instrument.name} ${formatQuantity(order.quantity, instrument.kind)}를 ${formatWon(amount)}에 ${side === 'buy' ? '샀어요' : '팔았어요'}.`,
+          title: `${verb} 체결됐습니다`,
+          description: `${instrument.name} ${formatQuantity(order.quantity, instrument.kind)}를 ${formatWon(amount)}에 ${side === 'buy' ? '샀습니다' : '팔았습니다'}.`,
         });
         setQty(1);
       } else {
-        toast.error(`${verb}하지 못했어요`, order.reject_message ?? '주문이 거부됐어요.');
+        toast.error(`${verb}하지 못했습니다`, order.reject_message ?? '주문이 거부됐습니다.');
       }
       onFilled();
     } catch (err) {
-      toast.error(`${verb}하지 못했어요`, err instanceof ApiError ? err.message : '잠시 뒤 다시 시도해 주세요.');
+      toast.error(`${verb}하지 못했습니다`, err instanceof ApiError ? err.message : '잠시 뒤 다시 시도해 주세요.');
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +179,7 @@ export function OrderPanel({
           hint={
             blocker
               ? undefined
-              : `최대 ${formatQuantity(maxQty, instrument.kind)}까지 ${side === 'buy' ? '살' : '팔'} 수 있어요.`
+              : `최대 ${formatQuantity(maxQty, instrument.kind)}까지 ${side === 'buy' ? '살' : '팔'} 수 있습니다.`
           }
           error={blocker ?? undefined}
           trailing={
@@ -192,11 +192,11 @@ export function OrderPanel({
         {side === 'buy' && (
           <Text size="xs" tone="muted">
             한 종목은 하루에 총자산의 {formatPercent(portfolio.buy_limit.ratio, { digits: 0 })}(
-            {formatWon(portfolio.buy_limit.limit_amount)})까지만 살 수 있어요.
+            {formatWon(portfolio.buy_limit.limit_amount)})까지만 살 수 있습니다.
           </Text>
         )}
-        {disqualified && <Alert tone="danger" title="실격 처리되어 주문할 수 없어요" />}
-        {market && !market.canTrade && !disqualified && <Alert title="지금은 주문할 수 없어요">{market.detail}</Alert>}
+        {disqualified && <Alert tone="danger" title="실격 처리되어 주문할 수 없습니다" />}
+        {market && !market.canTrade && !disqualified && <Alert title="지금은 주문할 수 없습니다">{market.detail}</Alert>}
         <Button
           variant={side === 'buy' ? 'buy' : 'sell'}
           size="lg"

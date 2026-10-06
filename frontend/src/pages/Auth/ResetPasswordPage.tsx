@@ -27,8 +27,8 @@ export function validateResetCode(identity: string, code: string): Errors {
 /** 2단계: 새 비밀번호. */
 export function validateNewPassword(password: string, confirm: string): Errors {
   const errors: Errors = {};
-  if (password.length < 8) errors.password = '비밀번호는 8자 이상이어야 해요.';
-  if (confirm !== password) errors.confirm = '비밀번호가 서로 달라요. 같은 비밀번호를 한 번 더 입력해 주세요.';
+  if (password.length < 8) errors.password = '비밀번호는 8자 이상이어야 합니다.';
+  if (confirm !== password) errors.confirm = '비밀번호가 서로 다릅니다. 같은 비밀번호를 한 번 더 입력해 주세요.';
   return errors;
 }
 
@@ -77,7 +77,7 @@ export function ResetPasswordPage() {
     } catch (err) {
       if (!showCodeStepError(err)) {
         setErrors({
-          form: err instanceof ApiError ? err.message : '코드를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+          form: err instanceof ApiError ? err.message : '코드를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
         });
       }
     } finally {
@@ -93,7 +93,7 @@ export function ResetPasswordPage() {
     setSubmitting(true);
     try {
       const p = await resetPassword({ identity: identity.trim(), code, password });
-      toast.success('비밀번호를 바꿨어요', `${p.nickname}님, 새 비밀번호로 로그인했어요. 다른 기기에서는 로그아웃됐어요.`);
+      toast.success('비밀번호를 바꿨습니다', `${p.nickname}님, 새 비밀번호로 로그인했습니다. 다른 기기에서는 로그아웃됐습니다.`);
       navigate('/', { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'WEAK_PASSWORD') {
@@ -104,7 +104,7 @@ export function ResetPasswordPage() {
         setStep('code');
       } else {
         setErrors({
-          form: err instanceof ApiError ? err.message : '비밀번호를 바꾸지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+          form: err instanceof ApiError ? err.message : '비밀번호를 바꾸지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
         });
       }
       setSubmitting(false);
@@ -126,7 +126,7 @@ export function ResetPasswordPage() {
         description={
           step === 'code'
             ? '학번을 입력하면 가입할 때 등록한 학교 메일로 코드를 보냅니다. 받은 코드를 확인하면 새 비밀번호를 정할 수 있습니다.'
-            : '코드를 확인했어요. 새 비밀번호를 정하세요.'
+            : '코드를 확인했습니다. 새 비밀번호를 정하세요.'
         }
       />
       <Card>
@@ -167,7 +167,7 @@ export function ResetPasswordPage() {
                 코드 확인
               </Button>
               <Text size="sm" tone="muted">
-                가입할 때 학교 메일을 등록하지 않은 예전 계정은 재설정할 수 없어요. 운영진에게 문의해 주세요.{' '}
+                가입할 때 학교 메일을 등록하지 않은 예전 계정은 재설정할 수 없습니다. 운영진에게 문의해 주세요.{' '}
                 <Link to="/login">로그인으로 돌아가기</Link>
               </Text>
             </Stack>
@@ -176,7 +176,7 @@ export function ResetPasswordPage() {
           <form ref={formRef} onSubmit={onReset} noValidate>
             <Stack gap={4}>
               {errors.form && <Alert tone="danger">{errors.form}</Alert>}
-              <Alert tone="info">인증 코드를 확인했어요. 학번 {identity.trim()}의 새 비밀번호를 입력해 주세요.</Alert>
+              <Alert tone="info">인증 코드를 확인했습니다. 학번 {identity.trim()}의 새 비밀번호를 입력해 주세요.</Alert>
               {/* 비밀번호 관리자가 어느 계정의 비밀번호인지 알 수 있게 */}
               <input type="hidden" autoComplete="username" value={identity.trim()} readOnly />
               <TextField

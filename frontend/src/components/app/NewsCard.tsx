@@ -68,7 +68,7 @@ export function NewsCard({
             ))}
           </ul>
         ) : (
-          <Text tone="muted">오늘은 발표된 뉴스가 없어요.</Text>
+          <Text tone="muted">오늘은 발표된 뉴스가 없습니다.</Text>
         )}
         {past.length > 0 && (
           <details className={styles.past}>

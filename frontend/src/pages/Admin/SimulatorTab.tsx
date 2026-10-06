@@ -147,7 +147,7 @@ function SimulatorForm({ options }: { options: SimulateOptions }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (seed && !/^-?\d+$/.test(seed.trim())) {
-      setError('시드는 정수로 입력하세요. 비우면 매번 다른 결과가 나와요.');
+      setError('시드는 정수로 입력하세요. 비우면 매번 다른 결과가 나옵니다.');
       scrollToError();
       return;
     }
@@ -163,7 +163,7 @@ function SimulatorForm({ options }: { options: SimulateOptions }) {
         }),
       );
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '시뮬레이션을 돌리지 못했어요.');
+      setError(err instanceof ApiError ? err.message : '시뮬레이션을 돌리지 못했습니다.');
     } finally {
       setRunning(false);
     }

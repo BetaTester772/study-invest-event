@@ -36,10 +36,10 @@ function KeyGate({ onUnlock, notice }: { onUnlock: () => void; notice?: string |
       adminKeyStore.set(null);
       setError(
         err instanceof ApiError && err.status === 401
-          ? '관리자 키가 맞지 않아요. 다시 확인해 주세요.'
+          ? '관리자 키가 맞지 않습니다. 다시 확인해 주세요.'
           : err instanceof ApiError
             ? err.message
-            : '확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+            : '확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     } finally {
       setChecking(false);
@@ -82,7 +82,7 @@ export function AdminPage() {
       onUnauthorized((mode) => {
         if (mode !== 'admin') return;
         adminKeyStore.set(null);
-        setNotice('관리자 키가 만료되었거나 바뀌었어요. 다시 입력해 주세요.');
+        setNotice('관리자 키가 만료되었거나 바뀌었습니다. 다시 입력해 주세요.');
         setUnlocked(false);
       }),
     [],

@@ -47,7 +47,7 @@ export function VerifyEmailPage() {
     }
     const codeErr = codeError(code);
     if (codeErr) v.code = codeErr;
-    if (needsProfile && !consent) v.consent = '개인정보 수집·이용에 동의해야 계속 참가할 수 있어요.';
+    if (needsProfile && !consent) v.consent = '개인정보 수집·이용에 동의해야 계속 참가할 수 있습니다.';
     setErrors(v);
     if (Object.keys(v).length > 0) return;
     setSubmitting(true);
@@ -57,17 +57,17 @@ export function VerifyEmailPage() {
         code,
         ...(needsProfile ? { ...trimProfile(profile), privacy_consent: consent } : {}),
       });
-      toast.success('학교 메일 인증을 마쳤어요', '이제 인증된 참가자예요.');
+      toast.success('학교 메일 인증을 마쳤습니다', '이제 인증된 참가자입니다.');
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'EMAIL_TAKEN') {
-        setErrors({ email: '다른 계정이 이미 인증한 학교 메일이에요. 한 사람당 한 계정만 쓸 수 있어요.' });
+        setErrors({ email: '다른 계정이 이미 인증한 학교 메일입니다. 한 사람당 한 계정만 쓸 수 있습니다.' });
       } else if (err instanceof ApiError && err.code === 'STUDENT_ID_TAKEN') {
-        setErrors({ student_id: '이미 다른 계정에 등록된 학번이에요. 본인 학번이 맞다면 운영진에게 문의해 주세요.' });
+        setErrors({ student_id: '이미 다른 계정에 등록된 학번입니다. 본인 학번이 맞다면 운영진에게 문의해 주세요.' });
       } else if (err instanceof ApiError && CODE_ERRORS.has(err.code)) {
         setErrors({ code: err.message });
       } else {
-        setErrors({ form: err instanceof ApiError ? err.message : '인증하지 못했어요. 잠시 뒤 다시 시도해 주세요.' });
+        setErrors({ form: err instanceof ApiError ? err.message : '인증하지 못했습니다. 잠시 뒤 다시 시도해 주세요.' });
       }
       setSubmitting(false);
     }
