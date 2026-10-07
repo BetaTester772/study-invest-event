@@ -3,10 +3,18 @@
 비동기 원칙: I/O가 전혀 없는 의존성만 `async def`로 둔다(이벤트 루프에서 바로 실행되어
 스레드풀을 소모하지 않는다). DB·파일을 건드리는 것은 모두 동기 `def`로 두어 스레드풀에서
 실행한다. `async def` 안에서 동기 I/O를 하면 그동안 서버 전체가 멈춘다.
+
+연결 반납 원칙: 동기 의존성·라우트는 각각 따로 스레드를 받아 실행된다. 한 단계가 DB 연결을 쥔 채
+끝나면, 그 요청은 연결을 쥐고 다음 단계의 스레드를 기다린다. 동시 요청이 많으면 스레드는 모두
+연결을 기다리고 연결은 모두 스레드를 기다려 api 풀 대기 시간(10초)마다만 조금씩 풀린다
+(2026-10-07 스트레스 테스트). 그래서 DB를 읽는 의존성은 끝날 때 `release_connection`으로,
+라우트는 `SessionReleasingRoute`로 연결을 돌려준다.
 """
 
 from __future__ import annotations
 
+import functools
+import inspect
 import logging
 import random
 import secrets
@@ -15,9 +23,10 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import Executor
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Header, Request
+from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..captcha import CaptchaUnavailable, CaptchaVerifier, NoCaptcha
@@ -88,6 +97,41 @@ def get_session(state: StateDep) -> Iterator[Session]:
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
+def release_connection(s: Session) -> None:
+    """읽기만 한 의존성이 끝날 때 트랜잭션을 끝내 연결을 api 풀에 돌려준다(모듈 설명 참고).
+
+    expire_on_commit=False라 읽어 둔 객체(참가자 등)는 그대로 쓸 수 있고, 라우트가 다시 DB를
+    쓰면 그때 새 트랜잭션이 연결을 받는다. 쓰기가 없으므로 커밋은 롤백과 같다."""
+    if s.in_transaction():
+        s.commit()
+
+
+def _close_sessions_after(endpoint: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(endpoint)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        result = endpoint(*args, **kwargs)
+        for value in kwargs.values():
+            if isinstance(value, Session):
+                value.close()
+        return result
+
+    return wrapper
+
+
+class SessionReleasingRoute(APIRoute):
+    """동기 라우트가 정상 반환하면 받은 세션을 바로 닫아 연결을 돌려준다(모듈 설명 참고).
+
+    FastAPI는 동기 라우트의 반환값 검증(response_model)을 또 다른 스레드에서 하고, 세션은 그 뒤
+    의존성 정리 때 닫힌다. 라우트는 커밋을 직접 하므로 여기서 닫아도 결과는 정리 때 닫는 것과
+    같다(커밋하지 않은 변경은 원래도 버려진다). 닫힌 세션의 객체는 읽어 둔 값으로 직렬화된다.
+    예외가 나면 그대로 두어 get_session이 롤백한다."""
+
+    def __init__(self, path: str, endpoint: Callable[..., Any], **kwargs: Any) -> None:
+        if not inspect.iscoroutinefunction(endpoint):
+            endpoint = _close_sessions_after(endpoint)
+        super().__init__(path, endpoint, **kwargs)
+
+
 def get_batch_session(state: StateDep) -> Iterator[Session]:
     """배치 전용 풀의 세션. 관리자 배치 API가 api 풀 대기열 뒤에 서지 않게 한다."""
     with state.batch_session_factory() as session:
@@ -121,7 +165,9 @@ RealNowDep = Annotated[datetime, Depends(get_real_now)]
 
 
 def current_params(s: SessionDep) -> EventParams:
-    return get_params(s)
+    params = get_params(s)
+    release_connection(s)
+    return params
 
 
 ParamsDep = Annotated[EventParams, Depends(current_params)]
@@ -143,6 +189,7 @@ def optional_participant(s: SessionDep, token: TokenDep) -> Participant | None:
     # 만료·폐기된 토큰의 요청도 같은 세션 ID로 남아 "왜 갑자기 401인지" 추적할 수 있다.
     bind(session_id=auth.session_id(token))
     participant = auth.participant_by_token(s, token)
+    release_connection(s)
     if participant is not None:
         bind(participant_id=participant.id)
     return participant
@@ -164,7 +211,9 @@ def verified_participant(participant: MeDep, s: SessionDep) -> Participant:
     """주문용. 관리자가 '인증된 참가자만 거래'(verified_only_trading)를 켰으면 미인증 계정은 403.
 
     파라미터를 DB에서 읽으므로 동기 def(스레드풀)."""
-    if not participant.verified and get_params(s).verified_only_trading:
+    verified_only = get_params(s).verified_only_trading
+    release_connection(s)
+    if not participant.verified and verified_only:
         raise DomainError(
             "VERIFICATION_REQUIRED",
             "지금은 인증된 참가자만 거래할 수 있습니다. 학교 메일 인증을 마쳐 주세요.",

@@ -1,6 +1,7 @@
 """연결 풀 격리 (docs/dev/db-pools.md).
 
 - api 풀이 가득 차면 요청은 오래 기다리지 않고 503, 배치 풀은 영향을 받지 않는다.
+- 동시 요청이 풀·스레드풀보다 많아도 단계 사이에 연결을 쥐고 기다리지 않아 교착되지 않는다.
 - (PgBouncer 경유 시) pgAdmin 풀은 서버 연결 5개로 제한되고, 가득 차도 앱 풀은 영향이 없다.
 
 PostgreSQL 전용. pgAdmin 풀 테스트는 PgBouncer 주소가 있을 때만 돈다:
@@ -18,7 +19,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from conftest import ADMIN_KEY, TEST_DB_URL, Clock
+from conftest import ADMIN_KEY, TEST_DB_URL, Clock, FakeMailer, register
 from fastapi.testclient import TestClient
 
 from study_invest.api.app import create_app
@@ -82,6 +83,46 @@ def test_api_pool_exhaustion_returns_503_and_batch_still_runs(
     assert status.json()["api"]["checked_out"] == 1
     # 연결을 돌려주면 api 풀도 정상
     assert tiny_pool_client.get("/api/instruments").status_code == 200
+
+
+def test_concurrent_logged_in_requests_do_not_deadlock(tmp_path: Path) -> None:
+    """2026-10-07 스트레스 테스트 회귀. 로그인 확인(의존성)과 라우트, 응답 검증은 각각 스레드를
+    따로 받는다. 단계 사이에 연결을 쥐고 다음 스레드를 기다리면, 요청이 몰릴 때 스레드는 모두
+    연결을, 연결은 모두 스레드를 기다려 풀 대기 시간이 지나야 풀린다(503 DB_BUSY)."""
+    settings = Settings(
+        database_url=TEST_DB_URL,
+        admin_key=ADMIN_KEY,
+        upload_dir=tmp_path,
+        auto_create_schema=True,
+        loop_guard="raise",
+        api_pool_size=2,
+        api_pool_timeout=3,
+        threadpool_size=4,
+    )
+    clock = Clock(datetime(2026, 10, 6, 9, 30, tzinfo=KST))
+    app = create_app(settings, clock=clock, mailer=FakeMailer())
+    pools = app.state.study_invest.pools
+    Base.metadata.drop_all(pools.api)
+    Base.metadata.create_all(pools.api)
+    try:
+        with TestClient(app) as client:
+            h = register(client)
+            statuses: list[int] = []
+
+            def hit() -> None:
+                statuses.append(client.get("/api/me/portfolio", headers=h).status_code)
+
+            threads = [threading.Thread(target=hit) for _ in range(40)]
+            start = time.perf_counter()
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=60)
+            elapsed = time.perf_counter() - start
+    finally:
+        Base.metadata.drop_all(pools.api)
+    assert statuses == [200] * 40
+    assert elapsed < 3  # 교착되면 풀 대기 시간(3초)을 넘긴다
 
 
 @pytest.mark.skipif(not PGADMIN_URL, reason="PgBouncer pgAdmin 풀 주소가 필요")
