@@ -24,6 +24,7 @@ from .deps import (
     ParamsDep,
     RealNowDep,
     SessionDep,
+    SessionReleasingRoute,
     StateDep,
     VerifiedMeDep,
 )
@@ -32,7 +33,7 @@ from .routes_public import send_code
 
 log = logging.getLogger("study_invest.me")
 
-router = APIRouter(prefix="/api/me")
+router = APIRouter(prefix="/api/me", route_class=SessionReleasingRoute)
 
 
 @router.get("", response_model=schemas.Participant)

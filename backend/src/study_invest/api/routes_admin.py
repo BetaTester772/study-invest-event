@@ -43,11 +43,23 @@ from ..services.common import (
 from ..services.market import BatchResult
 from ..simulator import run as run_simulation
 from . import schemas, views
-from .deps import BatchSessionDep, NowDep, ParamsDep, SessionDep, StateDep, require_admin
+from .deps import (
+    BatchSessionDep,
+    NowDep,
+    ParamsDep,
+    SessionDep,
+    SessionReleasingRoute,
+    StateDep,
+    require_admin,
+)
 
 log = logging.getLogger("study_invest.admin")
 
-router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
+router = APIRouter(
+    prefix="/api/admin",
+    dependencies=[Depends(require_admin)],
+    route_class=SessionReleasingRoute,
+)
 
 
 def _admin_participant(

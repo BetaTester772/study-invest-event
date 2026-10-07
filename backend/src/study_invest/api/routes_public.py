@@ -27,6 +27,7 @@ from .deps import (
     OptionalMeDep,
     RealNowDep,
     SessionDep,
+    SessionReleasingRoute,
     StateDep,
     TokenDep,
     require_captcha,
@@ -35,7 +36,7 @@ from .email_codes import consume_code
 
 log = logging.getLogger("study_invest")
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", route_class=SessionReleasingRoute)
 
 
 @router.get("/health")
