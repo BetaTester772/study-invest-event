@@ -269,6 +269,8 @@ class TestNumericLimits:
             ("stock_noise_scale", -0.1),
             ("stock_noise_scale", STOCK_NOISE_MAX + 1),
             ("news_probability", 1.5),
+            ("news_max_per_day", 0),
+            ("news_max_per_day", 5),
             ("news_rate_max", 1.5),
             ("coin_cap", COIN_CAP_MAX * 2),
         ],

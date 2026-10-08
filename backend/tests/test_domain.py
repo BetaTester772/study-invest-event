@@ -18,6 +18,7 @@ from study_invest.params import (
     CALM_ROUNDS_MAX,
     INITIAL_CASH,
     KST,
+    NEWS_PER_DAY_MAX,
     REWARD_CASH_MAX,
     STOCK_NOISE_MAX,
     STOCK_RATE_JITTER_MAX,
@@ -428,28 +429,59 @@ class TestNews:
             settle_stocks(PRICES, {}, P, news={"LB": Fraction(-1)})
 
     def test_draw_news_sequence(self) -> None:
-        """발생 여부 → 종목 → 호재·악재 → 크기 → 제목 순으로 균등난수를 쓴다."""
+        """자리마다 발생 여부 → 종목 → 호재·악재 → 크기 → 제목 순으로 균등난수를 쓴다."""
         codes = [i.code for i in STOCKS]
-        assert draw_news(codes, P, Seq([0.5])) is None  # u ≥ 0.5 → 뉴스 없음
-        draw = draw_news(codes, P, Seq([0.1, 0.3, 0.2, 0.5, 0.9]))
-        assert draw is not None
+        one = replace(P, news_max_per_day=1)
+        assert draw_news(codes, one, Seq([0.5])) == []  # u ≥ 0.5 → 뉴스 없음
+        draws = draw_news(codes, one, Seq([0.1, 0.3, 0.2, 0.5, 0.9]))
+        assert len(draws) == 1
+        draw = draws[0]
         assert (draw.code, draw.kind, draw.rate, draw.headline_pick) == ("SKLOW", "good", 0.15, 0.9)
-        bad = draw_news(codes, P, Seq([0.0, 0.99, 0.5, 0.333, 0.0]))
-        assert bad is not None and (bad.code, bad.kind, bad.rate) == ("LB", "bad", 0.13)
+        bad = draw_news(codes, one, Seq([0.0, 0.99, 0.5, 0.333, 0.0]))
+        assert [(d.code, d.kind, d.rate) for d in bad] == [("LB", "bad", 0.13)]
         # 하한·상한이 엇갈려 저장돼 있어도 정렬해 쓴다
-        swapped = replace(P, news_rate_min=0.2, news_rate_max=0.1)
+        swapped = replace(one, news_rate_min=0.2, news_rate_max=0.1)
         d = draw_news(codes, swapped, Seq([0.0, 0.0, 0.0, 0.0, 0.0]))
-        assert d is not None and d.rate == 0.1
-        assert draw_news([], P, Seq([])) is None
+        assert [x.rate for x in d] == [0.1]
+        assert draw_news([], P, Seq([])) == []
+
+    def test_draw_news_several_per_day(self) -> None:
+        """자리를 최대 news_max_per_day개 순서대로 채운다. 같은 종목에는 한 번만 붙는다."""
+        codes = [i.code for i in STOCKS]
+        three = replace(P, news_max_per_day=3)
+        seq = [
+            0.1, 0.0, 0.2, 0.5, 0.0,  # 1번 자리: 첫 종목(SAMSU), 호재, 15%
+            0.9,  # 2번 자리: 비움
+            0.2, 0.0, 0.9, 0.7, 0.5,  # 3번 자리: 남은 3종목 중 첫째(SKLOW), 악재, 17%
+        ]  # fmt: skip
+        draws = draw_news(codes, three, Seq(seq))
+        assert [(d.code, d.kind, d.rate) for d in draws] == [
+            ("SAMSU", "good", 0.15),
+            ("SKLOW", "bad", 0.17),
+        ]
+        # 확률 1이면 모든 자리가 차고, 종목은 서로 다르다(남은 종목이 없으면 거기서 멈춘다)
+        always = replace(P, news_probability=1, news_max_per_day=4)
+        rng = random.Random(1)
+        for _ in range(50):
+            got = draw_news(codes, always, rng)
+            assert sorted(d.code for d in got) == sorted(codes)
+        # 자리 수보다 종목이 적으면 종목 수까지만
+        two_codes = draw_news(codes[:2], always, random.Random(2))
+        assert len(two_codes) == 2
 
     def test_params_range(self) -> None:
         assert (P.news_probability, P.news_rate_min, P.news_rate_max) == (0.5, 0.1, 0.2)
+        assert P.news_max_per_day == 3
         EventParams(news_probability=0, news_rate_min=1, news_rate_max=1)
+        EventParams(news_max_per_day=1)
+        EventParams(news_max_per_day=NEWS_PER_DAY_MAX)
         for bad in (
             {"news_probability": -0.1},
             {"news_probability": 1.1},
             {"news_rate_min": 0},
             {"news_rate_max": 1.5},
+            {"news_max_per_day": 0},
+            {"news_max_per_day": NEWS_PER_DAY_MAX + 1},
         ):
             with pytest.raises(ValueError):
                 EventParams(**bad)

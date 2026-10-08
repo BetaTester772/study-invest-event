@@ -79,33 +79,34 @@ def all_news(s: Session) -> list[NewsItem]:
 
 def create_random_news(
     s: Session, day: date, now: datetime, params: EventParams, rng: random.Random
-) -> NewsItem | None:
-    """day 몫의 무작위 뉴스를 1건 이하 만든다. 그날 뉴스가 이미 있으면(관리자 작성) 만들지 않는다.
+) -> list[NewsItem]:
+    """day 몫의 무작위 뉴스를 하루 최대 news_max_per_day건(서로 다른 종목) 만든다. 그날 뉴스가
+    이미 있으면(관리자 작성) 만들지 않는다.
 
     호출자(정산)가 코인·주식 잡음 난수를 뽑은 뒤에 부른다.
     """
     if params.news_probability <= 0 or news_on(s, day):
-        return None
-    draw = draw_news([i.code for i in STOCKS], params, rng)
-    if draw is None:
-        return None
-    kind = NewsKind(draw.kind)
-    article = pick_article(s, draw.code, BY_CODE[draw.code].name, kind, draw.headline_pick)
-    item = NewsItem(
-        day=day,
-        code=draw.code,
-        kind=kind,
-        rate=draw.rate,
-        headline=article.headline,
-        subtitle=article.subtitle,
-        body=article.body,
-        byline=article.byline,
-        source=NewsSource.RANDOM,
-        created_at=now,
-    )
-    s.add(item)
+        return []
+    items: list[NewsItem] = []
+    for draw in draw_news([i.code for i in STOCKS], params, rng):
+        kind = NewsKind(draw.kind)
+        article = pick_article(s, draw.code, BY_CODE[draw.code].name, kind, draw.headline_pick)
+        item = NewsItem(
+            day=day,
+            code=draw.code,
+            kind=kind,
+            rate=draw.rate,
+            headline=article.headline,
+            subtitle=article.subtitle,
+            body=article.body,
+            byline=article.byline,
+            source=NewsSource.RANDOM,
+            created_at=now,
+        )
+        s.add(item)
+        items.append(item)
     s.flush()
-    return item
+    return items
 
 
 def is_priced(s: Session, day: date, calendar: EventCalendar) -> bool:

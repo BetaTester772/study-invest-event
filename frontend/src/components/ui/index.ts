@@ -14,8 +14,21 @@ export { DayStrip, type DayStripProps } from './DayStrip/DayStrip';
 export { EmptyState, type EmptyStateProps } from './EmptyState/EmptyState';
 export { FileDropzone, matchesAccept, type FileDropzoneProps } from './FileDropzone/FileDropzone';
 export { Icon, type IconName } from './Icon/Icon';
+export {
+  IndicatorPanel,
+  type IndicatorPanelProps,
+  type PanelBars,
+  type PanelGuide,
+  type PanelLine,
+} from './IndicatorPanel/IndicatorPanel';
 export { KeyValueList, type KeyValueItem } from './KeyValueList/KeyValueList';
-export { LineChart, type ChartPoint, type LineChartProps } from './LineChart/LineChart';
+export {
+  LineChart,
+  type ChartBand,
+  type ChartOverlay,
+  type ChartPoint,
+  type LineChartProps,
+} from './LineChart/LineChart';
 export { Modal, type ModalProps } from './Modal/Modal';
 export { Money, Percent, PriceChange, type MoneyProps, type PercentProps, type PriceChangeProps } from './Money/Money';
 export { NumberField, clampInt, type NumberFieldProps } from './NumberField/NumberField';

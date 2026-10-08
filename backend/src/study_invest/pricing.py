@@ -115,18 +115,26 @@ class NewsDraw:
     """제목 선택용 균등난수 U(0, 1)."""
 
 
-def draw_news(codes: Sequence[str], params: EventParams, rng: random.Random) -> NewsDraw | None:
-    """균등난수로 다음 운영일 뉴스를 뽑는다. u ≥ news_probability면 None(뉴스 없음).
+def draw_news(codes: Sequence[str], params: EventParams, rng: random.Random) -> list[NewsDraw]:
+    """균등난수로 다음 운영일의 무작위 뉴스를 뽑는다. 하루 최대 news_max_per_day건, 종목은 다르다.
 
-    순서: 발생 여부 → 종목(균등) → 호재·악재(반반) → 크기 U(min, max)를 0.01 단위로 → 제목.
+    자리(최대 건수)마다 순서대로: 발생 여부(u ≥ news_probability면 그 자리는 비움) → 종목(아직
+    뉴스가 없는 종목 중 균등) → 호재·악재(반반) → 크기 U(min, max)를 0.01 단위로 → 제목.
+    뉴스가 없으면 빈 목록이다.
     """
-    if not codes or rng.random() >= params.news_probability:
-        return None
-    code = codes[min(int(rng.random() * len(codes)), len(codes) - 1)]
-    kind: Literal["good", "bad"] = "good" if rng.random() < 0.5 else "bad"
     lo, hi = sorted((params.news_rate_min, params.news_rate_max))
-    rate = min(hi, max(lo, round(lo + (hi - lo) * rng.random(), 2)))
-    return NewsDraw(code, kind, rate, rng.random())
+    remaining = list(codes)
+    draws: list[NewsDraw] = []
+    for _ in range(params.news_max_per_day):
+        if not remaining:
+            break
+        if rng.random() >= params.news_probability:
+            continue
+        code = remaining.pop(min(int(rng.random() * len(remaining)), len(remaining) - 1))
+        kind: Literal["good", "bad"] = "good" if rng.random() < 0.5 else "bad"
+        rate = min(hi, max(lo, round(lo + (hi - lo) * rng.random(), 2)))
+        draws.append(NewsDraw(code, kind, rate, rng.random()))
+    return draws
 
 
 def gumbel(rng: random.Random) -> float:

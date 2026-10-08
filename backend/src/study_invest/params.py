@@ -46,6 +46,8 @@ STOCK_RATE_JITTER_MAX = 0.50
 """주식 종목별 변동 배율 폭 w 파라미터의 최대값(배율 0.5~1.5배)."""
 NEWS_RATE_MAX = 1.0
 """호재·악재 효과 크기의 최대값(±100%)."""
+NEWS_PER_DAY_MAX = 4
+"""하루 무작위 뉴스 건수 파라미터의 최대값. 운영일·종목당 뉴스가 1건이라 주식 종목 수(4)까지."""
 
 STOCK_DAILY_LIMIT = Fraction(3, 10)
 """주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 감도 계수와 별개로 고정."""
@@ -95,8 +97,12 @@ class EventParams:
 
     # 호재·악재 (03-pricing §3)
     news_probability: float = 0.50
-    """정산 때 다음 운영일(반영일이 있는 날)에 무작위 뉴스 1건이 생길 확률. 0이면 무작위 뉴스 없음
-    (관리자가 쓴 뉴스만). 호재·악재는 반반, 종목은 주식 4종목 중 균등."""
+    """정산 때 다음 운영일(반영일이 있는 날)의 무작위 뉴스 '자리' 하나가 채워질 확률. 자리는 하루
+    `news_max_per_day`개이고 자리마다 따로 뽑는다. 0이면 무작위 뉴스 없음(관리자가 쓴 뉴스만).
+    호재·악재는 반반, 종목은 아직 뉴스가 없는 주식 중 균등."""
+    news_max_per_day: int = 3
+    """하루 무작위 뉴스 건수의 상한(1~4). 한 종목에는 하루 1건만 붙으므로 서로 다른 종목에
+    최대 이만큼 나온다. 기본 3·확률 0.5이면 하루 평균 1.5건이고 절반은 여러 건이 나온다."""
     news_rate_min: float = 0.10
     """무작위 뉴스 효과 크기의 하한(+10% / -10%)."""
     news_rate_max: float = 0.20
@@ -180,6 +186,10 @@ class EventParams:
                 f"virtual_liquidity must be in [0, {AMOUNT_MAX:,}]",
             ),
             (0 <= self.news_probability <= 1, "news_probability must be in [0, 1]"),
+            (
+                1 <= self.news_max_per_day <= NEWS_PER_DAY_MAX,
+                f"news_max_per_day must be in [1, {NEWS_PER_DAY_MAX}]",
+            ),
             # 하한·상한은 따로 검사한다(엇갈려 저장돼도 배치가 멈추지 않게. 추출 때 정렬해 쓴다).
             (
                 0 < self.news_rate_min <= NEWS_RATE_MAX,

@@ -208,7 +208,7 @@ interface RankingEntry {
 | GET | `/api/event` | `EventInfo` |
 | GET | `/api/instruments` | `Instrument[]` |
 | GET | `/api/instruments/{code}/history` | `PricePoint[]` (공시된 운영일만, 오름차순) |
-| GET | `/api/news` | `NewsItem[]` (공시된 운영일까지의 호재·악재, 최신 날짜부터. 공시 전 날짜는 보이지 않음) |
+| GET | `/api/news` | `NewsItem[]` (공시된 운영일까지의 호재·악재, 최신 날짜부터. 하루에 여러 건(서로 다른 종목)이 있을 수 있다. 공시 전 날짜는 보이지 않음) |
 | GET | `/api/ranking` | `{ day: string\|null, entries: RankingEntry[] }` (총자산 순 정렬, 실격자 제외. 항목마다 수익률 순위 표시) |
 
 ## 참가자 인증
@@ -266,7 +266,7 @@ interface AdminCertification extends Certification {
 }
 // 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_cash 0~100,000,000,
 // virtual_liquidity 0~10^15, coin_cap·coin_calm_cap (0, 10], coin_floor·coin_calm_floor (-1, 0),
-// coin_calm_rounds 0~100, stock_noise_scale 0~2, stock_rate_jitter 0~0.5, news_probability 0~1, news_rate_min·max (0, 1],
+// coin_calm_rounds 0~100, stock_noise_scale 0~2, stock_rate_jitter 0~0.5, news_probability 0~1, news_max_per_day 1~4, news_rate_min·max (0, 1],
 // 실수 파라미터는 유한값만(NaN·Infinity는 422).
 interface Params {
   coin_p_up: number; coin_up_exp: number; coin_down_exp: number;
@@ -276,7 +276,8 @@ interface Params {
   stock_sensitivity: number; stock_min_price: number; virtual_liquidity: number;
   stock_noise_scale: number;             // 매수지분 Gumbel 잡음 세기 τ(기본 0.1, 0이면 잡음 없음)
   stock_rate_jitter?: number | null;     // 종목별 변동 배율 폭 w(기본 0.1 → 0.9~1.1배, 0이면 없음). PUT에서 생략·null이면 현재 값 유지
-  news_probability: number;              // 정산 때 다음 운영일 무작위 뉴스 확률(기본 0.5)
+  news_probability: number;              // 정산 때 다음 운영일 무작위 뉴스 '자리' 하나가 채워질 확률(기본 0.5)
+  news_max_per_day?: number | null;      // 하루 무작위 뉴스 건수 상한(기본 3, 1~4. 서로 다른 종목). PUT에서 생략·null이면 현재 값 유지
   news_rate_min: number; news_rate_max: number;   // 무작위 뉴스 효과 범위(기본 0.1~0.2)
   daily_buy_limit_ratio: number;
   reward_cash: number;                   // 인증 1건당 지급 현금(기본 250,000원 = 시드의 1/4)
@@ -330,7 +331,7 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | PUT | `/api/admin/news/{day}/{code}` | `{kind, rate, headline, subtitle?, body?, byline?}` | `AdminNewsItem` — 시작가가 아직 정해지지 않은 운영일(전날 정산 전)의 뉴스를 쓴다(같은 날·종목이 있으면 덮어씀). 전날 정산에서 곱해진다. 부제·본문·바이라인은 선택이며 공백은 정리되고 비면 null. 감사 로그 `news.manual` / 404 `UNKNOWN_INSTRUMENT`, 409 `PRICE_ALREADY_FIXED`, 422 `NOT_A_STOCK`, `NOT_OPERATING_DAY`, `NO_ROUND`, `NO_PREVIOUS_SETTLEMENT`(첫 운영일), `INVALID_RATE`, `HEADLINE_REQUIRED`, `HEADLINE_TOO_LONG`, `ARTICLE_TOO_LONG` |
 | DELETE | `/api/admin/news/{day}/{code}` | – | 204. 감사 로그 `news.delete` / 404 `NEWS_NOT_FOUND`, 409 `PRICE_ALREADY_FIXED` |
 | POST | `/api/admin/batch/open` | `{day?}` (기본 오늘) | `BatchResult` |
-| POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` — `detail.news`: 이 정산에서 다음 운영일 시작가에 곱한 뉴스 목록(`day, code, kind, rate, headline, source`) |
+| POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` — `detail.news`: 이 정산에서 다음 운영일 시작가에 곱한 뉴스 목록(종목마다 최대 1건, 하루 여러 건 가능. `day, code, kind, rate, headline, source`) |
 | POST | `/api/admin/batch/run-due` | – | `BatchResult[]` (현재 시각에 밀린 배치 실행) |
 | GET | `/api/admin/qa` | – | `{enabled: boolean}` — QA 도구 사용 가능 여부(`STUDY_INVEST_QA_TOOLS`). 화면이 QA 버튼을 보일지 정한다 |
 | POST | `/api/admin/qa/advance-price` | – | `BatchResult`(`action: "advance"`, `day`는 새로 공시된 운영일) / 403 `QA_DISABLED`, 409 `NO_ROUND`(마지막 운영일. 무제한 모드에는 없음) — 최신 공시일을 시각과 무관하게 정산하고 다음 운영일 시작가를 바로 공시한다(이미 정산됐다면 공시만, 공시된 날이 없으면 이벤트 첫날 공시만). 한 트랜잭션이며 감사 로그에 `qa.advance_price`가 남는다 |

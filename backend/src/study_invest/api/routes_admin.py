@@ -239,6 +239,8 @@ def update_params(body: schemas.Params, s: SessionDep, now: NowDep) -> schemas.P
         values["verified_only_trading"] = current.verified_only_trading
     if values["stock_rate_jitter"] is None:  # 이 값을 모르는 이전 화면이 저장해도 유지
         values["stock_rate_jitter"] = current.stock_rate_jitter
+    if values["news_max_per_day"] is None:  # 마찬가지
+        values["news_max_per_day"] = current.news_max_per_day
     try:
         params = EventParams.from_dict(values)
     except ValueError as exc:
