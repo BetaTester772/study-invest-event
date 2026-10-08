@@ -17,6 +17,7 @@ from conftest import (
     register,
     register_with,
     settle_day,
+    stock_draws,
 )
 from fastapi.testclient import TestClient
 
@@ -174,76 +175,103 @@ class TestAdminPositions:
 
 
 class TestSettlement:
-    def test_prices_move_inverse_to_crowding(
+    def test_prices_follow_net_buy_probabilistically(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
         h = register(client)
         open_day(client, clock, D1)
         assert client.get("/api/instruments").json()[0]["day"] == D1.isoformat()
         order(client, h, "SAMSU", "buy", 5)  # 375,000원
-        order(client, h, "SAMSU", "sell", 5)  # 매도는 집계하지 않는다
-        rng.queue = [0.1, 1.0]  # 코인 상승일, X=1 → 1회차는 안정기라 +30%(평소면 +80%)
+        order(client, h, "SAMSU", "sell", 2)  # 150,000원 → 순매수 225,000원
+        # 코인 상승일, X=1 → 1회차는 안정기라 +30%(평소면 +80%).
+        # SAMSU u=0.51: 순매수가 있어 상승 확률이 0.5보다 조금 높으므로(≈0.521) 상승, X=1.
+        # 나머지는 (0.5, 0.5): 순매수 0 → 상승 확률 0.5 → 하락, 폭 상한 20% × 0.5 = -10%.
+        rng.queue = [0.1, 1.0, *stock_draws(SAMSU=(0.51, 1.0), SKLOW=(0.5, 0.5))]
         result = settle_day(client, clock, D1)
-        # B′ = 5,375,000 / 5,000,000 ×3, 총 20,375,000 → r_SAMSU ≈ 1.055
         assert result["detail"]["round"] == 1
         new = result["detail"]["new_prices"]
-        assert new["SAMSU"] == 73_760  # 75,000 × (1 − 0.3·0.0552) → 73,760
-        assert new["LB"] > 14_000 and new["BYUNG"] == 325_000
+        # z = 225,000 / 3,225,000 = 3/43, 폭 상한 = 5% + 15% × 40/43 ≈ 18.95%
+        assert new["SAMSU"] == 89_220  # 75,000 × 1.18953… = 89,215.1 → 89,220
+        assert new["SKLOW"] == 153_000 and new["LB"] == 14_000 and new["BYUNG"] == 325_000
         # 공시 전에는 D1 가격이 보인다
         assert prices(client)["SAMSU"] == 75_000
         open_day(client, clock, D2)
         p = client.get("/api/instruments").json()
         samsu = next(i for i in p if i["code"] == "SAMSU")
-        assert samsu["price"] == 73_760 and samsu["previous_price"] == 75_000
-        assert samsu["change_rate"] < 0
+        assert samsu["price"] == 89_220 and samsu["previous_price"] == 75_000
+        assert samsu["change_rate"] > 0
         hist = client.get("/api/instruments/BYUNG/history").json()
         assert [x["price"] for x in hist] == [250_000, 325_000]
         assert hist[1]["source"] == "settlement"
         logs = client.get("/api/admin/settlements", headers=admin).json()
         assert logs[0]["coin"]["p"] == 0.1 and logs[0]["coin"]["direction"] == "up"
         assert logs[0]["coin"]["calm"] is True
-        assert logs[0]["stocks"][0]["buy_amount"] == 375_000
-        # 주식 잡음은 코인 뒤에 뽑는다. StubRandom은 큐가 비면 0.5라 전 종목 같은 배수(<1)가 되어
-        # 지분에 영향이 없고, 위의 73,760원이 그대로다. 배수는 정산 로그에 남는다.
-        factors = [x["noise_factor"] for x in logs[0]["stocks"]]
-        assert len(set(factors)) == 1 and 0.97 < factors[0] < 1.0
-        assert logs[0]["params"]["stock_noise_scale"] == 0.1
-        # 종목별 변동 배율은 뉴스 뒤에 뽑는다. 0.5면 k = 1이라 가격이 그대로다.
-        assert [x["rate_factor"] for x in logs[0]["stocks"]] == [1.0] * 4
-        assert logs[0]["params"]["stock_rate_jitter"] == 0.1
-
-    def test_stock_noise_can_be_turned_off(
-        self, client: TestClient, clock: Clock, admin: dict[str, str]
-    ) -> None:
-        params = client.get("/api/admin/params", headers=admin).json()
-        r = client.put("/api/admin/params", json=dict(params, stock_noise_scale=0), headers=admin)
-        assert r.status_code == 200 and r.json()["stock_noise_scale"] == 0
-        open_day(client, clock, D1)
-        settle_day(client, clock, D1)
-        logs = client.get("/api/admin/settlements", headers=admin).json()
-        assert all(x["noise_factor"] is None and x["rate"] == 0 for x in logs[0]["stocks"])
-
-    def test_stock_rate_jitter_param(
-        self, client: TestClient, clock: Clock, admin: dict[str, str]
-    ) -> None:
-        params = client.get("/api/admin/params", headers=admin).json()
-        assert params["stock_rate_jitter"] == 0.1
-        r = client.put("/api/admin/params", json=dict(params, stock_rate_jitter=0.2), headers=admin)
-        assert r.status_code == 200 and r.json()["stock_rate_jitter"] == 0.2
-        # 이 값을 모르는 이전 화면이 보내지 않아도 저장된 값을 유지한다
-        legacy = {k: v for k, v in params.items() if k != "stock_rate_jitter"}
-        r = client.put("/api/admin/params", json=dict(legacy, news_probability=0.6), headers=admin)
-        assert r.status_code == 200 and r.json()["stock_rate_jitter"] == 0.2
-        bad = client.put(
-            "/api/admin/params", json=dict(params, stock_rate_jitter=0.6), headers=admin
+        row = logs[0]["stocks"][0]
+        assert (row["code"], row["buy_amount"], row["sell_amount"], row["net_amount"]) == (
+            "SAMSU",
+            375_000,
+            150_000,
+            225_000,
         )
-        assert bad.status_code == 422
-        # 0이면 배율 없음
-        client.put("/api/admin/params", json=dict(params, stock_rate_jitter=0), headers=admin)
+        assert row["signal"] == pytest.approx(3 / 43)
+        assert row["p_up"] == pytest.approx(0.5 + 0.3 * 3 / 43)
+        assert row["move_limit"] == pytest.approx(0.05 + 0.15 * 40 / 43)
+        assert (row["u"], row["x"], row["direction"]) == (0.51, 1.0, "up")
+        assert row["rate"] == row["move_limit"] and row["total_rate"] == row["rate"]
+        assert row["concentration"] is None and row["noise_factor"] is None
+        assert logs[0]["params"]["stock_p_shift"] == 0.3
+
+    def test_net_sell_lowers_up_probability(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        """같은 u=0.49여도 순매도면 상승 확률이 0.5 아래로 내려가 하락한다."""
+        h = register(client)
         open_day(client, clock, D1)
+        order(client, h, "LB", "buy", 25)  # 350,000원
+        settle_day(client, clock, D1)
+        open_day(client, clock, D2)
+        order(client, h, "LB", "sell", 25)
+        rng.queue = [0.9, 0.0, *stock_draws(LB=(0.49, 1.0), MIRAE=(0.49, 1.0))]
+        settle_day(client, clock, D2)
+        logs = client.get("/api/admin/settlements", headers=admin).json()
+        by = {x["code"]: x for x in logs[1]["stocks"]}
+        assert by["LB"]["net_amount"] < 0 and by["LB"]["p_up"] < 0.49
+        assert by["LB"]["direction"] == "down" and by["LB"]["rate"] < 0
+        assert by["MIRAE"]["p_up"] == 0.5 and by["MIRAE"]["direction"] == "up"
+
+    def test_stock_params(self, client: TestClient, clock: Clock, admin: dict[str, str]) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        assert (params["stock_p_shift"], params["stock_move_max"], params["stock_move_min"]) == (
+            0.3,
+            0.2,
+            0.05,
+        )
+        assert "stock_sensitivity" not in params and "stock_noise_scale" not in params
+        r = client.put("/api/admin/params", json=dict(params, stock_p_shift=0), headers=admin)
+        assert r.status_code == 200 and r.json()["stock_p_shift"] == 0
+        # 이 값을 모르는 이전 화면이 보내지 않아도 저장된 값을 유지한다
+        new_keys = ("stock_p_shift", "stock_move_max", "stock_move_min")
+        legacy = {k: v for k, v in params.items() if k not in new_keys}
+        legacy |= {"stock_sensitivity": 0.3, "stock_noise_scale": 0.1, "stock_rate_jitter": 0.1}
+        r = client.put("/api/admin/params", json=dict(legacy, news_probability=0.6), headers=admin)
+        assert r.status_code == 200 and r.json()["stock_p_shift"] == 0
+        assert r.json()["news_probability"] == 0.6
+        for key, bad in (("stock_p_shift", 0.6), ("stock_move_max", 0), ("stock_move_min", 0.4)):
+            assert (
+                client.put(
+                    "/api/admin/params", json=dict(params, **{key: bad}), headers=admin
+                ).status_code
+                == 422
+            )
+        # δ = 0이면 순매수가 있어도 상승 확률은 반반이다
+        h = register(client)
+        open_day(client, clock, D1)
+        order(client, h, "SAMSU", "buy", 5)
         settle_day(client, clock, D1)
         logs = client.get("/api/admin/settlements", headers=admin).json()
-        assert all(x["rate_factor"] is None for x in logs[0]["stocks"])
+        samsu = next(x for x in logs[0]["stocks"] if x["code"] == "SAMSU")
+        assert samsu["net_amount"] == 375_000 and samsu["p_up"] == 0.5
+        assert samsu["move_limit"] < 0.2  # 폭은 그래도 줄어든다
 
     def test_coin_is_calm_for_first_three_rounds(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
@@ -349,17 +377,18 @@ class TestNews:
     ) -> None:
         open_day(client, clock, D1)
         assert client.get("/api/news").json() == []
-        # 코인(p, X) → 주식 잡음 4개 → 뉴스(발생, 종목, 종류, 크기, 제목) 순서로 난수를 쓴다
-        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+        # 코인(p, X) → 주식 (u, X) 4쌍 → 뉴스(발생, 종목, 종류, 크기, 제목) 순서로 난수를 쓴다.
+        # 주식은 X = 0이라 확률 변동이 0%다.
+        rng.queue = [0.9, 0.0, *stock_draws(), 0.1, 0.3, 0.2, 0.5, 0.0]
         result = settle_day(client, clock, D1)
         applied = result["detail"]["news"]
         assert [(n["day"], n["code"], n["kind"], n["rate"], n["source"]) for n in applied] == [
-            (D2.isoformat(), "SKLOW", "good", 0.15, "random")
+            (D2.isoformat(), "SKLOW", "good", 0.1, "random")
         ]
         assert "SK로우닉스" in applied[0]["headline"]
-        # 같은 정산에서 바로 곱해진다: 아무도 안 샀으니 쏠림 0% × 1.15
+        # 같은 정산에서 바로 곱해진다: 확률 변동 0% × 1.10
         new = result["detail"]["new_prices"]
-        assert new["SKLOW"] == 195_500 and new["SAMSU"] == 75_000
+        assert new["SKLOW"] == 187_000 and new["SAMSU"] == 75_000
         # 공시 전에는 참가자에게 보이지 않는다(관리자 목록에는 반영 완료로 보인다)
         assert client.get("/api/news").json() == []
         assert all(i["news"] is None for i in client.get("/api/instruments").json())
@@ -370,11 +399,11 @@ class TestNews:
         open_day(client, clock, D2)
         items = client.get("/api/news").json()
         assert [(n["day"], n["code"], n["kind"], n["rate"], n["name"]) for n in items] == [
-            (D2.isoformat(), "SKLOW", "good", 0.15, "SK로우닉스")
+            (D2.isoformat(), "SKLOW", "good", 0.1, "SK로우닉스")
         ]
         ins = {i["code"]: i for i in client.get("/api/instruments").json()}
         assert ins["SKLOW"]["news"]["headline"] == applied[0]["headline"]
-        assert ins["SKLOW"]["price"] == 195_500 and ins["SKLOW"]["change_rate"] == 0.15
+        assert ins["SKLOW"]["price"] == 187_000 and ins["SKLOW"]["change_rate"] == 0.1
         assert ins["SAMSU"]["news"] is None
         # 무작위 뉴스는 종목별 기사 풀에서 제목·부제·본문·바이라인을 모두 채운다
         article = items[0]
@@ -382,7 +411,7 @@ class TestNews:
         assert "SK로우닉스" in article["body"] and "{name}" not in article["body"]
         logs = client.get("/api/admin/settlements", headers=admin).json()
         row = next(x for x in logs[0]["stocks"] if x["code"] == "SKLOW")
-        assert (row["rate"], row["news_rate"], row["total_rate"]) == (0, 0.15, 0.15)
+        assert (row["rate"], row["news_rate"], row["total_rate"]) == (0, 0.1, 0.1)
         other = next(x for x in logs[0]["stocks"] if x["code"] == "SAMSU")
         assert other["news_rate"] is None and other["total_rate"] == 0
 
@@ -403,7 +432,7 @@ class TestNews:
         )
         assert (r.json()["subtitle"], r.json()["body"], r.json()["byline"]) == (None, None, None)
         # 무작위 뉴스가 나올 난수여도 D2에 이미 뉴스가 있어 만들지 않고 관리자 뉴스를 곱한다
-        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+        rng.queue = [0.9, 0.0, *stock_draws(), 0.1, 0.3, 0.2, 0.5, 0.0]
         result = settle_day(client, clock, D1)
         assert [(n["code"], n["source"]) for n in result["detail"]["news"]] == [("LB", "manual")]
         assert result["detail"]["new_prices"]["LB"] == 11_200  # 14,000 × 0.8
@@ -430,7 +459,7 @@ class TestNews:
                 headers=admin,
             )
             assert r.status_code == 200 and r.json()["rate"] == rate
-        rng.queue = [0.9, 0.0]
+        rng.queue = [0.9, 0.0, *stock_draws()]
         assert settle_day(client, clock, D2)["detail"]["new_prices"]["LB"] == 14_000  # ×1.25
         audit = client.get("/api/admin/audit", headers=admin).json()
         assert {a["action"] for a in audit} >= {"news.manual", "market.settle"}
@@ -443,7 +472,7 @@ class TestNews:
         for d in (D1, D2, D3):
             open_day(client, clock, d)
             # 매번 SKLOW 호재, pick=0
-            rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+            rng.queue = [0.9, 0.0, *stock_draws(), 0.1, 0.3, 0.2, 0.5, 0.0]
             headlines.append(settle_day(client, clock, d)["detail"]["news"][0]["headline"])
         assert len(set(headlines)) == 3
         listed = client.get("/api/admin/news", headers=admin).json()
@@ -764,9 +793,10 @@ class TestRankingAndAdmin:
         a, b = register(client, "alice"), register(client, "bob")
         register(client, "carol")
         open_day(client, clock, D1)
-        order(client, a, "SKLOW", "buy", 2)  # 크게 몰림 → 하락
-        order(client, b, "SAMSU", "buy", 1)  # 기준선 아래 → 상승
-        rng.queue = [0.9, 0.0]  # 코인 0%
+        order(client, a, "SKLOW", "buy", 2)
+        order(client, b, "SAMSU", "buy", 1)
+        # 코인 0%, SAMSU 상승·SKLOW 하락(최대 폭)
+        rng.queue = [0.9, 0.0, *stock_draws(SAMSU=(0.0, 1.0), SKLOW=(0.99, 1.0))]
         settle_day(client, clock, D1)
         open_day(client, clock, D2)
         entries = client.get("/api/ranking").json()["entries"]
@@ -790,7 +820,7 @@ class TestRankingAndAdmin:
         open_day(client, clock, D1)
         order(client, a, "SKLOW", "buy", 2)  # 둘 다 340,000원어치 같은 종목 → 같은 손실
         order(client, b, "SKLOW", "buy", 2)
-        rng.queue = [0.9, 0.0]  # 코인 0%
+        rng.queue = [0.9, 0.0, *stock_draws(SKLOW=(0.99, 1.0))]  # 코인 0%, SKLOW 하락
         settle_day(client, clock, D1)
         open_day(client, clock, D2)  # alice는 보상 250,000원을 받는다
         sklow = prices(client)["SKLOW"]
@@ -831,7 +861,7 @@ class TestRankingAndAdmin:
         open_day(client, clock, D1)
         order(client, a, "SKLOW", "buy", 2)
         order(client, b, "SKLOW", "buy", 2)
-        rng.queue = [0.9, 0.0]
+        rng.queue = [0.9, 0.0, *stock_draws(SKLOW=(0.99, 1.0))]
         settle_day(client, clock, D1)
         open_day(client, clock, D2)
         entries = {e["nickname"]: e for e in client.get("/api/ranking").json()["entries"]}
