@@ -91,10 +91,16 @@ class StockMove:
     """매수지분 잡음 배수 exp(τ·(Gᵢ − γ)). 잡음을 쓰지 않았으면 None."""
     concentration: Fraction | None
     """쏠림 지수 rᵢ = n·Bᵢ″ / B_total (Bᵢ″ = Bᵢ′ × 잡음 배수). B_total = 0이면 None."""
+    volume_concentration: Fraction | None
+    """잡음을 뺀 쏠림 지수 r⁰ᵢ = n·Bᵢ′ / ΣB′. B_total = 0이면 None."""
+    volume_rate: Fraction
+    """거래량 몫 = 거래량 감도 × (1 − r⁰ᵢ) (배율·클램프 전)."""
+    noise_rate: Fraction
+    """잡음 몫 = 잡음 감도 × (r⁰ᵢ − rᵢ) (배율·클램프 전)."""
     rate_factor: float | None
     """종목별 변동 배율 kᵢ. 배율을 쓰지 않았으면 None(= 1)."""
     rate: Fraction
-    """쏠림 변동률 = clamp(계수 × (1 − rᵢ) × kᵢ, ±30%). 뉴스 효과는 포함하지 않는다."""
+    """쏠림 변동률 = clamp((거래량 몫 + 잡음 몫) × kᵢ, ±30%). 뉴스 효과는 포함하지 않는다."""
     news_rate: Fraction | None
     """그날 호재·악재 효과(부호 포함). 뉴스가 없으면 None."""
     total_rate: Fraction
@@ -167,10 +173,10 @@ def draw_stock_rate_factor(
 
 
 def stock_rate(
-    concentration: Fraction, sensitivity: float, factor: float | None = None
+    volume_rate: Fraction, noise_rate: Fraction, factor: float | None = None
 ) -> Fraction:
-    """변동률 = clamp(계수 × (1 − rᵢ) × kᵢ, −30%, +30%). factor가 None이면 kᵢ = 1."""
-    raw = exact(sensitivity) * (1 - concentration)
+    """변동률 = clamp((거래량 몫 + 잡음 몫) × kᵢ, −30%, +30%). factor가 None이면 kᵢ = 1."""
+    raw = volume_rate + noise_rate
     if factor is not None:
         raw *= exact(factor)
     return max(-STOCK_DAILY_LIMIT, min(STOCK_DAILY_LIMIT, raw))
@@ -202,6 +208,10 @@ def settle_stocks(
     당일 매수만으로 결정한다. 호출자가 뽑아 넘기므로 정산 로그에 그대로 남길 수 있다.
     news는 그날 호재·악재의 부호 있는 효과(종목 → 변동률)다. 쏠림 변동률(클램프 뒤)에 곱으로 얹는다.
     rate_factor는 draw_stock_rate_factor()가 뽑은 종목별 변동 배율이다. 클램프 전에 곱한다.
+
+    쏠림 변동률은 거래량 몫 a(1 − r⁰ᵢ)와 잡음 몫 b(r⁰ᵢ − rᵢ)의 합이다(a: stock_sensitivity,
+    b: stock_noise_sensitivity). r⁰ᵢ는 잡음 없는, rᵢ는 잡음을 넣은 쏠림 지수다. a = b이면
+    a(1 − rᵢ)와 같다. 두 몫 모두 종목 합이 0이다.
     """
     if not prices:
         return {}
@@ -235,15 +245,24 @@ def settle_stocks(
         for code, v in adjusted.items()
     }
     total = sum(weights.values())
+    volume_total = sum(adjusted.values())
     n = len(prices)
     moves: dict[str, StockMove] = {}
     for code, price in prices.items():
         factor = None if rate_factor is None else rate_factor[code]
+        concentration: Fraction | None
+        volume_concentration: Fraction | None
         if total == 0:  # 03-pricing §2.3: 전 종목 매수 0 → 변동률 0%
-            concentration, rate = None, Fraction(0)
+            concentration = volume_concentration = None
+            volume_rate = noise_rate = rate = Fraction(0)
         else:
             concentration = n * weights[code] / total
-            rate = stock_rate(concentration, params.stock_sensitivity, factor)
+            volume_concentration = Fraction(n * adjusted[code], volume_total)
+            volume_rate = exact(params.stock_sensitivity) * (1 - volume_concentration)
+            noise_rate = exact(params.stock_noise_sensitivity) * (
+                volume_concentration - concentration
+            )
+            rate = stock_rate(volume_rate, noise_rate, factor)
         news_rate = news.get(code) if news else None
         total_rate = combined_rate(rate, news_rate)
         moves[code] = StockMove(
@@ -252,6 +271,9 @@ def settle_stocks(
             adjusted_amount=adjusted[code],
             noise_factor=None if noise is None else noise[code],
             concentration=concentration,
+            volume_concentration=volume_concentration,
+            volume_rate=volume_rate,
+            noise_rate=noise_rate,
             rate_factor=factor,
             rate=rate,
             news_rate=news_rate,

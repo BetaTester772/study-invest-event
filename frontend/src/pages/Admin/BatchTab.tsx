@@ -76,6 +76,20 @@ const STOCK_COLUMNS: Column<SettlementStock>[] = [
     numeric: true,
     render: (s) => (s.concentration == null ? '—' : formatNumber(s.concentration, 3)),
   },
+  {
+    key: 'volume_rate',
+    header: '거래량 몫',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => (s.volume_rate == null ? '—' : <PriceChange rate={s.volume_rate} />),
+  },
+  {
+    key: 'noise_rate',
+    header: '잡음 몫',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => (s.noise_rate == null ? '—' : <PriceChange rate={s.noise_rate} />),
+  },
   { key: 'rate', header: '쏠림 변동률', numeric: true, render: (s) => <PriceChange rate={s.rate} /> },
   {
     key: 'rate_factor',

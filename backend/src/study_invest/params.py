@@ -80,7 +80,9 @@ class EventParams:
 
     # 주식 (03-pricing §2, 06-abuse-risk §1)
     stock_sensitivity: float = 0.30
-    """감도 계수: 변동률 = 계수 × (1 − rᵢ), ±30% 클램프."""
+    """거래량(쏠림) 감도 계수 a: 쏠림 변동률의 거래량 몫 = a × (1 − r⁰ᵢ).
+    r⁰ᵢ는 잡음을 빼고 매수금액만으로 잰 쏠림 지수다. 낮추면 매수가 몰린·외면받은 종목의
+    움직임이 줄고 잡음 몫은 그대로다."""
     stock_min_price: int = 1_000
     """주식 최저가 하한(원)."""
     virtual_liquidity: int = 5_000_000
@@ -88,6 +90,11 @@ class EventParams:
     stock_noise_scale: float = 0.10
     """매수지분 잡음 세기 τ: Bᵢ″ = Bᵢ′ × exp(τ·(Gᵢ − γ)), Gᵢ ~ Gumbel(0, 1). 0이면 잡음 없음
     (변동률이 당일 매수만으로 결정된다). 0.1이면 매수가 전혀 없을 때 종목당 대략 ±5%(5~95%)."""
+    stock_noise_sensitivity: float = 0.30
+    """잡음 감도 계수 b: 쏠림 변동률의 잡음 몫 = b × (r⁰ᵢ − rᵢ).
+    rᵢ는 매수지분 잡음(τ)을 넣은 쏠림 지수다. 거래량 감도와 같으면 b × (1 − rᵢ) 한 식과 같다
+    (기본 둘 다 0.3). 0이면 매수지분 잡음이 가격에 영향을 주지 않는다. τ는 잡음의 모양(종목 사이
+    지분을 얼마나 흔드는지), b는 그 흔들림이 가격을 얼마나 움직이는지다."""
     stock_rate_jitter: float = 0.10
     """종목별 변동 배율 폭 w: 쏠림 변동률 = clamp(계수 × (1 − rᵢ) × kᵢ, ±30%), kᵢ ~ U(1 − w, 1 + w).
     0.1이면 원래 움직임의 0.9~1.1배. 종목마다 따로 뽑으므로 4종목 변동률의 합이 0으로 고정되지
@@ -127,6 +134,7 @@ class EventParams:
             "coin_calm_cap": self.coin_calm_cap,
             "coin_calm_floor": self.coin_calm_floor,
             "stock_sensitivity": self.stock_sensitivity,
+            "stock_noise_sensitivity": self.stock_noise_sensitivity,
             "stock_noise_scale": self.stock_noise_scale,
             "stock_rate_jitter": self.stock_rate_jitter,
             "news_probability": self.news_probability,
@@ -163,6 +171,10 @@ class EventParams:
             ),
             (-1 < self.coin_calm_floor < 0, "coin_calm_floor must be in (-1, 0)"),
             (0 < self.stock_sensitivity <= 10, "stock_sensitivity must be in (0, 10]"),
+            (
+                0 <= self.stock_noise_sensitivity <= 10,
+                "stock_noise_sensitivity must be in [0, 10]",
+            ),
             (
                 0 <= self.stock_noise_scale <= STOCK_NOISE_MAX,
                 f"stock_noise_scale must be in [0, {STOCK_NOISE_MAX:g}]",
