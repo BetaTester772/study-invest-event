@@ -397,8 +397,10 @@ export interface Params {
   stock_min_price: number;
   /** 순매수 기준 L(원). */
   virtual_liquidity: number;
-  /** 정산 때 다음 운영일 무작위 뉴스가 생길 확률(0~1). */
-  news_probability: number;
+  /** 하루 무작위 호재 건수(0~4). 호재·악재는 서로 다른 종목에 붙고 합은 4 이하, 둘 다 0이면 무작위 뉴스 없음. */
+  news_good_per_day: number;
+  /** 하루 무작위 악재 건수(0~4). */
+  news_bad_per_day: number;
   /** 무작위 뉴스 효과 크기 범위(0~1]. */
   news_rate_min: number;
   news_rate_max: number;

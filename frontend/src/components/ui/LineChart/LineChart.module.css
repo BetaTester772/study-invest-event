@@ -26,6 +26,10 @@
   font-size: var(--text-sm);
 }
 
+.plot {
+  position: relative;
+}
+
 .svg {
   display: block;
   width: 100%;
@@ -94,6 +98,14 @@
   font-size: var(--text-xs);
 }
 
+.tooltipRight {
+  transform: none;
+}
+
+.tooltipLeft {
+  transform: translateX(-100%);
+}
+
 .tooltipX {
   color: var(--color-text-muted);
 }
@@ -103,4 +115,104 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
+}
+
+/* Indicator overlays: 2px lines in the chart series colors, quieter than the price line only by hue. */
+.overlay {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.overlayDot {
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+/* A band is a wash plus hairline edges: it frames the price, it does not compete with it. */
+.band {
+  fill: color-mix(in srgb, var(--color-text-subtle) 14%, transparent);
+  stroke: none;
+}
+
+.bandEdge {
+  fill: none;
+  stroke: var(--color-text-subtle);
+  stroke-opacity: 0.7;
+  stroke-width: 1;
+}
+
+/* Legend row: line keys + live values. Text stays in text tokens; only the key carries the hue. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.legendName {
+  color: var(--color-text-muted);
+}
+
+.legendValue {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.legendEmpty {
+  color: var(--color-text-subtle);
+  font-weight: var(--weight-regular);
+}
+
+.key {
+  --key-color: var(--color-flat);
+  display: inline-block;
+  flex: none;
+  background: var(--key-color);
+}
+
+.keyLine {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.keyPrice {
+  --key-color: var(--chart-line);
+}
+
+.keyBand {
+  --key-color: color-mix(in srgb, var(--color-text-subtle) 30%, transparent);
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text-subtle) 70%, transparent);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tooltipValue {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipName {
+  color: var(--color-text-muted);
 }

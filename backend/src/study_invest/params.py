@@ -43,6 +43,8 @@ STOCK_P_SHIFT_MAX = 0.50
 """주식 상승 확률 폭 δ 파라미터의 최대값(상승 확률 0~1)."""
 NEWS_RATE_MAX = 1.0
 """호재·악재 효과 크기의 최대값(±100%)."""
+NEWS_PER_DAY_MAX = 4
+"""하루 무작위 뉴스 건수(호재+악재) 상한. 운영일·종목당 뉴스가 1건이라 주식 종목 수(4)까지."""
 
 STOCK_DAILY_LIMIT = 0.30
 """주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 폭 상한 파라미터(stock_move_*)의 최대값이다."""
@@ -91,9 +93,11 @@ class EventParams:
     클수록 매매의 영향이 작다(소수 참가 시 가격 왜곡 완화)."""
 
     # 호재·악재 (03-pricing §3)
-    news_probability: float = 0.50
-    """정산 때 다음 운영일(반영일이 있는 날)에 무작위 뉴스 1건이 생길 확률. 0이면 무작위 뉴스 없음
-    (관리자가 쓴 뉴스만). 호재·악재는 반반, 종목은 주식 4종목 중 균등."""
+    news_good_per_day: int = 1
+    """하루 무작위 호재 건수. 정산 때 다음 운영일(반영일이 있는 날) 몫으로 이만큼 뽑는다."""
+    news_bad_per_day: int = 1
+    """하루 무작위 악재 건수. 호재·악재는 서로 다른 종목(주식 4종목 중 균등)에 붙는다. 호재와 악재
+    건수가 모두 0이면 무작위 뉴스 없음(관리자가 쓴 뉴스만). 합은 4 이하."""
     news_rate_min: float = 0.05
     """무작위 뉴스 효과 크기의 하한(+5% / -5%)."""
     news_rate_max: float = 0.15
@@ -126,7 +130,6 @@ class EventParams:
             "stock_p_shift": self.stock_p_shift,
             "stock_move_max": self.stock_move_max,
             "stock_move_min": self.stock_move_min,
-            "news_probability": self.news_probability,
             "news_rate_min": self.news_rate_min,
             "news_rate_max": self.news_rate_max,
             "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
@@ -180,7 +183,18 @@ class EventParams:
                 0 <= self.virtual_liquidity <= AMOUNT_MAX,
                 f"virtual_liquidity must be in [0, {AMOUNT_MAX:,}]",
             ),
-            (0 <= self.news_probability <= 1, "news_probability must be in [0, 1]"),
+            (
+                0 <= self.news_good_per_day <= NEWS_PER_DAY_MAX,
+                f"news_good_per_day must be in [0, {NEWS_PER_DAY_MAX}]",
+            ),
+            (
+                0 <= self.news_bad_per_day <= NEWS_PER_DAY_MAX,
+                f"news_bad_per_day must be in [0, {NEWS_PER_DAY_MAX}]",
+            ),
+            (
+                self.news_good_per_day + self.news_bad_per_day <= NEWS_PER_DAY_MAX,
+                f"news_good_per_day + news_bad_per_day must be at most {NEWS_PER_DAY_MAX}",
+            ),
             # 하한·상한은 따로 검사한다(엇갈려 저장돼도 배치가 멈추지 않게. 추출 때 정렬해 쓴다).
             (
                 0 < self.news_rate_min <= NEWS_RATE_MAX,

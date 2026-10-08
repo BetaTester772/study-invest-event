@@ -3,13 +3,13 @@ import { meApi, publicApi, useApi, useRefetchOnOpen, type PricePoint } from '../
 import { useAuth } from '../../auth/AuthContext';
 import { KindBadge, NewsBadge } from '../../components/app/badges';
 import { LoadError } from '../../components/app/LoadError';
+import { PriceHistoryChart } from '../../components/app/PriceHistoryChart';
 import {
   Badge,
   Card,
   Container,
   EmptyState,
   Grid,
-  LineChart,
   LinkButton,
   Money,
   PageHeader,
@@ -20,7 +20,7 @@ import {
   Text,
   type Column,
 } from '../../components/ui';
-import { formatDay, formatDayShort } from '../../lib/format';
+import { formatDay } from '../../lib/format';
 import { OrderPanel } from './OrderPanel';
 
 const SOURCE_LABEL: Record<PricePoint['source'], string> = {
@@ -29,6 +29,8 @@ const SOURCE_LABEL: Record<PricePoint['source'], string> = {
   carry_over: '전일 유지',
   manual: '관리자 조정',
 };
+
+const EMPTY_HISTORY: PricePoint[] = [];
 
 const HISTORY_COLUMNS: Column<PricePoint>[] = [
   { key: 'day', header: '운영일', nowrap: true, render: (p) => formatDay(p.day) },
@@ -81,7 +83,6 @@ export function InstrumentPage() {
     );
   }
 
-  const points = (history.data ?? []).map((p) => ({ x: p.day, y: p.price }));
   const rows = [...(history.data ?? [])].reverse();
 
   return (
@@ -145,7 +146,7 @@ export function InstrumentPage() {
             ) : history.loading ? (
               <Skeleton height="240px" />
             ) : (
-              <LineChart points={points} label={`${instrument?.name ?? code} 시작가 이력`} formatX={formatDayShort} />
+              <PriceHistoryChart history={history.data ?? EMPTY_HISTORY} name={instrument?.name ?? code} />
             )}
           </Card>
           <Card title="날짜별 시작가" padding="none">

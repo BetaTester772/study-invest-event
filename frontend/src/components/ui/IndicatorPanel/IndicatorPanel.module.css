@@ -1,0 +1,165 @@
+.panel {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+  margin-bottom: var(--space-1);
+}
+
+.title {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.legendName {
+  color: var(--color-text-muted);
+}
+
+.legendValue {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.legendEmpty {
+  color: var(--color-text-subtle);
+  font-weight: var(--weight-regular);
+}
+
+.description {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Line key: a short stroke of the series color, so identity never rides on the text color. */
+.key {
+  --key-color: var(--color-flat);
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--key-color);
+}
+
+.keyDashed {
+  background: repeating-linear-gradient(90deg, var(--key-color) 0 4px, transparent 4px 7px);
+}
+
+.keyBars {
+  width: 10px;
+  height: 8px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(90deg, var(--color-up) 0 50%, var(--color-down) 50% 100%);
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+.axis text {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  stroke: var(--color-grid);
+  stroke-width: 1;
+}
+
+.guide {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+
+.zone {
+  fill: color-mix(in srgb, var(--color-text-subtle) 10%, transparent);
+}
+
+.zero {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.lineDashed {
+  stroke-dasharray: 5 4;
+}
+
+.bar {
+  stroke: none;
+}
+
+.barUp {
+  fill: var(--color-up);
+}
+
+.barDown {
+  fill: var(--color-down);
+}
+
+.barActive {
+  opacity: 0.8;
+  stroke: var(--color-text);
+  stroke-width: 1;
+}
+
+.dot {
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+.crosshair {
+  stroke: var(--color-text-subtle);
+  stroke-width: 1;
+}

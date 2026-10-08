@@ -17,6 +17,7 @@ from study_invest.params import (
     CALM_ROUNDS_MAX,
     INITIAL_CASH,
     KST,
+    NEWS_PER_DAY_MAX,
     REWARD_CASH_MAX,
     STOCK_DAILY_LIMIT,
     STOCK_P_SHIFT_MAX,
@@ -341,31 +342,81 @@ class TestNews:
             settle_stocks(PRICES, {}, {}, P, draws, news={"LB": Fraction(-1)})
 
     def test_draw_news_sequence(self) -> None:
-        """발생 여부 → 종목 → 호재·악재 → 크기 → 제목 순으로 균등난수를 쓴다."""
+        """기본값은 호재 1건·악재 1건. 뉴스마다 종목 → 크기 → 제목 순으로 균등난수를 쓴다."""
         codes = [i.code for i in STOCKS]
-        assert draw_news(codes, P, Seq([0.5])) is None  # u ≥ 0.5 → 뉴스 없음
-        draw = draw_news(codes, P, Seq([0.1, 0.3, 0.2, 0.5, 0.9]))
-        assert draw is not None
-        assert (draw.code, draw.kind, draw.rate, draw.headline_pick) == ("SKLOW", "good", 0.1, 0.9)
-        bad = draw_news(codes, P, Seq([0.0, 0.99, 0.5, 0.333, 0.0]))
-        assert bad is not None and (bad.code, bad.kind, bad.rate) == ("LB", "bad", 0.08)
+        assert (P.news_good_per_day, P.news_bad_per_day) == (1, 1)
+        good_only = replace(P, news_good_per_day=1, news_bad_per_day=0)
+        draws = draw_news(codes, good_only, Seq([0.3, 0.5, 0.9]))
+        assert [(d.code, d.kind, d.rate, d.headline_pick) for d in draws] == [
+            ("SKLOW", "good", 0.1, 0.9)
+        ]
+        bad_only = replace(P, news_good_per_day=0, news_bad_per_day=1)
+        draws = draw_news(codes, bad_only, Seq([0.99, 0.333, 0.0]))
+        assert [(d.code, d.kind, d.rate) for d in draws] == [("LB", "bad", 0.08)]
         # 하한·상한이 엇갈려 저장돼 있어도 정렬해 쓴다
-        swapped = replace(P, news_rate_min=0.2, news_rate_max=0.1)
-        d = draw_news(codes, swapped, Seq([0.0, 0.0, 0.0, 0.0, 0.0]))
-        assert d is not None and d.rate == 0.1
-        assert draw_news([], P, Seq([])) is None
+        swapped = replace(good_only, news_rate_min=0.2, news_rate_max=0.1)
+        assert [x.rate for x in draw_news(codes, swapped, Seq([0.0, 0.0, 0.0]))] == [0.1]
+        assert draw_news([], P, Seq([])) == []
+
+    def test_draw_news_default_is_one_good_and_one_bad_on_different_stocks(self) -> None:
+        codes = [i.code for i in STOCKS]
+        # 호재: 4종목 중 첫째(SAMSU). 악재: 남은 3종목 중 첫째(SKLOW)
+        draws = draw_news(codes, P, Seq([0.0, 0.5, 0.0, 0.0, 0.0, 0.9]))
+        assert [(d.code, d.kind, d.rate) for d in draws] == [
+            ("SAMSU", "good", 0.1),  # 크기 U 0.5 → 5% + 10% × 0.5
+            ("SKLOW", "bad", 0.05),  # 크기 U 0.0 → 하한 5%
+        ]
+        # 난수가 같은 자리를 가리켜도(0.0) 종목은 겹치지 않는다. 어느 난수에서도 건수와 순서는 같다.
+        rng = random.Random(7)
+        seen_good: set[str] = set()
+        seen_bad: set[str] = set()
+        for _ in range(500):
+            got = draw_news(codes, P, rng)
+            assert [d.kind for d in got] == ["good", "bad"]
+            assert got[0].code != got[1].code
+            assert all(0.05 <= d.rate <= 0.15 for d in got)
+            seen_good.add(got[0].code)
+            seen_bad.add(got[1].code)
+        # 호재·악재 모두 어느 종목에든 갈 수 있다(특정 종목에 쏠리지 않는다)
+        assert seen_good == seen_bad == set(codes)
+
+    def test_draw_news_counts(self) -> None:
+        codes = [i.code for i in STOCKS]
+        three = replace(P, news_good_per_day=2, news_bad_per_day=1)
+        got = draw_news(codes, three, random.Random(1))
+        assert [d.kind for d in got] == ["good", "good", "bad"]
+        assert len({d.code for d in got}) == 3
+        # 둘 다 0이면 난수를 쓰지 않고 뉴스도 없다
+        off = replace(P, news_good_per_day=0, news_bad_per_day=0)
+        assert draw_news(codes, off, Seq([])) == []
+        # 4건이면 4종목 모두에 하나씩
+        full = replace(P, news_good_per_day=2, news_bad_per_day=2)
+        got = draw_news(codes, full, random.Random(2))
+        assert sorted(d.code for d in got) == sorted(codes)
+        # 종목이 건수보다 적으면 종목 수까지만
+        assert len(draw_news(codes[:1], P, random.Random(3))) == 1
 
     def test_params_range(self) -> None:
-        assert (P.news_probability, P.news_rate_min, P.news_rate_max) == (0.5, 0.05, 0.15)
-        EventParams(news_probability=0, news_rate_min=1, news_rate_max=1)
+        assert (P.news_good_per_day, P.news_bad_per_day) == (1, 1)
+        assert (P.news_rate_min, P.news_rate_max) == (0.05, 0.15)
+        EventParams(news_good_per_day=0, news_bad_per_day=0, news_rate_min=1, news_rate_max=1)
+        EventParams(news_good_per_day=NEWS_PER_DAY_MAX, news_bad_per_day=0)
+        EventParams(news_good_per_day=2, news_bad_per_day=2)
         for bad in (
-            {"news_probability": -0.1},
-            {"news_probability": 1.1},
+            {"news_good_per_day": -1},
+            {"news_bad_per_day": -1},
+            {"news_good_per_day": NEWS_PER_DAY_MAX + 1},
+            {"news_good_per_day": 3, "news_bad_per_day": 2},  # 합이 종목 수(4)를 넘는다
             {"news_rate_min": 0},
             {"news_rate_max": 1.5},
         ):
             with pytest.raises(ValueError):
                 EventParams(**bad)
+
+    def test_stored_params_with_the_removed_keys_still_load(self) -> None:
+        """이전 버전이 저장한 news_probability·news_max_per_day는 무시하고 새 기본값을 쓴다."""
+        loaded = EventParams.from_dict({"news_probability": 0.5, "news_max_per_day": 3})
+        assert (loaded.news_good_per_day, loaded.news_bad_per_day) == (1, 1)
 
 
 class TestCalendar:

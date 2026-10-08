@@ -477,8 +477,11 @@ class Params(Schema):
     stock_min_price: int
     virtual_liquidity: int
     """순매수 기준 L(원): z = N / (|N| + L)."""
-    news_probability: float
-    """정산 때 다음 운영일 무작위 뉴스가 생길 확률(0~1). 0이면 관리자 작성 뉴스만."""
+    news_good_per_day: int | None = None
+    """하루 무작위 호재 건수(0~4). 호재·악재는 서로 다른 종목에 붙고 합은 4 이하, 둘 다 0이면
+    관리자 작성 뉴스만. null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
+    news_bad_per_day: int | None = None
+    """하루 무작위 악재 건수(0~4). null이면 현재 값 유지."""
     news_rate_min: float
     news_rate_max: float
     """무작위 뉴스 효과 크기 범위(0~1]."""

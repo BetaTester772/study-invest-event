@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import type { PricePoint } from '../../api';
+import { PriceHistoryChart } from '../../components/app/PriceHistoryChart';
 import {
   Alert,
   Badge,
@@ -60,6 +62,15 @@ const zipPoints = (ys: number[]) =>
   SAMPLE_DAYS.slice(0, ys.length).map((x, i) => ({ x, y: ys[i] ?? 0 }));
 const SAMPLE_POINTS = zipPoints([75000, 71200, 73900, 80100, 78400, 82000, 79300, 85600]);
 const SAMPLE_DOWN = zipPoints([250000, 212000, 198500, 460000, 301000, 244000]);
+/** 보조 지표를 보여 주는 11일치 시작가(이벤트 전 기간). */
+const SAMPLE_HISTORY: PricePoint[] = [75000, 71200, 73900, 80100, 78400, 82000, 79300, 85600, 83100, 88400, 91200].map(
+  (price, i, all) => ({
+    day: SAMPLE_DAYS[i] ?? '',
+    price,
+    change_rate: i === 0 ? null : price / (all[i - 1] ?? price) - 1,
+    source: i === 0 ? 'initial' : 'settlement',
+  }),
+);
 
 interface RankRow {
   rank: number;
@@ -359,6 +370,16 @@ export function StyleGuidePage() {
             <LineChart label="하락 예시" points={SAMPLE_DOWN} formatX={formatDayShort} />
             <LineChart label="빈 차트" points={[]} height={160} />
           </Grid>
+        </Section>
+
+        <Section
+          title="보조 지표"
+          description="종목 화면의 가격 이력. 이동평균·볼린저 밴드는 가격 위에, RSI·MACD·일간 변동률은 아래 패널에 그린다. 호버 위치는 모두 같이 움직인다."
+        >
+          <Stack gap={8}>
+            <PriceHistoryChart history={SAMPLE_HISTORY} name="삼수전자" />
+            <PriceHistoryChart history={SAMPLE_HISTORY.slice(0, 4)} name="데이터가 적은 경우" />
+          </Stack>
         </Section>
 
         <Section title="알림">

@@ -82,10 +82,17 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   },
   { key: 'stock_min_price', label: '주식 최저가(원)', hint: '기본 1000', kind: 'int', group: 'stock' },
   {
-    key: 'news_probability',
-    label: '무작위 뉴스 확률',
-    hint: '0~1. 정산 때 다음 운영일에 뉴스 1건이 생길 확률. 0이면 관리자가 쓴 뉴스만. 기본 0.5',
-    kind: 'float',
+    key: 'news_good_per_day',
+    label: '하루 호재 건수',
+    hint: '0~4. 기본 1. 호재와 악재는 서로 다른 종목에 붙고, 둘을 합쳐 4건까지입니다. 둘 다 0이면 관리자가 쓴 뉴스만',
+    kind: 'int',
+    group: 'news',
+  },
+  {
+    key: 'news_bad_per_day',
+    label: '하루 악재 건수',
+    hint: '0~4. 기본 1',
+    kind: 'int',
     group: 'news',
   },
   {
@@ -136,7 +143,7 @@ const GROUPS: { id: string; title: string; description: string }[] = [
     id: 'news',
     title: '호재·악재',
     description:
-      '18:00 정산 때 다음 운영일 뉴스를 무작위로 뽑아 그 정산에서 바로 반영합니다. 참가자는 반영된 시작가와 함께 다음 날 09:00에 확인합니다. 호재·악재는 반반, 종목은 주식 4종목 중 균등이고, 효과 크기는 하한~상한 사이에서 1% 단위로 뽑습니다. 직접 쓰는 뉴스는 호재·악재 탭에서 작성하세요.',
+      '18:00 정산 때 다음 운영일 뉴스를 무작위로 뽑아 그 정산에서 바로 반영합니다. 참가자는 반영된 시작가와 함께 다음 날 09:00에 확인합니다. 기본은 매일 호재 1건·악재 1건이고, 둘은 서로 다른 종목(주식 4종목 중 균등)에 붙습니다(한 종목에는 하루 1건). 효과 크기는 하한~상한 사이에서 1% 단위로 뽑습니다. 직접 쓰는 뉴스는 호재·악재 탭에서 작성하세요.',
   },
   { id: 'trade', title: '거래와 인증', description: '주문 한도, 인증 보상과 마감입니다.' },
 ];

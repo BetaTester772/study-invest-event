@@ -125,6 +125,12 @@
   --color-focus: #1f63e0;
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-focus) 35%, transparent);
 
+  /* Chart series (indicator lines). Violet · aqua · orange, in this fixed order; red/blue stay with the
+     market and yellow with the highlighter. Validated per mode (CVD ΔE ≥ 9, normal ΔE ≥ 24). */
+  --chart-1: #4a3aa7;
+  --chart-2: #1baf7a;
+  --chart-3: #eb6834;
+
   --shadow-float: 0 18px 40px -12px rgba(20, 28, 60, 0.28), 0 2px 6px rgba(20, 28, 60, 0.08);
 }
 
@@ -179,6 +185,10 @@
     --color-focus: #ffe14d;
     --focus-ring: 0 0 0 3px rgba(255, 225, 77, 0.45);
 
+    --chart-1: #9085e9;
+    --chart-2: #199e70;
+    --chart-3: #d95926;
+
     --shadow-float: 0 18px 40px -12px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
   }
 }
@@ -231,6 +241,10 @@
 
   --color-focus: #ffe14d;
   --focus-ring: 0 0 0 3px rgba(255, 225, 77, 0.45);
+
+  --chart-1: #9085e9;
+  --chart-2: #199e70;
+  --chart-3: #d95926;
 
   --shadow-float: 0 18px 40px -12px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
