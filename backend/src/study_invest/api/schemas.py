@@ -474,6 +474,8 @@ class Params(Schema):
     """순매수 0일 때의 폭 상한(0~0.3]. null이면 현재 값 유지."""
     stock_move_min: float | None = None
     """순매수·순매도가 한없이 클 때의 폭 상한[0~0.3]. null이면 현재 값 유지."""
+    stock_move_exp: float | None = None
+    """폭 지수 e(0~100]: 변동률 = ±폭 상한 × X^e. null이면 현재 값 유지."""
     stock_min_price: int
     virtual_liquidity: int
     """순매수 기준 L(원): z = N / (|N| + L)."""

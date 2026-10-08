@@ -266,7 +266,7 @@ interface AdminCertification extends Certification {
 }
 // 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_cash 0~100,000,000,
 // virtual_liquidity 0~10^15, coin_cap·coin_calm_cap (0, 10], coin_floor·coin_calm_floor (-1, 0),
-// coin_calm_rounds 0~100, stock_p_shift 0~0.5, stock_move_max (0, 0.3], stock_move_min 0~0.3, news_good_per_day·news_bad_per_day 각 0~4(합 4 이하), news_rate_min·max (0, 1],
+// coin_calm_rounds 0~100, stock_p_shift 0~0.5, stock_move_max (0, 0.3], stock_move_min 0~0.3, stock_move_exp (0, 100], news_good_per_day·news_bad_per_day 각 0~4(합 4 이하), news_rate_min·max (0, 1],
 // 실수 파라미터는 유한값만(NaN·Infinity는 422).
 interface Params {
   coin_p_up: number; coin_up_exp: number; coin_down_exp: number;
@@ -274,8 +274,9 @@ interface Params {
   coin_calm_rounds: number;              // 1회차부터 이 회차까지 안정기 상·하한(기본 3)
   coin_calm_cap: number; coin_calm_floor: number;   // 안정기 상·하한(0.3, -0.1)
   stock_p_shift?: number | null;         // 상승 확률 = 1/2 + δ·z (기본 0.3). PUT에서 생략·null이면 현재 값 유지
-  stock_move_max?: number | null;        // 순매수 0일 때 폭 상한(기본 0.2). 생략·null이면 현재 값 유지
+  stock_move_max?: number | null;        // 순매수 0일 때 폭 상한(기본 0.15). 생략·null이면 현재 값 유지
   stock_move_min?: number | null;        // 순매수가 한없이 클 때 폭 상한(기본 0.05). 생략·null이면 현재 값 유지
+  stock_move_exp?: number | null;        // 폭 지수 e(기본 2): 변동률 = ±폭 상한 × X^e. 생략·null이면 현재 값 유지
   stock_min_price: number;
   virtual_liquidity: number;             // 순매수 기준 L: z = N / (|N| + L)
   news_good_per_day?: number | null;     // 하루 무작위 호재 건수(기본 1, 0~4). 호재·악재는 서로 다른 종목, 합은 4 이하, 둘 다 0이면 무작위 뉴스 없음. PUT에서 생략·null이면 현재 값 유지
