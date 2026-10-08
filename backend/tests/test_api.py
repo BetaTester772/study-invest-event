@@ -383,12 +383,12 @@ class TestNews:
         result = settle_day(client, clock, D1)
         applied = result["detail"]["news"]
         assert [(n["day"], n["code"], n["kind"], n["rate"], n["source"]) for n in applied] == [
-            (D2.isoformat(), "SKLOW", "good", 0.15, "random")
+            (D2.isoformat(), "SKLOW", "good", 0.1, "random")
         ]
         assert "SK로우닉스" in applied[0]["headline"]
-        # 같은 정산에서 바로 곱해진다: 확률 변동 0% × 1.15
+        # 같은 정산에서 바로 곱해진다: 확률 변동 0% × 1.10
         new = result["detail"]["new_prices"]
-        assert new["SKLOW"] == 195_500 and new["SAMSU"] == 75_000
+        assert new["SKLOW"] == 187_000 and new["SAMSU"] == 75_000
         # 공시 전에는 참가자에게 보이지 않는다(관리자 목록에는 반영 완료로 보인다)
         assert client.get("/api/news").json() == []
         assert all(i["news"] is None for i in client.get("/api/instruments").json())
@@ -399,11 +399,11 @@ class TestNews:
         open_day(client, clock, D2)
         items = client.get("/api/news").json()
         assert [(n["day"], n["code"], n["kind"], n["rate"], n["name"]) for n in items] == [
-            (D2.isoformat(), "SKLOW", "good", 0.15, "SK로우닉스")
+            (D2.isoformat(), "SKLOW", "good", 0.1, "SK로우닉스")
         ]
         ins = {i["code"]: i for i in client.get("/api/instruments").json()}
         assert ins["SKLOW"]["news"]["headline"] == applied[0]["headline"]
-        assert ins["SKLOW"]["price"] == 195_500 and ins["SKLOW"]["change_rate"] == 0.15
+        assert ins["SKLOW"]["price"] == 187_000 and ins["SKLOW"]["change_rate"] == 0.1
         assert ins["SAMSU"]["news"] is None
         # 무작위 뉴스는 종목별 기사 풀에서 제목·부제·본문·바이라인을 모두 채운다
         article = items[0]
@@ -411,7 +411,7 @@ class TestNews:
         assert "SK로우닉스" in article["body"] and "{name}" not in article["body"]
         logs = client.get("/api/admin/settlements", headers=admin).json()
         row = next(x for x in logs[0]["stocks"] if x["code"] == "SKLOW")
-        assert (row["rate"], row["news_rate"], row["total_rate"]) == (0, 0.15, 0.15)
+        assert (row["rate"], row["news_rate"], row["total_rate"]) == (0, 0.1, 0.1)
         other = next(x for x in logs[0]["stocks"] if x["code"] == "SAMSU")
         assert other["news_rate"] is None and other["total_rate"] == 0
 

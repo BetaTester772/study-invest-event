@@ -279,7 +279,7 @@ interface Params {
   stock_min_price: number;
   virtual_liquidity: number;             // 순매수 기준 L: z = N / (|N| + L)
   news_probability: number;              // 정산 때 다음 운영일 무작위 뉴스 확률(기본 0.5)
-  news_rate_min: number; news_rate_max: number;   // 무작위 뉴스 효과 범위(기본 0.1~0.2)
+  news_rate_min: number; news_rate_max: number;   // 무작위 뉴스 효과 범위(기본 0.05~0.15)
   daily_buy_limit_ratio: number;
   reward_cash: number;                   // 인증 1건당 지급 현금(기본 250,000원 = 시드의 1/4)
   certification_cutoff: string;          // "23:59"

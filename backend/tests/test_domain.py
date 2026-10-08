@@ -346,9 +346,9 @@ class TestNews:
         assert draw_news(codes, P, Seq([0.5])) is None  # u ≥ 0.5 → 뉴스 없음
         draw = draw_news(codes, P, Seq([0.1, 0.3, 0.2, 0.5, 0.9]))
         assert draw is not None
-        assert (draw.code, draw.kind, draw.rate, draw.headline_pick) == ("SKLOW", "good", 0.15, 0.9)
+        assert (draw.code, draw.kind, draw.rate, draw.headline_pick) == ("SKLOW", "good", 0.1, 0.9)
         bad = draw_news(codes, P, Seq([0.0, 0.99, 0.5, 0.333, 0.0]))
-        assert bad is not None and (bad.code, bad.kind, bad.rate) == ("LB", "bad", 0.13)
+        assert bad is not None and (bad.code, bad.kind, bad.rate) == ("LB", "bad", 0.08)
         # 하한·상한이 엇갈려 저장돼 있어도 정렬해 쓴다
         swapped = replace(P, news_rate_min=0.2, news_rate_max=0.1)
         d = draw_news(codes, swapped, Seq([0.0, 0.0, 0.0, 0.0, 0.0]))
@@ -356,7 +356,7 @@ class TestNews:
         assert draw_news([], P, Seq([])) is None
 
     def test_params_range(self) -> None:
-        assert (P.news_probability, P.news_rate_min, P.news_rate_max) == (0.5, 0.1, 0.2)
+        assert (P.news_probability, P.news_rate_min, P.news_rate_max) == (0.5, 0.05, 0.15)
         EventParams(news_probability=0, news_rate_min=1, news_rate_max=1)
         for bad in (
             {"news_probability": -0.1},

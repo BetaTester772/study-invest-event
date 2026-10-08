@@ -91,14 +91,14 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   {
     key: 'news_rate_min',
     label: '뉴스 효과 하한',
-    hint: '소수. 0.1 = ±10%',
+    hint: '소수. 0.05 = ±5%. 기본 0.05',
     kind: 'float',
     group: 'news',
   },
   {
     key: 'news_rate_max',
     label: '뉴스 효과 상한',
-    hint: '소수. 0.2 = ±20%',
+    hint: '소수. 0.15 = ±15%. 기본 0.15',
     kind: 'float',
     group: 'news',
   },
