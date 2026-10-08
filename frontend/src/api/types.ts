@@ -388,7 +388,10 @@ export interface Params {
   coin_calm_rounds: number;
   coin_calm_cap: number;
   coin_calm_floor: number;
+  /** 거래량 감도 a: 거래량 몫 = a × (1 − r⁰). */
   stock_sensitivity: number;
+  /** 잡음 감도 b (0~10): 잡음 몫 = b × (r⁰ − r). 0이면 매수지분 잡음이 가격에 영향 없음. */
+  stock_noise_sensitivity: number;
   stock_min_price: number;
   virtual_liquidity: number;
   /** 매수지분 잡음 세기 τ (0~2). 0이면 잡음 없음. */
@@ -418,6 +421,12 @@ export interface SettlementStock {
   /** Gumbel noise multiplier on the buy share; null when noise is off or for older logs. */
   noise_factor: number | null;
   concentration: number | null;
+  /** Concentration r⁰ without the share noise; absent for older logs. */
+  volume_concentration?: number | null;
+  /** Volume share a × (1 − r⁰), before the multiplier and clamp; absent for older logs. */
+  volume_rate?: number | null;
+  /** Noise share b × (r⁰ − r), before the multiplier and clamp; absent for older logs. */
+  noise_rate?: number | null;
   /** Per-stock rate multiplier k (applied before the clamp); null when off or for older logs. */
   rate_factor?: number | null;
   /** Crowding rate after the multiplier and the ±30% clamp, before news. */

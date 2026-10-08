@@ -295,6 +295,66 @@ class TestStockNoise:
         assert sd == pytest.approx(tau * math.pi / math.sqrt(6), abs=0.01)
 
 
+class TestStockSensitivitySplit:
+    """03-pricing §2.7: 쏠림 변동률 = 거래량 몫 a(1 − r⁰ᵢ) + 잡음 몫 b(r⁰ᵢ − rᵢ)."""
+
+    buys: ClassVar[dict[str, int]] = TestStockNoise.buys
+    noise: ClassVar[dict[str, float]] = {"SAMSU": 1.1, "SKLOW": 0.95, "MIRAE": 1.0, "LB": 1.05}
+
+    def test_default_and_range(self) -> None:
+        assert P.stock_noise_sensitivity == 0.30 == P.stock_sensitivity
+        EventParams(stock_noise_sensitivity=0)
+        EventParams(stock_noise_sensitivity=10)
+        for bad in (-0.1, 10.1, float("nan")):
+            with pytest.raises(ValueError):
+                EventParams(stock_noise_sensitivity=bad)
+
+    def test_equal_sensitivities_match_single_formula(self) -> None:
+        moves = settle_stocks(PRICES, self.buys, P, noise=self.noise)
+        for m in moves.values():
+            assert m.concentration is not None and m.volume_concentration is not None
+            assert m.volume_rate + m.noise_rate == Fraction(3, 10) * (1 - m.concentration)
+
+    def test_split_values(self) -> None:
+        moves = settle_stocks(PRICES, self.buys, P, noise=self.noise)
+        samsu = moves["SAMSU"]
+        assert samsu.concentration is not None
+        # B′ = 2500/1700/1100/700만, 총 6000만 → r⁰ = 10/6
+        assert samsu.volume_concentration == Fraction(10, 6)
+        assert samsu.volume_rate == Fraction(3, 10) * (1 - Fraction(10, 6))
+        assert samsu.noise_rate == Fraction(3, 10) * (Fraction(10, 6) - samsu.concentration)
+        # 두 몫 모두 종목 합이 0
+        assert sum(m.volume_rate for m in moves.values()) == 0
+        assert sum(m.noise_rate for m in moves.values()) == 0
+
+    def test_zero_noise_sensitivity_ignores_noise(self) -> None:
+        params = replace(P, stock_noise_sensitivity=0)
+        noisy = settle_stocks(PRICES, self.buys, params, noise=self.noise)
+        plain = settle_stocks(PRICES, self.buys, params)
+        assert {c: m.rate for c, m in noisy.items()} == {c: m.rate for c, m in plain.items()}
+        assert all(m.noise_rate == 0 for m in noisy.values())
+
+    def test_volume_sensitivity_leaves_noise_share(self) -> None:
+        """거래량 감도를 낮춰도 잡음 몫은 그대로다."""
+        half = settle_stocks(
+            PRICES, self.buys, replace(P, stock_sensitivity=0.15), noise=self.noise
+        )
+        full = settle_stocks(PRICES, self.buys, P, noise=self.noise)
+        for code in PRICES:
+            assert half[code].volume_rate == full[code].volume_rate / 2
+            assert half[code].noise_rate == full[code].noise_rate
+
+    def test_no_orders_moves_only_by_noise_share(self) -> None:
+        """주문이 없으면(전 종목 L) r⁰ = 1이라 거래량 몫은 0이고 잡음 감도만 움직임을 정한다."""
+        a = settle_stocks(PRICES, {}, replace(P, stock_sensitivity=0.9), noise=self.noise)
+        b = settle_stocks(PRICES, {}, replace(P, stock_noise_sensitivity=0.6), noise=self.noise)
+        base = settle_stocks(PRICES, {}, P, noise=self.noise)
+        for code in PRICES:
+            assert a[code].volume_rate == 0
+            assert a[code].rate == base[code].rate
+            assert b[code].rate == 2 * base[code].rate
+
+
 class TestStockRateFactor:
     """03-pricing §2.6: 종목별 변동 배율 kᵢ ~ U(1 − w, 1 + w)를 쏠림 변동률(클램프 전)에 곱한다."""
 

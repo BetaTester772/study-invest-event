@@ -469,6 +469,10 @@ class Params(Schema):
     coin_calm_cap: float
     coin_calm_floor: float
     stock_sensitivity: float
+    """거래량 감도 a: 거래량 몫 = a × (1 − r⁰)."""
+    stock_noise_sensitivity: float | None = None
+    """잡음 감도 b(0~10): 잡음 몫 = b × (r⁰ − r).
+    null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
     stock_min_price: int
     virtual_liquidity: int
     stock_noise_scale: float
@@ -542,6 +546,13 @@ class StockSettlement(Schema):
     noise_factor: float | None = None
     """매수지분 잡음 배수 exp(τ·(G − γ)). 잡음 없음(τ = 0)이거나 도입 전 기록이면 None."""
     concentration: float | None
+    """쏠림 지수 r(매수지분 잡음 포함)."""
+    volume_concentration: float | None = None
+    """잡음을 뺀 쏠림 지수 r⁰. 도입 전 기록이면 None."""
+    volume_rate: float | None = None
+    """거래량 몫 a × (1 − r⁰)(배율·클램프 전). 도입 전 기록이면 None."""
+    noise_rate: float | None = None
+    """잡음 몫 b × (r⁰ − r)(배율·클램프 전). 도입 전 기록이면 None."""
     rate_factor: float | None = None
     """종목별 변동 배율 k(클램프 전에 곱함). 배율 없음(w = 0)이거나 도입 전 기록이면 None."""
     rate: float

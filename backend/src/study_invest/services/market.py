@@ -231,6 +231,11 @@ def settle_day(
             "adjusted_amount": m.adjusted_amount,
             "noise_factor": m.noise_factor,
             "concentration": None if m.concentration is None else float(m.concentration),
+            "volume_concentration": None
+            if m.volume_concentration is None
+            else float(m.volume_concentration),
+            "volume_rate": float(m.volume_rate),
+            "noise_rate": float(m.noise_rate),
             "rate_factor": m.rate_factor,
             "rate": float(m.rate),
             "news_rate": None if m.news_rate is None else float(m.news_rate),

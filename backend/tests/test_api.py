@@ -245,6 +245,31 @@ class TestSettlement:
         logs = client.get("/api/admin/settlements", headers=admin).json()
         assert all(x["rate_factor"] is None for x in logs[0]["stocks"])
 
+    def test_stock_noise_sensitivity_param(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        params = client.get("/api/admin/params", headers=admin).json()
+        assert params["stock_noise_sensitivity"] == 0.3
+        r = client.put(
+            "/api/admin/params", json=dict(params, stock_noise_sensitivity=0.1), headers=admin
+        )
+        assert r.status_code == 200 and r.json()["stock_noise_sensitivity"] == 0.1
+        # 이 값을 모르는 이전 화면이 보내지 않아도 저장된 값을 유지한다
+        legacy = {k: v for k, v in params.items() if k != "stock_noise_sensitivity"}
+        r = client.put("/api/admin/params", json=dict(legacy, news_probability=0.6), headers=admin)
+        assert r.status_code == 200 and r.json()["stock_noise_sensitivity"] == 0.1
+        bad = client.put(
+            "/api/admin/params", json=dict(params, stock_noise_sensitivity=-1), headers=admin
+        )
+        assert bad.status_code == 422
+        open_day(client, clock, D1)
+        settle_day(client, clock, D1)
+        logs = client.get("/api/admin/settlements", headers=admin).json()
+        assert logs[0]["params"]["stock_noise_sensitivity"] == 0.1
+        for x in logs[0]["stocks"]:
+            assert x["volume_concentration"] is not None
+            assert x["volume_rate"] + x["noise_rate"] == pytest.approx(x["rate"])
+
     def test_coin_is_calm_for_first_three_rounds(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
