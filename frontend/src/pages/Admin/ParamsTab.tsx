@@ -76,7 +76,7 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   {
     key: 'virtual_liquidity',
     label: '순매수 기준 L(원)',
-    hint: '순매수 신호 = 순매수 ÷ (|순매수| + L). 순매수가 L이면 신호 ±0.5. 기본 5000000',
+    hint: '순매수 신호 = 순매수 ÷ (|순매수| + L). 순매수가 L이면 신호 ±0.5. 기본 3000000',
     kind: 'int',
     group: 'stock',
   },

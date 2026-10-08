@@ -42,7 +42,7 @@ P = EventParams()
 P0 = replace(P, virtual_liquidity=0)
 PRICES = {i.code: i.initial_price for i in STOCKS}
 MAN = 10_000
-L = P.virtual_liquidity  # 500만원
+L = P.virtual_liquidity  # 300만원
 
 
 def same_draw(u: float, x: float) -> dict[str, StockDraw]:
@@ -198,19 +198,19 @@ class TestStock:
         assert move_limit(Fraction(1, 2), swapped) == Fraction(1, 8)
 
     def test_settlement_example(self) -> None:
-        """L=500만. SAMSU 순매수 500만(z=0.5), LB 순매도 500만(z=−0.5), 나머지 0. u=0.6, X=1."""
+        """L=300만. SAMSU 순매수 300만(z=0.5), LB 순매도 300만(z=−0.5), 나머지 0. u=0.6, X=1."""
         moves = settle_stocks(
             PRICES,
-            {"SAMSU": 800 * MAN, "LB": 100 * MAN},
-            {"SAMSU": 300 * MAN, "LB": 600 * MAN},
+            {"SAMSU": 600 * MAN, "LB": 100 * MAN},
+            {"SAMSU": 300 * MAN, "LB": 400 * MAN},
             P,
             same_draw(0.6, 1.0),
         )
         samsu, sklow, lb = moves["SAMSU"], moves["SKLOW"], moves["LB"]
         assert (samsu.buy_amount, samsu.sell_amount, samsu.net_amount) == (
-            800 * MAN,
+            600 * MAN,
             300 * MAN,
-            500 * MAN,
+            300 * MAN,
         )
         assert (samsu.signal, samsu.p_up, samsu.u, samsu.x) == (
             Fraction(1, 2),
@@ -226,7 +226,7 @@ class TestStock:
             Fraction(-1, 5),
         )
         assert sklow.new_price == 136_000
-        assert (lb.net_amount, lb.p_up, lb.direction) == (-500 * MAN, Fraction(7, 20), "down")
+        assert (lb.net_amount, lb.p_up, lb.direction) == (-300 * MAN, Fraction(7, 20), "down")
         assert lb.rate == Fraction(-1, 8) and lb.new_price == 12_250
 
     def test_magnitude_scales_with_x(self) -> None:
@@ -236,15 +236,15 @@ class TestStock:
         assert all(m.rate == 0 and m.new_price == m.old_price for m in moves.values())
 
     def test_up_ratio_follows_probability(self) -> None:
-        """순매수 500만이면 상승 비율 ≈ 0.65, 순매도 500만이면 ≈ 0.35. 크기는 ≤ 12.5%."""
+        """순매수 L이면 상승 비율 ≈ 0.65, 순매도 L이면 ≈ 0.35. 크기는 ≤ 12.5%."""
         rng = random.Random(2026)
         ups = {"SAMSU": 0, "LB": 0}
         n = 20_000
         for _ in range(n):
             moves = settle_stocks(
                 PRICES,
-                {"SAMSU": 500 * MAN},
-                {"LB": 500 * MAN},
+                {"SAMSU": L},
+                {"LB": L},
                 P,
                 draw_stock_randoms(PRICES, rng),
             )

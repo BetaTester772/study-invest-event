@@ -86,7 +86,7 @@ class EventParams:
     폭 상한 = M_min + (M_max − M_min)·(1 − |zᵢ|)."""
     stock_min_price: int = 1_000
     """주식 최저가 하한(원)."""
-    virtual_liquidity: int = 5_000_000
+    virtual_liquidity: int = 3_000_000
     """순매수 기준 L(원): zᵢ = Nᵢ / (|Nᵢ| + L). 순매수가 L이면 |zᵢ| = 0.5다.
     클수록 매매의 영향이 작다(소수 참가 시 가격 왜곡 완화)."""
 
