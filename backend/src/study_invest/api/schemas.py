@@ -468,14 +468,15 @@ class Params(Schema):
     coin_calm_rounds: int
     coin_calm_cap: float
     coin_calm_floor: float
-    stock_sensitivity: float
+    stock_p_shift: float | None = None
+    """상승 확률 폭 δ(0~0.5): 상승 확률 = 1/2 + δ·z. null이면 현재 값 유지(이전 화면 호환)."""
+    stock_move_max: float | None = None
+    """순매수 0일 때의 폭 상한(0~0.3]. null이면 현재 값 유지."""
+    stock_move_min: float | None = None
+    """순매수·순매도가 한없이 클 때의 폭 상한[0~0.3]. null이면 현재 값 유지."""
     stock_min_price: int
     virtual_liquidity: int
-    stock_noise_scale: float
-    """매수지분 잡음 세기 τ(0~2). 0이면 잡음 없이 당일 매수만으로 변동률을 정한다."""
-    stock_rate_jitter: float | None = None
-    """종목별 변동 배율 폭 w(0~0.5). 쏠림 변동률에 U(1 − w, 1 + w) 배율을 곱한다.
-    null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
+    """순매수 기준 L(원): z = N / (|N| + L)."""
     news_good_per_day: int | None = None
     """하루 무작위 호재 건수(0~4). 호재·악재는 서로 다른 종목에 붙고 합은 4 이하, 둘 다 0이면
     관리자 작성 뉴스만. null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
@@ -539,16 +540,35 @@ class QaStatus(Schema):
 
 
 class StockSettlement(Schema):
+    """종목별 정산 기록. 순매수 확률 모델 기록은 sell_amount~direction을, 그 전(쏠림 모델) 기록은
+    adjusted_amount~rate_factor를 채운다."""
+
     code: str
     buy_amount: int
-    adjusted_amount: int
+    sell_amount: int | None = None
+    """당일 체결 매도금액 S. 쏠림 모델 기록은 None(매도를 집계하지 않았다)."""
+    net_amount: int | None = None
+    """순매수 N = B − S."""
+    signal: float | None = None
+    """순매수 신호 z = N / (|N| + L)."""
+    p_up: float | None = None
+    """상승 확률 1/2 + δ·z."""
+    move_limit: float | None = None
+    """폭 상한 M_min + (M_max − M_min)·(1 − |z|)."""
+    u: float | None = None
+    """방향 난수. u < p_up이면 상승."""
+    x: float | None = None
+    """폭 난수. 변동률 크기 = 폭 상한 × x."""
+    direction: Literal["up", "down"] | None = None
+    # --- 쏠림 모델 기록 전용 ---
+    adjusted_amount: int | None = None
     noise_factor: float | None = None
     """매수지분 잡음 배수 exp(τ·(G − γ)). 잡음 없음(τ = 0)이거나 도입 전 기록이면 None."""
-    concentration: float | None
+    concentration: float | None = None
     rate_factor: float | None = None
     """종목별 변동 배율 k(클램프 전에 곱함). 배율 없음(w = 0)이거나 도입 전 기록이면 None."""
     rate: float
-    """쏠림 변동률(배율·클램프 뒤, 뉴스 제외)."""
+    """뉴스 전 변동률. 확률 모델은 ±폭 상한 × x, 쏠림 모델은 쏠림 변동률(배율·클램프 뒤)."""
     rate_noise: float | None = None
     """(10/6 정산 기록 전용) 당시 방식의 변동률 잡음 ε. 적용률에 (1 + ε)로 곱했다."""
     news_rate: float | None = None

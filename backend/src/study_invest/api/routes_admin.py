@@ -235,11 +235,16 @@ def update_params(body: schemas.Params, s: SessionDep, now: NowDep) -> schemas.P
     params_lock(s)
     values = body.model_dump()
     current = get_params(s)
-    if values["verified_only_trading"] is None:  # 파라미터 폼은 이 스위치를 보내지 않는다
-        values["verified_only_trading"] = current.verified_only_trading
-    if values["stock_rate_jitter"] is None:  # 이 값을 모르는 이전 화면이 저장해도 유지
-        values["stock_rate_jitter"] = current.stock_rate_jitter
-    for key in ("news_good_per_day", "news_bad_per_day"):  # 마찬가지
+    # 파라미터 폼은 verified_only_trading을 보내지 않고, 이전 화면은 주식 확률 모델 값과 하루
+    # 호재·악재 건수를 모른다. 빠진 값은 현재 값을 유지한다.
+    for key in (
+        "verified_only_trading",
+        "stock_p_shift",
+        "stock_move_max",
+        "stock_move_min",
+        "news_good_per_day",
+        "news_bad_per_day",
+    ):
         if values[key] is None:
             values[key] = getattr(current, key)
     try:

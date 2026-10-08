@@ -53,7 +53,68 @@ const ACTION_COPY: Record<Action, { title: string; button: string; description: 
   },
 };
 
-const STOCK_COLUMNS: Column<SettlementStock>[] = [
+const NEWS_COLUMNS: Column<SettlementStock>[] = [
+  {
+    key: 'news',
+    header: '뉴스',
+    numeric: true,
+    render: (s) => (s.news_rate == null ? '—' : <PriceChange rate={s.news_rate} />),
+  },
+  {
+    key: 'total',
+    header: '적용 변동률',
+    numeric: true,
+    render: (s) => <PriceChange rate={s.total_rate ?? s.rate} />,
+  },
+  { key: 'old', header: '이전가', numeric: true, hideOnMobile: true, render: (s) => <Money value={s.old_price} /> },
+  { key: 'new', header: '새 시작가', numeric: true, render: (s) => <Money value={s.new_price} /> },
+];
+
+/** 순매수 확률 모델: 순매수 신호 z로 상승 확률·폭 상한을 정하고 (u, X)로 뽑는다. */
+const PROBABILITY_COLUMNS: Column<SettlementStock>[] = [
+  { key: 'code', header: '종목', render: (s) => s.code },
+  { key: 'buy', header: '매수 B', numeric: true, hideOnMobile: true, render: (s) => <Money value={s.buy_amount} /> },
+  {
+    key: 'sell',
+    header: '매도 S',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => <Money value={s.sell_amount ?? 0} />,
+  },
+  { key: 'net', header: '순매수 N', numeric: true, render: (s) => <Money value={s.net_amount ?? 0} /> },
+  {
+    key: 'signal',
+    header: '신호 z',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => (s.signal == null ? '—' : formatNumber(s.signal, 3)),
+  },
+  {
+    key: 'p_up',
+    header: '상승 확률',
+    numeric: true,
+    render: (s) => (s.p_up == null ? '—' : `${formatNumber(s.p_up * 100, 1)}%`),
+  },
+  {
+    key: 'limit',
+    header: '폭 상한',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => (s.move_limit == null ? '—' : `±${formatNumber(s.move_limit * 100, 1)}%`),
+  },
+  {
+    key: 'draw',
+    header: '난수 u · X',
+    numeric: true,
+    hideOnMobile: true,
+    render: (s) => (s.u == null || s.x == null ? '—' : `${formatNumber(s.u, 3)} · ${formatNumber(s.x, 3)}`),
+  },
+  { key: 'rate', header: '확률 변동률', numeric: true, render: (s) => <PriceChange rate={s.rate} /> },
+  ...NEWS_COLUMNS,
+];
+
+/** 쏠림 모델(순매수 확률 모델 도입 전 정산 기록). */
+const CROWDING_COLUMNS: Column<SettlementStock>[] = [
   { key: 'code', header: '종목', render: (s) => s.code },
   { key: 'buy', header: '매수금액 B', numeric: true, render: (s) => <Money value={s.buy_amount} /> },
   {
@@ -61,7 +122,7 @@ const STOCK_COLUMNS: Column<SettlementStock>[] = [
     header: "유동성 반영 B'",
     numeric: true,
     hideOnMobile: true,
-    render: (s) => <Money value={s.adjusted_amount} />,
+    render: (s) => (s.adjusted_amount == null ? '—' : <Money value={s.adjusted_amount} />),
   },
   {
     key: 'noise',
@@ -94,20 +155,7 @@ const STOCK_COLUMNS: Column<SettlementStock>[] = [
         '—'
       ),
   },
-  {
-    key: 'news',
-    header: '뉴스',
-    numeric: true,
-    render: (s) => (s.news_rate == null ? '—' : <PriceChange rate={s.news_rate} />),
-  },
-  {
-    key: 'total',
-    header: '적용 변동률',
-    numeric: true,
-    render: (s) => <PriceChange rate={s.total_rate ?? s.rate} />,
-  },
-  { key: 'old', header: '이전가', numeric: true, hideOnMobile: true, render: (s) => <Money value={s.old_price} /> },
-  { key: 'new', header: '새 시작가', numeric: true, render: (s) => <Money value={s.new_price} /> },
+  ...NEWS_COLUMNS,
 ];
 
 function SettlementCard({ log }: { log: SettlementLog }) {
@@ -120,7 +168,7 @@ function SettlementCard({ log }: { log: SettlementLog }) {
         <Card padding="none" tone="sunken">
           <Table
             caption={`${log.round}회차 주식 정산`}
-            columns={STOCK_COLUMNS}
+            columns={log.stocks.some((s) => s.p_up != null) ? PROBABILITY_COLUMNS : CROWDING_COLUMNS}
             rows={log.stocks}
             rowKey={(s) => s.code}
             dense

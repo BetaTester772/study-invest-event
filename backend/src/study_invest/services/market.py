@@ -31,8 +31,7 @@ from ..money import PRICE_UNIT
 from ..params import KST, MARKET_CLOSE, MARKET_OPEN, PRICE_MAX
 from ..pricing import (
     draw_coin,
-    draw_stock_noise,
-    draw_stock_rate_factor,
+    draw_stock_randoms,
     is_calm_round,
     settle_stocks,
 )
@@ -133,13 +132,13 @@ def open_day(
 # --- 18:00 정산 ------------------------------------------------------------------
 
 
-def buy_amounts(s: Session, day: date) -> dict[str, int]:
-    """당일 종목별 체결 매수금액 Bᵢ (매도는 집계하지 않는다)."""
+def trade_amounts(s: Session, day: date, side: Side) -> dict[str, int]:
+    """당일 종목별 체결 금액. 매수면 Bᵢ, 매도면 Sᵢ."""
     rows = s.execute(
         select(Order.code, func.sum(Order.amount))
         .where(
             Order.trade_day == day,
-            Order.side == Side.BUY,
+            Order.side == side,
             Order.status == OrderStatus.FILLED,
         )
         .group_by(Order.code)
@@ -177,27 +176,26 @@ def settle_day(
 
     params = get_params(s)
     prices = prices_on(s, day)
-    amounts = buy_amounts(s, day)
-    # 난수는 코인(p, X) → 주식 잡음 순서로 뽑는다. 테스트의 StubRandom은 코인용 난수를 큐로 넣고
-    # 나머지는 0.5를 돌려주므로, 이 순서면 주식 잡음이 전 종목 같은 배수가 되어 상쇄된다.
-    coin = draw_coin(prices[COIN.code], params, rng, calm=is_calm_round(round_no, params))
     stock_codes = [i.code for i in STOCKS]
-    noise = draw_stock_noise(stock_codes, params, rng)
-    # 다음 운영일(effective)의 호재·악재는 코인·잡음 다음에 뽑고, 이 정산에서 바로 곱해
+    buys = {c: a for c, a in trade_amounts(s, day, Side.BUY).items() if c in stock_codes}
+    sells = {c: a for c, a in trade_amounts(s, day, Side.SELL).items() if c in stock_codes}
+    # 난수는 코인(p, X) → 주식 종목별 (u, X) → 뉴스 순서로 뽑는다. 테스트의 StubRandom은 앞쪽
+    # 난수를 큐로 넣고 나머지는 0.5를 돌려준다.
+    coin = draw_coin(prices[COIN.code], params, rng, calm=is_calm_round(round_no, params))
+    draws = draw_stock_randoms(stock_codes, rng)
+    # 다음 운영일(effective)의 호재·악재는 코인·주식 난수 다음에 뽑고, 이 정산에서 바로 곱해
     # effective 시작가에 반영한다. 참가자는 반영된 가격과 함께 09:00에 뉴스를 본다(03-pricing §3).
     # 반영일이 없는 마지막 날에는 만들지 않는다. 관리자가 미리 써 둔 뉴스가 있으면 그것을 쓴다.
     if calendar.round_of(effective) is not None:
         news.create_random_news(s, effective, now, params, rng)
     applied_news = news.news_on(s, effective)
-    # 종목별 변동 배율은 뉴스 뒤에 뽑는다(기존 코인·지분 잡음·뉴스 난수의 순서를 바꾸지 않는다).
-    rate_factor = draw_stock_rate_factor(stock_codes, params, rng)
     stock_moves = settle_stocks(
         {code: prices[code] for code in stock_codes},
-        {c: a for c, a in amounts.items() if c in stock_codes},
+        buys,
+        sells,
         params,
-        noise=noise,
+        draws,
         news=news.news_rates(applied_news),
-        rate_factor=rate_factor,
     )
 
     new_prices = {code: m.new_price for code, m in stock_moves.items()}
@@ -228,10 +226,14 @@ def settle_day(
         {
             "code": m.code,
             "buy_amount": m.buy_amount,
-            "adjusted_amount": m.adjusted_amount,
-            "noise_factor": m.noise_factor,
-            "concentration": None if m.concentration is None else float(m.concentration),
-            "rate_factor": m.rate_factor,
+            "sell_amount": m.sell_amount,
+            "net_amount": m.net_amount,
+            "signal": float(m.signal),
+            "p_up": float(m.p_up),
+            "move_limit": float(m.move_limit),
+            "u": m.u,
+            "x": m.x,
+            "direction": m.direction,
             "rate": float(m.rate),
             "news_rate": None if m.news_rate is None else float(m.news_rate),
             "total_rate": float(m.total_rate),

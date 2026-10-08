@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from study_invest.api.app import create_app
 from study_invest.config import Settings
 from study_invest.db import Base
+from study_invest.instruments import STOCKS
 from study_invest.models import ParamsRecord
 from study_invest.params import KST, EventParams
 
@@ -74,6 +75,16 @@ class StubRandom(random.Random):
 
     def random(self) -> float:
         return self.queue.pop(0) if self.queue else 0.5
+
+
+def stock_draws(**draws: tuple[float, float]) -> list[float]:
+    """정산의 주식 난수 (u, X)를 종목 순서대로 편다. 빠진 종목은 (0.5, 0) = 변동 없음.
+
+    코인 (p, X) 뒤, 뉴스 앞에 넣는다: rng.queue = [p, x, *stock_draws(SAMSU=(0.1, 1.0)), ...]
+    """
+    unknown = set(draws) - {i.code for i in STOCKS}
+    assert not unknown, unknown
+    return [v for i in STOCKS for v in draws.get(i.code, (0.5, 0.0))]
 
 
 @pytest.fixture
