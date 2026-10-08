@@ -176,12 +176,12 @@ def move_limit(signal: Fraction, params: EventParams) -> Fraction:
 
 
 def stock_rate(
-    draw: StockDraw, p_up: Fraction, limit: Fraction
+    draw: StockDraw, p_up: Fraction, limit: Fraction, exponent: float = 1
 ) -> tuple[Literal["up", "down"], Fraction]:
-    """u < p_up이면 상승(+limit × X), 아니면 하락(−limit × X)."""
+    """u < p_up이면 상승(+limit × X^e), 아니면 하락(−limit × X^e). e = exponent."""
     if not (0.0 <= draw.u < 1.0 and 0.0 <= draw.x <= 1.0):
         raise ValueError("u must be in [0, 1) and x in [0, 1]")
-    magnitude = limit * exact(draw.x)
+    magnitude = limit * exact(draw.x**exponent)
     return ("up", magnitude) if exact(draw.u) < p_up else ("down", -magnitude)
 
 
@@ -233,7 +233,7 @@ def settle_stocks(
         p_up = up_probability(signal, params)
         limit = move_limit(signal, params)
         draw = draws[code]
-        direction, rate = stock_rate(draw, p_up, limit)
+        direction, rate = stock_rate(draw, p_up, limit, params.stock_move_exp)
         news_rate = news.get(code) if news else None
         total_rate = combined_rate(rate, news_rate)
         moves[code] = StockMove(

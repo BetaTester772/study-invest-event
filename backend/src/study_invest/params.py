@@ -81,8 +81,12 @@ class EventParams:
     stock_p_shift: float = 0.30
     """상승 확률 폭 δ: 상승 확률 = 1/2 + δ·zᵢ, zᵢ = Nᵢ / (|Nᵢ| + L) (Nᵢ: 순매수). 0.3이면 0.2~0.8.
     0이면 매매와 무관하게 반반."""
-    stock_move_max: float = 0.20
-    """순매수가 0일 때의 폭 상한 M_max: 변동률 = ±폭 상한 × X, X ~ U(0, 1)."""
+    stock_move_max: float = 0.15
+    """순매수가 0일 때의 폭 상한 M_max: 변동률 = ±폭 상한 × X^e, X ~ U(0, 1). 시뮬레이션으로
+    0.2 → 0.15(2026-10-08): 매매가 적은 종목도 확률 변동만으로는 ±15%를 넘지 않는다."""
+    stock_move_exp: float = 2
+    """폭 지수 e: 변동률 = ±폭 상한 × X^e. 1이면 폭 상한 안에서 고르게, 2면 작은 변동이 잦고 큰
+    변동이 드물다(평균 크기 = 폭 상한 / (e + 1)). 코인의 coin_up_exp·coin_down_exp와 같은 방식."""
     stock_move_min: float = 0.05
     """순매수·순매도가 한없이 클 때의 폭 상한 M_min.
     폭 상한 = M_min + (M_max − M_min)·(1 − |zᵢ|)."""
@@ -130,6 +134,7 @@ class EventParams:
             "stock_p_shift": self.stock_p_shift,
             "stock_move_max": self.stock_move_max,
             "stock_move_min": self.stock_move_min,
+            "stock_move_exp": self.stock_move_exp,
             "news_rate_min": self.news_rate_min,
             "news_rate_max": self.news_rate_max,
             "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
@@ -175,6 +180,7 @@ class EventParams:
                 0 <= self.stock_move_min <= STOCK_DAILY_LIMIT,
                 f"stock_move_min must be in [0, {STOCK_DAILY_LIMIT:g}]",
             ),
+            (0 < self.stock_move_exp <= 100, "stock_move_exp must be in (0, 100]"),
             (
                 price_ok(self.stock_min_price),
                 f"stock_min_price must be a multiple of 10 in [10, {PRICE_MAX:,}]",

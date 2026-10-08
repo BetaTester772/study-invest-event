@@ -394,6 +394,8 @@ export interface Params {
   stock_move_max: number;
   /** 순매수·순매도가 한없이 클 때의 폭 상한 [0~0.3]. */
   stock_move_min: number;
+  /** 폭 지수 e (0~100]: 변동률 = ±폭 상한 × X^e. 2면 작은 변동이 잦고 큰 변동이 드물다. */
+  stock_move_exp: number;
   stock_min_price: number;
   /** 순매수 기준 L(원). */
   virtual_liquidity: number;

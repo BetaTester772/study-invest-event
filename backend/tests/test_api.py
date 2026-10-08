@@ -186,20 +186,20 @@ class TestSettlement:
         order(client, h, "SAMSU", "sell", 2)  # 150,000원 → 순매수 225,000원
         # 코인 상승일, X=1 → 1회차는 안정기라 +30%(평소면 +80%).
         # SAMSU u=0.51: 순매수가 있어 상승 확률이 0.5보다 조금 높으므로(≈0.521) 상승, X=1.
-        # 나머지는 (0.5, 0.5): 순매수 0 → 상승 확률 0.5 → 하락, 폭 상한 20% × 0.5 = -10%.
+        # 나머지는 (0.5, 0.5): 순매수 0 → 상승 확률 0.5 → 하락, 폭 상한 15% × 0.5² = -3.75%.
         rng.queue = [0.1, 1.0, *stock_draws(SAMSU=(0.51, 1.0), SKLOW=(0.5, 0.5))]
         result = settle_day(client, clock, D1)
         assert result["detail"]["round"] == 1
         new = result["detail"]["new_prices"]
-        # z = 225,000 / 3,225,000 = 3/43, 폭 상한 = 5% + 15% × 40/43 ≈ 18.95%
-        assert new["SAMSU"] == 89_220  # 75,000 × 1.18953… = 89,215.1 → 89,220
-        assert new["SKLOW"] == 153_000 and new["LB"] == 14_000 and new["BYUNG"] == 325_000
+        # z = 225,000 / 3,225,000 = 3/43, 폭 상한 = 5% + 10% × 40/43 ≈ 14.30%
+        assert new["SAMSU"] == 85_730  # 75,000 × 1.14302… = 85,726.7 → 85,730
+        assert new["SKLOW"] == 163_630 and new["LB"] == 14_000 and new["BYUNG"] == 325_000
         # 공시 전에는 D1 가격이 보인다
         assert prices(client)["SAMSU"] == 75_000
         open_day(client, clock, D2)
         p = client.get("/api/instruments").json()
         samsu = next(i for i in p if i["code"] == "SAMSU")
-        assert samsu["price"] == 89_220 and samsu["previous_price"] == 75_000
+        assert samsu["price"] == 85_730 and samsu["previous_price"] == 75_000
         assert samsu["change_rate"] > 0
         hist = client.get("/api/instruments/BYUNG/history").json()
         assert [x["price"] for x in hist] == [250_000, 325_000]
@@ -216,7 +216,7 @@ class TestSettlement:
         )
         assert row["signal"] == pytest.approx(3 / 43)
         assert row["p_up"] == pytest.approx(0.5 + 0.3 * 3 / 43)
-        assert row["move_limit"] == pytest.approx(0.05 + 0.15 * 40 / 43)
+        assert row["move_limit"] == pytest.approx(0.05 + 0.10 * 40 / 43)
         assert (row["u"], row["x"], row["direction"]) == (0.51, 1.0, "up")
         assert row["rate"] == row["move_limit"] and row["total_rate"] == row["rate"]
         assert row["concentration"] is None and row["noise_factor"] is None
@@ -244,14 +244,15 @@ class TestSettlement:
         params = client.get("/api/admin/params", headers=admin).json()
         assert (params["stock_p_shift"], params["stock_move_max"], params["stock_move_min"]) == (
             0.3,
-            0.2,
+            0.15,
             0.05,
         )
+        assert params["stock_move_exp"] == 2
         assert "stock_sensitivity" not in params and "stock_noise_scale" not in params
         r = client.put("/api/admin/params", json=dict(params, stock_p_shift=0), headers=admin)
         assert r.status_code == 200 and r.json()["stock_p_shift"] == 0
         # 이 값을 모르는 이전 화면이 보내지 않아도 저장된 값을 유지한다
-        new_keys = ("stock_p_shift", "stock_move_max", "stock_move_min")
+        new_keys = ("stock_p_shift", "stock_move_max", "stock_move_min", "stock_move_exp")
         legacy = {k: v for k, v in params.items() if k not in new_keys}
         legacy |= {"stock_sensitivity": 0.3, "stock_noise_scale": 0.1, "stock_rate_jitter": 0.1}
         r = client.put(
@@ -259,7 +260,12 @@ class TestSettlement:
         )
         assert r.status_code == 200 and r.json()["stock_p_shift"] == 0
         assert r.json()["daily_buy_limit_ratio"] == 0.6
-        for key, bad in (("stock_p_shift", 0.6), ("stock_move_max", 0), ("stock_move_min", 0.4)):
+        for key, bad in (
+            ("stock_p_shift", 0.6),
+            ("stock_move_max", 0),
+            ("stock_move_min", 0.4),
+            ("stock_move_exp", 0),
+        ):
             assert (
                 client.put(
                     "/api/admin/params", json=dict(params, **{key: bad}), headers=admin

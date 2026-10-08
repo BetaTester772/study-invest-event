@@ -242,6 +242,7 @@ def update_params(body: schemas.Params, s: SessionDep, now: NowDep) -> schemas.P
         "stock_p_shift",
         "stock_move_max",
         "stock_move_min",
+        "stock_move_exp",
         "news_good_per_day",
         "news_bad_per_day",
     ):

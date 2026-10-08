@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
@@ -41,6 +42,8 @@ from study_invest.pricing import (
 
 P = EventParams()
 P0 = replace(P, virtual_liquidity=0)
+PL = replace(P, stock_move_max=0.20, stock_move_exp=1)
+"""계산 예시용: 폭 상한 5%~20%, 선형 폭(X¹). 03-pricing §2.4 예시와 같다."""
 PRICES = {i.code: i.initial_price for i in STOCKS}
 MAN = 10_000
 L = P.virtual_liquidity  # 300만원
@@ -188,14 +191,14 @@ class TestStock:
         assert up_probability(Fraction(1, 2), replace(P, stock_p_shift=0)) == Fraction(1, 2)
 
     def test_move_limit_shrinks_with_net_flow(self) -> None:
-        assert move_limit(Fraction(0), P) == Fraction(1, 5)  # M_max 20%
-        assert move_limit(Fraction(1, 2), P) == Fraction(1, 8)  # 5% + 15% × 0.5
-        assert move_limit(Fraction(-1, 2), P) == Fraction(1, 8)  # 순매도도 같다
-        assert move_limit(Fraction(1), P) == Fraction(1, 20)  # M_min 5%
-        limits = [move_limit(flow_signal(n * MAN, L), P) for n in (0, 100, 500, 2000, 10_000)]
+        assert move_limit(Fraction(0), PL) == Fraction(1, 5)  # M_max 20%
+        assert move_limit(Fraction(1, 2), PL) == Fraction(1, 8)  # 5% + 15% × 0.5
+        assert move_limit(Fraction(-1, 2), PL) == Fraction(1, 8)  # 순매도도 같다
+        assert move_limit(Fraction(1), PL) == Fraction(1, 20)  # M_min 5%
+        limits = [move_limit(flow_signal(n * MAN, L), PL) for n in (0, 100, 500, 2000, 10_000)]
         assert limits == sorted(limits, reverse=True)
         # 최대·최소가 엇갈려 저장돼 있어도 정렬해 쓴다
-        swapped = replace(P, stock_move_max=0.05, stock_move_min=0.20)
+        swapped = replace(PL, stock_move_max=0.05, stock_move_min=0.20)
         assert move_limit(Fraction(1, 2), swapped) == Fraction(1, 8)
 
     def test_settlement_example(self) -> None:
@@ -204,7 +207,7 @@ class TestStock:
             PRICES,
             {"SAMSU": 600 * MAN, "LB": 100 * MAN},
             {"SAMSU": 300 * MAN, "LB": 400 * MAN},
-            P,
+            PL,
             same_draw(0.6, 1.0),
         )
         samsu, sklow, lb = moves["SAMSU"], moves["SKLOW"], moves["LB"]
@@ -231,10 +234,32 @@ class TestStock:
         assert lb.rate == Fraction(-1, 8) and lb.new_price == 12_250
 
     def test_magnitude_scales_with_x(self) -> None:
-        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.1, 0.5))
+        moves = settle_stocks(PRICES, {}, {}, PL, same_draw(0.1, 0.5))
         assert all(m.direction == "up" and m.rate == Fraction(1, 10) for m in moves.values())
-        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.9, 0.0))
+        moves = settle_stocks(PRICES, {}, {}, PL, same_draw(0.9, 0.0))
         assert all(m.rate == 0 and m.new_price == m.old_price for m in moves.values())
+
+    def test_magnitude_uses_exponent(self) -> None:
+        """기본 폭 지수 2: 변동률 = 폭 상한 × X². 순매수 0이면 폭 상한 15%라 X=0.5 → 3.75%."""
+        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.1, 0.5))
+        assert all(m.direction == "up" and m.rate == Fraction(3, 80) for m in moves.values())
+        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.9, 1.0))
+        assert all(m.rate == Fraction(-3, 20) for m in moves.values())  # X=1이면 지수와 무관
+        cubic = settle_stocks(PRICES, {}, {}, replace(PL, stock_move_exp=3), same_draw(0.1, 0.5))
+        assert all(m.rate == Fraction(1, 40) for m in cubic.values())  # 20% × 0.125
+
+    def test_default_magnitude_statistics(self) -> None:
+        """순매수 0, 기본값: |변동률| 평균 ≈ 15%/3 = 5%, 최대 15%, 10% 초과 ≈ 1 − √(2/3) ≈ 18.4%."""
+        rng = random.Random(7)
+        mags = [
+            abs(float(m.rate))
+            for _ in range(5_000)
+            for m in settle_stocks(PRICES, {}, {}, P, draw_stock_randoms(PRICES, rng)).values()
+        ]
+        n = len(mags)
+        assert sum(mags) / n == pytest.approx(0.05, abs=0.002)
+        assert max(mags) <= 0.15
+        assert sum(x > 0.10 for x in mags) / n == pytest.approx(1 - math.sqrt(2 / 3), abs=0.01)
 
     def test_up_ratio_follows_probability(self) -> None:
         """순매수 L이면 상승 비율 ≈ 0.65, 순매도 L이면 ≈ 0.35. 크기는 ≤ 12.5%."""
@@ -279,8 +304,9 @@ class TestStock:
                 settle_stocks(PRICES, {}, {}, P, dict.fromkeys(PRICES, bad))
 
     def test_params_defaults_and_range(self) -> None:
-        assert (P.stock_p_shift, P.stock_move_max, P.stock_move_min) == (0.30, 0.20, 0.05)
-        EventParams(stock_p_shift=0, stock_move_min=0)
+        assert (P.stock_p_shift, P.stock_move_max, P.stock_move_min) == (0.30, 0.15, 0.05)
+        assert P.stock_move_exp == 2
+        EventParams(stock_p_shift=0, stock_move_min=0, stock_move_exp=0.5)
         EventParams(stock_p_shift=STOCK_P_SHIFT_MAX, stock_move_max=STOCK_DAILY_LIMIT)
         bad_values: list[tuple[str, float]] = [
             ("stock_p_shift", -0.01),
@@ -290,6 +316,9 @@ class TestStock:
             ("stock_move_min", -0.01),
             ("stock_move_min", STOCK_DAILY_LIMIT + 0.01),
             ("stock_move_min", float("nan")),
+            ("stock_move_exp", 0),
+            ("stock_move_exp", 100.5),
+            ("stock_move_exp", float("nan")),
         ]
         for field, bad in bad_values:
             with pytest.raises(ValueError):
@@ -317,7 +346,7 @@ class TestNews:
     def test_news_multiplies_after_rate(self) -> None:
         """전 종목 -20%(u=0.99, X=1)인데 SAMSU는 호재 +15%가 곱해져 -8%가 된다."""
         news = {"SAMSU": Fraction(15, 100)}
-        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.99, 1.0), news=news)
+        moves = settle_stocks(PRICES, {}, {}, PL, same_draw(0.99, 1.0), news=news)
         samsu = moves["SAMSU"]
         assert samsu.rate == Fraction(-1, 5)
         assert samsu.news_rate == Fraction(15, 100)
@@ -330,7 +359,7 @@ class TestNews:
     def test_bad_news_can_exceed_daily_limit(self) -> None:
         """뉴스는 ±30%에 묶이지 않는다: 악재 -20% × 확률 변동 -20% → -36%."""
         news = {"SAMSU": Fraction(-1, 5)}
-        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.99, 1.0), news=news)
+        moves = settle_stocks(PRICES, {}, {}, PL, same_draw(0.99, 1.0), news=news)
         assert moves["SAMSU"].total_rate == Fraction(-36, 100)
         assert moves["SAMSU"].new_price == 48_000
 

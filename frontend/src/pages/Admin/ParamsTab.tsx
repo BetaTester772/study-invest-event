@@ -62,7 +62,7 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   {
     key: 'stock_move_max',
     label: '최대 변동폭',
-    hint: '소수, 최대 0.3. 순매수가 0일 때 변동률 = ±이 값 × U(0, 1). 기본 0.2',
+    hint: '소수, 최대 0.3. 순매수가 0일 때 변동률 = ±이 값 × X^지수. 기본 0.15',
     kind: 'float',
     group: 'stock',
   },
@@ -70,6 +70,13 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
     key: 'stock_move_min',
     label: '최소 변동폭',
     hint: '소수, 최대 0.3. 순매수·순매도가 한없이 커질 때 다가가는 변동폭. 기본 0.05',
+    kind: 'float',
+    group: 'stock',
+  },
+  {
+    key: 'stock_move_exp',
+    label: '변동폭 지수',
+    hint: '변동률 = ±폭 상한 × X^지수, X ~ U(0, 1). 1이면 폭 안에서 고르게, 2면 작은 변동이 잦고 큰 변동이 드묾. 기본 2',
     kind: 'float',
     group: 'stock',
   },
