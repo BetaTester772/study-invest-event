@@ -388,13 +388,15 @@ export interface Params {
   coin_calm_rounds: number;
   coin_calm_cap: number;
   coin_calm_floor: number;
-  stock_sensitivity: number;
+  /** 상승 확률 폭 δ (0~0.5): 상승 확률 = 1/2 + δ·z, z = 순매수 / (|순매수| + L). */
+  stock_p_shift: number;
+  /** 순매수 0일 때의 폭 상한 (0~0.3]. 변동률 = ±폭 상한 × X. */
+  stock_move_max: number;
+  /** 순매수·순매도가 한없이 클 때의 폭 상한 [0~0.3]. */
+  stock_move_min: number;
   stock_min_price: number;
+  /** 순매수 기준 L(원). */
   virtual_liquidity: number;
-  /** 매수지분 잡음 세기 τ (0~2). 0이면 잡음 없음. */
-  stock_noise_scale: number;
-  /** 종목별 변동 배율 폭 w (0~0.5). 쏠림 변동률에 U(1−w, 1+w) 배율을 곱한다. 0이면 없음. */
-  stock_rate_jitter: number;
   /** 정산 때 다음 운영일 무작위 뉴스가 생길 확률(0~1). */
   news_probability: number;
   /** 무작위 뉴스 효과 크기 범위(0~1]. */
@@ -414,13 +416,24 @@ export interface TradingAccess {
 export interface SettlementStock {
   code: string;
   buy_amount: number;
-  adjusted_amount: number;
+  /** Net-buy probability model fields; null on logs from the older crowding model. */
+  sell_amount: number | null;
+  net_amount: number | null;
+  /** Net-buy signal z = N / (|N| + L). */
+  signal: number | null;
+  p_up: number | null;
+  move_limit: number | null;
+  u: number | null;
+  x: number | null;
+  direction: 'up' | 'down' | null;
+  /** Crowding model fields; null on net-buy probability model logs. */
+  adjusted_amount: number | null;
   /** Gumbel noise multiplier on the buy share; null when noise is off or for older logs. */
   noise_factor: number | null;
   concentration: number | null;
   /** Per-stock rate multiplier k (applied before the clamp); null when off or for older logs. */
   rate_factor?: number | null;
-  /** Crowding rate after the multiplier and the ±30% clamp, before news. */
+  /** Rate before news: ±move_limit × x (probability model) or the crowding rate (older logs). */
   rate: number;
   /** Rate noise ε from the 10/6 settlement only (earlier scheme, multiplied as 1 + ε). */
   rate_noise?: number | null;

@@ -6,7 +6,6 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from datetime import date, time, timedelta, timezone
-from fractions import Fraction
 
 from .money import PRICE_UNIT
 
@@ -40,15 +39,13 @@ COIN_CAP_MAX = 10.0
 """코인 일일 상승 상한 파라미터의 최대값(+1000%)."""
 CALM_ROUNDS_MAX = 100
 """코인 초반 안정기 회차 수 파라미터의 최대값."""
-STOCK_NOISE_MAX = 2.0
-"""주식 매수지분 잡음 세기 τ 파라미터의 최대값."""
-STOCK_RATE_JITTER_MAX = 0.50
-"""주식 종목별 변동 배율 폭 w 파라미터의 최대값(배율 0.5~1.5배)."""
+STOCK_P_SHIFT_MAX = 0.50
+"""주식 상승 확률 폭 δ 파라미터의 최대값(상승 확률 0~1)."""
 NEWS_RATE_MAX = 1.0
 """호재·악재 효과 크기의 최대값(±100%)."""
 
-STOCK_DAILY_LIMIT = Fraction(3, 10)
-"""주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 감도 계수와 별개로 고정."""
+STOCK_DAILY_LIMIT = 0.30
+"""주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 폭 상한 파라미터(stock_move_*)의 최대값이다."""
 
 
 # --- 관리자 조정 파라미터 (02-parameters §2, F-11) -------------------------------
@@ -79,19 +76,19 @@ class EventParams:
     """안정기 하락일 최대 변동률(-10%)."""
 
     # 주식 (03-pricing §2, 06-abuse-risk §1)
-    stock_sensitivity: float = 0.30
-    """감도 계수: 변동률 = 계수 × (1 − rᵢ), ±30% 클램프."""
+    stock_p_shift: float = 0.30
+    """상승 확률 폭 δ: 상승 확률 = 1/2 + δ·zᵢ, zᵢ = Nᵢ / (|Nᵢ| + L) (Nᵢ: 순매수). 0.3이면 0.2~0.8.
+    0이면 매매와 무관하게 반반."""
+    stock_move_max: float = 0.20
+    """순매수가 0일 때의 폭 상한 M_max: 변동률 = ±폭 상한 × X, X ~ U(0, 1)."""
+    stock_move_min: float = 0.05
+    """순매수·순매도가 한없이 클 때의 폭 상한 M_min.
+    폭 상한 = M_min + (M_max − M_min)·(1 − |zᵢ|)."""
     stock_min_price: int = 1_000
     """주식 최저가 하한(원)."""
     virtual_liquidity: int = 5_000_000
-    """종목별 가상 유동성 L(원). Bᵢ′ = Bᵢ + L."""
-    stock_noise_scale: float = 0.10
-    """매수지분 잡음 세기 τ: Bᵢ″ = Bᵢ′ × exp(τ·(Gᵢ − γ)), Gᵢ ~ Gumbel(0, 1). 0이면 잡음 없음
-    (변동률이 당일 매수만으로 결정된다). 0.1이면 매수가 전혀 없을 때 종목당 대략 ±5%(5~95%)."""
-    stock_rate_jitter: float = 0.10
-    """종목별 변동 배율 폭 w: 쏠림 변동률 = clamp(계수 × (1 − rᵢ) × kᵢ, ±30%), kᵢ ~ U(1 − w, 1 + w).
-    0.1이면 원래 움직임의 0.9~1.1배. 종목마다 따로 뽑으므로 4종목 변동률의 합이 0으로 고정되지
-    않는다. 0이면 배율 없음(kᵢ = 1)."""
+    """순매수 기준 L(원): zᵢ = Nᵢ / (|Nᵢ| + L). 순매수가 L이면 |zᵢ| = 0.5다.
+    클수록 매매의 영향이 작다(소수 참가 시 가격 왜곡 완화)."""
 
     # 호재·악재 (03-pricing §3)
     news_probability: float = 0.50
@@ -126,9 +123,9 @@ class EventParams:
             "coin_floor": self.coin_floor,
             "coin_calm_cap": self.coin_calm_cap,
             "coin_calm_floor": self.coin_calm_floor,
-            "stock_sensitivity": self.stock_sensitivity,
-            "stock_noise_scale": self.stock_noise_scale,
-            "stock_rate_jitter": self.stock_rate_jitter,
+            "stock_p_shift": self.stock_p_shift,
+            "stock_move_max": self.stock_move_max,
+            "stock_move_min": self.stock_move_min,
             "news_probability": self.news_probability,
             "news_rate_min": self.news_rate_min,
             "news_rate_max": self.news_rate_max,
@@ -162,14 +159,18 @@ class EventParams:
                 f"coin_calm_cap must be in (0, {COIN_CAP_MAX:g}]",
             ),
             (-1 < self.coin_calm_floor < 0, "coin_calm_floor must be in (-1, 0)"),
-            (0 < self.stock_sensitivity <= 10, "stock_sensitivity must be in (0, 10]"),
             (
-                0 <= self.stock_noise_scale <= STOCK_NOISE_MAX,
-                f"stock_noise_scale must be in [0, {STOCK_NOISE_MAX:g}]",
+                0 <= self.stock_p_shift <= STOCK_P_SHIFT_MAX,
+                f"stock_p_shift must be in [0, {STOCK_P_SHIFT_MAX:g}]",
+            ),
+            # 폭 상한 최대·최소는 따로 검사한다(엇갈려 저장돼도 배치가 멈추지 않게. 정렬해 쓴다).
+            (
+                0 < self.stock_move_max <= STOCK_DAILY_LIMIT,
+                f"stock_move_max must be in (0, {STOCK_DAILY_LIMIT:g}]",
             ),
             (
-                0 <= self.stock_rate_jitter <= STOCK_RATE_JITTER_MAX,
-                f"stock_rate_jitter must be in [0, {STOCK_RATE_JITTER_MAX:g}]",
+                0 <= self.stock_move_min <= STOCK_DAILY_LIMIT,
+                f"stock_move_min must be in [0, {STOCK_DAILY_LIMIT:g}]",
             ),
             (
                 price_ok(self.stock_min_price),

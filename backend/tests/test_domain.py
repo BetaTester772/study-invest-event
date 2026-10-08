@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import math
 import random
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from fractions import Fraction
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 
@@ -19,29 +18,36 @@ from study_invest.params import (
     INITIAL_CASH,
     KST,
     REWARD_CASH_MAX,
-    STOCK_NOISE_MAX,
-    STOCK_RATE_JITTER_MAX,
+    STOCK_DAILY_LIMIT,
+    STOCK_P_SHIFT_MAX,
     EventParams,
 )
 from study_invest.pricing import (
-    EULER_GAMMA,
+    StockDraw,
     coin_rate,
     combined_rate,
     draw_coin,
     draw_news,
-    draw_stock_noise,
-    draw_stock_rate_factor,
-    gumbel,
+    draw_stock_randoms,
+    flow_signal,
     is_calm_round,
+    move_limit,
     next_coin_price,
     next_stock_price,
     settle_stocks,
+    up_probability,
 )
 
 P = EventParams()
 P0 = replace(P, virtual_liquidity=0)
 PRICES = {i.code: i.initial_price for i in STOCKS}
 MAN = 10_000
+L = P.virtual_liquidity  # 500만원
+
+
+def same_draw(u: float, x: float) -> dict[str, StockDraw]:
+    """전 종목에 같은 (u, X)."""
+    return dict.fromkeys(PRICES, StockDraw(u, x))
 
 
 class TestMoney:
@@ -159,223 +165,134 @@ class TestCoinCalmPeriod:
 
 
 class TestStock:
-    def test_spec_example_table(self) -> None:
-        """03-pricing §2.4: L=0, 총매수 4,000만원."""
-        buys = {"SAMSU": 2000 * MAN, "SKLOW": 1200 * MAN, "MIRAE": 600 * MAN, "LB": 200 * MAN}
-        moves = settle_stocks(PRICES, buys, P0)
-        assert {c: m.concentration for c, m in moves.items()} == {
-            "SAMSU": 2,
-            "SKLOW": Fraction(6, 5),
-            "MIRAE": Fraction(3, 5),
-            "LB": Fraction(1, 5),
-        }
-        assert {c: m.rate for c, m in moves.items()} == {
-            "SAMSU": Fraction(-3, 10),
-            "SKLOW": Fraction(-6, 100),
-            "MIRAE": Fraction(12, 100),
-            "LB": Fraction(24, 100),
-        }
-        assert {c: m.new_price for c, m in moves.items()} == {
-            "SAMSU": 52_500,
-            "SKLOW": 159_800,
-            "MIRAE": 44_800,
-            "LB": 17_360,
-        }
+    """03-pricing §2: 순매수 신호 z로 상승 확률과 폭 상한을 정하고 (u, X)로 뽑는다."""
 
-    def test_clamped_at_minus_30(self) -> None:
-        moves = settle_stocks(PRICES, {"SAMSU": 100 * MAN}, P0)  # r = 4
-        assert moves["SAMSU"].rate == Fraction(-3, 10)
-        assert moves["SKLOW"].rate == Fraction(3, 10)  # r = 0 → +30%
+    def test_flow_signal(self) -> None:
+        assert flow_signal(0, L) == 0
+        assert flow_signal(L, L) == Fraction(1, 2)
+        assert flow_signal(-L, L) == Fraction(-1, 2)
+        assert flow_signal(3 * L, L) == Fraction(3, 4)
+        # L = 0이면 순매수 부호, 순매수도 0이면 0
+        assert (flow_signal(10, 0), flow_signal(-10, 0), flow_signal(0, 0)) == (
+            Fraction(1),
+            Fraction(-1),
+            Fraction(0),
+        )
 
-    def test_no_buys_without_liquidity(self) -> None:
-        moves = settle_stocks(PRICES, {}, P0)
-        assert all(m.rate == 0 and m.concentration is None for m in moves.values())
-        assert {c: m.new_price for c, m in moves.items()} == PRICES
+    def test_up_probability_rises_with_net_buy(self) -> None:
+        assert up_probability(Fraction(0), P) == Fraction(1, 2)
+        assert up_probability(Fraction(1, 2), P) == Fraction(13, 20)  # 0.5 + 0.3 × 0.5
+        assert up_probability(Fraction(-1, 2), P) == Fraction(7, 20)
+        assert up_probability(Fraction(1), P) == Fraction(4, 5)  # 한계 0.2~0.8
+        assert up_probability(Fraction(1, 2), replace(P, stock_p_shift=0)) == Fraction(1, 2)
 
-    def test_virtual_liquidity_dampens(self) -> None:
-        buys = {"SAMSU": 2000 * MAN, "SKLOW": 1200 * MAN, "MIRAE": 600 * MAN, "LB": 200 * MAN}
-        with_l = settle_stocks(PRICES, buys, P)  # L = 500만원
-        # B′ = 2500/1700/1100/700만, 총 6000만 → r_SAMSU = 10/6
-        assert with_l["SAMSU"].concentration == Fraction(10, 6)
-        assert with_l["SAMSU"].rate == Fraction(-1, 5)
-        assert settle_stocks(PRICES, {}, P)["LB"].rate == 0  # 전원 L → r=1
+    def test_move_limit_shrinks_with_net_flow(self) -> None:
+        assert move_limit(Fraction(0), P) == Fraction(1, 5)  # M_max 20%
+        assert move_limit(Fraction(1, 2), P) == Fraction(1, 8)  # 5% + 15% × 0.5
+        assert move_limit(Fraction(-1, 2), P) == Fraction(1, 8)  # 순매도도 같다
+        assert move_limit(Fraction(1), P) == Fraction(1, 20)  # M_min 5%
+        limits = [move_limit(flow_signal(n * MAN, L), P) for n in (0, 100, 500, 2000, 10_000)]
+        assert limits == sorted(limits, reverse=True)
+        # 최대·최소가 엇갈려 저장돼 있어도 정렬해 쓴다
+        swapped = replace(P, stock_move_max=0.05, stock_move_min=0.20)
+        assert move_limit(Fraction(1, 2), swapped) == Fraction(1, 8)
 
-    def test_sensitivity_above_limit_is_clamped(self) -> None:
-        moves = settle_stocks(PRICES, {"SAMSU": 100}, replace(P0, stock_sensitivity=0.9))
-        assert moves["SKLOW"].rate == Fraction(3, 10)
+    def test_settlement_example(self) -> None:
+        """L=500만. SAMSU 순매수 500만(z=0.5), LB 순매도 500만(z=−0.5), 나머지 0. u=0.6, X=1."""
+        moves = settle_stocks(
+            PRICES,
+            {"SAMSU": 800 * MAN, "LB": 100 * MAN},
+            {"SAMSU": 300 * MAN, "LB": 600 * MAN},
+            P,
+            same_draw(0.6, 1.0),
+        )
+        samsu, sklow, lb = moves["SAMSU"], moves["SKLOW"], moves["LB"]
+        assert (samsu.buy_amount, samsu.sell_amount, samsu.net_amount) == (
+            800 * MAN,
+            300 * MAN,
+            500 * MAN,
+        )
+        assert (samsu.signal, samsu.p_up, samsu.u, samsu.x) == (
+            Fraction(1, 2),
+            Fraction(13, 20),
+            0.6,
+            1.0,
+        )
+        assert (samsu.direction, samsu.rate) == ("up", Fraction(1, 8))  # 0.6 < 0.65
+        assert samsu.new_price == 84_380  # 75,000 × 1.125 = 84,375 → 10원 사사오입
+        assert (sklow.p_up, sklow.direction, sklow.rate) == (
+            Fraction(1, 2),
+            "down",
+            Fraction(-1, 5),
+        )
+        assert sklow.new_price == 136_000
+        assert (lb.net_amount, lb.p_up, lb.direction) == (-500 * MAN, Fraction(7, 20), "down")
+        assert lb.rate == Fraction(-1, 8) and lb.new_price == 12_250
+
+    def test_magnitude_scales_with_x(self) -> None:
+        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.1, 0.5))
+        assert all(m.direction == "up" and m.rate == Fraction(1, 10) for m in moves.values())
+        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.9, 0.0))
+        assert all(m.rate == 0 and m.new_price == m.old_price for m in moves.values())
+
+    def test_up_ratio_follows_probability(self) -> None:
+        """순매수 500만이면 상승 비율 ≈ 0.65, 순매도 500만이면 ≈ 0.35. 크기는 ≤ 12.5%."""
+        rng = random.Random(2026)
+        ups = {"SAMSU": 0, "LB": 0}
+        n = 20_000
+        for _ in range(n):
+            moves = settle_stocks(
+                PRICES,
+                {"SAMSU": 500 * MAN},
+                {"LB": 500 * MAN},
+                P,
+                draw_stock_randoms(PRICES, rng),
+            )
+            for code in ups:
+                ups[code] += moves[code].direction == "up"
+                assert abs(moves[code].rate) <= Fraction(1, 8)
+        assert ups["SAMSU"] / n == pytest.approx(0.65, abs=0.015)
+        assert ups["LB"] / n == pytest.approx(0.35, abs=0.015)
+
+    def test_draw_order(self) -> None:
+        """종목 순서대로 (u, X)를 쓴다."""
+        draws = draw_stock_randoms(["A", "B"], Seq([0.1, 0.2, 0.3, 0.4]))
+        assert draws == {"A": StockDraw(0.1, 0.2), "B": StockDraw(0.3, 0.4)}
 
     def test_min_price_floor(self) -> None:
         assert next_stock_price(1_200, Fraction(-3, 10), 1_000) == 1_000
         assert next_stock_price(14_000, Fraction(24, 100), 1_000) == 17_360
 
-    def test_unknown_stock_rejected(self) -> None:
-        with pytest.raises(ValueError):
-            settle_stocks(PRICES, {"BYUNG": 1}, P)
-
-
-class TestStockNoise:
-    """03-pricing §2.5: 매수지분에 Gumbel 잡음 배수 exp(τ·(G − γ))를 곱한다."""
-
-    buys: ClassVar[dict[str, int]] = {
-        "SAMSU": 2000 * MAN,
-        "SKLOW": 1200 * MAN,
-        "MIRAE": 600 * MAN,
-        "LB": 200 * MAN,
-    }
-
-    def test_default_scale_and_range(self) -> None:
-        assert P.stock_noise_scale == 0.10
-        EventParams(stock_noise_scale=0)
-        EventParams(stock_noise_scale=STOCK_NOISE_MAX)
-        for bad in (-0.1, STOCK_NOISE_MAX + 0.1, float("nan")):
-            with pytest.raises(ValueError):
-                EventParams(stock_noise_scale=bad)
-
-    def test_no_noise_when_scale_is_zero(self) -> None:
-        rng = random.Random(1)
-        assert draw_stock_noise(PRICES, replace(P, stock_noise_scale=0), rng) is None
-        moves = settle_stocks(PRICES, self.buys, P0, noise=None)
-        assert all(m.noise_factor is None for m in moves.values())
-        assert moves["SAMSU"].rate == Fraction(-3, 10)  # §2.4 표와 같다
-
-    def test_equal_factors_cancel(self) -> None:
-        """전 종목 같은 배수면 지분이 그대로다(테스트 StubRandom의 0.5 고정값이 이 경우)."""
-        plain = settle_stocks(PRICES, self.buys, P0)
-        same = settle_stocks(PRICES, self.buys, P0, noise=dict.fromkeys(PRICES, 0.9))
-        assert {c: m.rate for c, m in same.items()} == {c: m.rate for c, m in plain.items()}
-        assert [m.new_price for m in same.values()] == [m.new_price for m in plain.values()]
-        assert all(m.noise_factor == 0.9 for m in same.values())
-
-    def test_noise_moves_prices_without_orders(self) -> None:
-        """아무도 안 사도(전 종목 L만) 잡음이 있으면 가격이 움직이고, 변동률 합은 0이다."""
-        noise = {"SAMSU": 1.1, "SKLOW": 1.0, "MIRAE": 1.0, "LB": 1.0}
-        moves = settle_stocks(PRICES, {}, P, noise=noise)
-        assert moves["SAMSU"].concentration == Fraction(44, 41)
-        assert moves["SAMSU"].rate < 0 < moves["LB"].rate
-        assert sum(m.rate for m in moves.values()) == 0  # Σ(1 − rᵢ) = 0 이므로 클램프 전 합은 0
-        assert moves["SAMSU"].adjusted_amount == P.virtual_liquidity  # B′는 잡음 전 값
-
-    def test_noise_is_clamped_like_any_rate(self) -> None:
-        noise = {"SAMSU": 100.0, "SKLOW": 1.0, "MIRAE": 1.0, "LB": 1.0}
-        moves = settle_stocks(PRICES, {}, P, noise=noise)
-        assert moves["SAMSU"].concentration == Fraction(400, 103)  # 원 변동률 −86% → −30%
-        assert moves["SAMSU"].rate == Fraction(-3, 10)
-        assert 0 < moves["LB"].rate < Fraction(3, 10)  # rᵢ > 0이라 +30%에는 닿지 않는다
-
-    def test_noise_validation(self) -> None:
-        with pytest.raises(ValueError):
-            settle_stocks(PRICES, {}, P, noise={"SAMSU": 1.0})  # 종목 누락
-        for bad in (0.0, -1.0, float("inf"), float("nan")):
-            with pytest.raises(ValueError):
-                settle_stocks(PRICES, {}, P, noise=dict.fromkeys(PRICES, bad))
-
-    def test_gumbel_draw(self) -> None:
-        assert gumbel(Seq([0.0, 0.5])) == pytest.approx(0.36651292)  # U=0은 버린다
-        assert gumbel(Seq([math.exp(-1)])) == pytest.approx(0.0)  # 최빈값
-        # 균등난수 0.5 고정이면 모든 종목이 같은 배수 → 지분 불변
-        rng = StubHalf()
-        factors = draw_stock_noise(PRICES, P, rng)
-        assert factors is not None and len(set(factors.values())) == 1
-        assert factors["SAMSU"] == pytest.approx(math.exp(0.1 * (0.36651292 - EULER_GAMMA)))
-
-    def test_noise_statistics(self) -> None:
-        """ln 배수의 평균 ≈ 0, 표준편차 ≈ τ·π/√6 (Gumbel 분산 π²/6)."""
-        rng = random.Random(2026)
-        tau = 0.1
-        params = replace(P, stock_noise_scale=tau)
-        logs = [
-            math.log(f)
-            for _ in range(5_000)
-            for f in (draw_stock_noise(PRICES, params, rng) or {}).values()
-        ]
-        n = len(logs)
-        mean = sum(logs) / n
-        sd = math.sqrt(sum((v - mean) ** 2 for v in logs) / n)
-        assert abs(mean) < 0.005
-        assert sd == pytest.approx(tau * math.pi / math.sqrt(6), abs=0.01)
-
-
-class TestStockRateFactor:
-    """03-pricing §2.6: 종목별 변동 배율 kᵢ ~ U(1 − w, 1 + w)를 쏠림 변동률(클램프 전)에 곱한다."""
-
-    buys: ClassVar[dict[str, int]] = TestStockNoise.buys
-
-    class Fixed(random.Random):
-        def __init__(self, u: float) -> None:
-            super().__init__(0)
-            self.u = u
-
-        def random(self) -> float:
-            return self.u
-
-    def test_default_and_range(self) -> None:
-        assert P.stock_rate_jitter == 0.10
-        EventParams(stock_rate_jitter=0)
-        EventParams(stock_rate_jitter=STOCK_RATE_JITTER_MAX)
-        for bad in (-0.01, STOCK_RATE_JITTER_MAX + 0.01, float("nan")):
-            with pytest.raises(ValueError):
-                EventParams(stock_rate_jitter=bad)
-
-    def test_draw(self) -> None:
-        off = replace(P, stock_rate_jitter=0)
-        assert draw_stock_rate_factor(PRICES, off, random.Random(1)) is None
-        # 균등난수 0.5(테스트 StubRandom 기본값)면 k = 1 → 기존 정산 결과가 그대로다
-        assert draw_stock_rate_factor(PRICES, P, self.Fixed(0.5)) == dict.fromkeys(PRICES, 1.0)
-        assert draw_stock_rate_factor(PRICES, P, self.Fixed(0.0)) == dict.fromkeys(PRICES, 0.9)
-        high = draw_stock_rate_factor(PRICES, P, self.Fixed(1.0))
-        assert high is not None and all(k == pytest.approx(1.1) for k in high.values())
-
-    def test_range_in_practice(self) -> None:
-        rng = random.Random(2026)
-        ks = [
-            k for _ in range(5_000) for k in (draw_stock_rate_factor(PRICES, P, rng) or {}).values()
-        ]
-        assert min(ks) >= 0.9 and max(ks) <= 1.1
-        assert sum(ks) / len(ks) == pytest.approx(1.0, abs=0.002)
-
-    def test_scales_rate_before_clamp(self) -> None:
-        """§2.4: SKLOW -6% × 1.1 = -6.6%, MIRAE +12% × 0.9 = +10.8%.
-
-        SAMSU -30% × 1.1 = -33%는 ±30% 제한으로 다시 -30%.
-        """
-        k = {"SAMSU": 1.1, "SKLOW": 1.1, "MIRAE": 0.9, "LB": 1.0}
-        moves = settle_stocks(PRICES, self.buys, P0, rate_factor=k)
-        assert moves["SKLOW"].rate == Fraction(-66, 1000)
-        assert moves["MIRAE"].rate == Fraction(108, 1000)
-        assert moves["SAMSU"].rate == Fraction(-3, 10)  # ±30% 제한은 배율 뒤에도 지킨다
-        assert moves["LB"].rate == Fraction(24, 100)
-        assert moves["SKLOW"].rate_factor == 1.1
-        # 쏠림만으로는 합이 0이지만, 배율이 종목마다 달라 합이 0으로 고정되지 않는다
-        assert sum(m.rate for m in settle_stocks(PRICES, self.buys, P0).values()) == 0
-        assert sum(m.rate for m in moves.values()) != 0
-
-    def test_news_multiplies_after_scaled_rate(self) -> None:
-        k = dict.fromkeys(PRICES, 0.9)
-        moves = settle_stocks(PRICES, self.buys, P0, rate_factor=k, news={"MIRAE": Fraction(1, 10)})
-        mirae = moves["MIRAE"]
-        assert mirae.rate == Fraction(108, 1000)
-        assert mirae.total_rate == Fraction(1108, 1000) * Fraction(11, 10) - 1
-
-    def test_without_factor_matches_before(self) -> None:
-        plain = settle_stocks(PRICES, self.buys, P0)
-        ones = settle_stocks(PRICES, self.buys, P0, rate_factor=dict.fromkeys(PRICES, 1.0))
-        assert all(m.rate_factor is None for m in plain.values())
-        assert [m.new_price for m in ones.values()] == [m.new_price for m in plain.values()]
-
     def test_validation(self) -> None:
+        draws = same_draw(0.5, 0.5)
         with pytest.raises(ValueError):
-            settle_stocks(PRICES, {}, P, rate_factor={"SAMSU": 1.0})  # 종목 누락
-        for bad in (0.0, -1.0, float("nan"), float("inf")):
+            settle_stocks(PRICES, {"BYUNG": 1}, {}, P, draws)
+        with pytest.raises(ValueError):
+            settle_stocks(PRICES, {}, {"BYUNG": 1}, P, draws)
+        with pytest.raises(ValueError):
+            settle_stocks(PRICES, {"LB": -1}, {}, P, draws)
+        with pytest.raises(ValueError):
+            settle_stocks(PRICES, {}, {}, P, {"SAMSU": StockDraw(0.5, 0.5)})  # 종목 누락
+        for bad in (StockDraw(1.0, 0.5), StockDraw(0.5, 1.5), StockDraw(float("nan"), 0.5)):
             with pytest.raises(ValueError):
-                settle_stocks(PRICES, {}, P, rate_factor=dict.fromkeys(PRICES, bad))
+                settle_stocks(PRICES, {}, {}, P, dict.fromkeys(PRICES, bad))
 
-
-class StubHalf(random.Random):
-    def __init__(self) -> None:
-        super().__init__(0)
-
-    def random(self) -> float:
-        return 0.5
+    def test_params_defaults_and_range(self) -> None:
+        assert (P.stock_p_shift, P.stock_move_max, P.stock_move_min) == (0.30, 0.20, 0.05)
+        EventParams(stock_p_shift=0, stock_move_min=0)
+        EventParams(stock_p_shift=STOCK_P_SHIFT_MAX, stock_move_max=STOCK_DAILY_LIMIT)
+        bad_values: list[tuple[str, float]] = [
+            ("stock_p_shift", -0.01),
+            ("stock_p_shift", STOCK_P_SHIFT_MAX + 0.01),
+            ("stock_move_max", 0),
+            ("stock_move_max", STOCK_DAILY_LIMIT + 0.01),
+            ("stock_move_min", -0.01),
+            ("stock_move_min", STOCK_DAILY_LIMIT + 0.01),
+            ("stock_move_min", float("nan")),
+        ]
+        for field, bad in bad_values:
+            with pytest.raises(ValueError):
+                replace(P, **{field: bad})  # type: ignore[arg-type]
 
 
 class Seq(random.Random):
@@ -390,42 +307,38 @@ class Seq(random.Random):
 
 
 class TestNews:
-    """03-pricing §3: 호재·악재는 쏠림 변동률에 곱으로 얹힌다."""
-
-    buys: ClassVar[dict[str, int]] = {
-        "SAMSU": 2000 * MAN,
-        "SKLOW": 1200 * MAN,
-        "MIRAE": 600 * MAN,
-        "LB": 200 * MAN,
-    }
+    """03-pricing §3: 호재·악재는 확률 변동률에 곱으로 얹힌다."""
 
     def test_combined_rate(self) -> None:
         assert combined_rate(Fraction(1, 10), None) == Fraction(1, 10)
         assert combined_rate(Fraction(1, 10), Fraction(-1, 5)) == Fraction(-12, 100)
 
-    def test_news_multiplies_after_clamp(self) -> None:
-        """SAMSU는 쏠림으로 -30%(클램프)인데 호재 +15%가 그 위에 곱해져 -19.5%가 된다."""
-        moves = settle_stocks(PRICES, self.buys, P0, news={"SAMSU": Fraction(15, 100)})
+    def test_news_multiplies_after_rate(self) -> None:
+        """전 종목 -20%(u=0.99, X=1)인데 SAMSU는 호재 +15%가 곱해져 -8%가 된다."""
+        news = {"SAMSU": Fraction(15, 100)}
+        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.99, 1.0), news=news)
         samsu = moves["SAMSU"]
-        assert samsu.rate == Fraction(-3, 10)
+        assert samsu.rate == Fraction(-1, 5)
         assert samsu.news_rate == Fraction(15, 100)
-        assert samsu.total_rate == Fraction(-195, 1000)
-        assert samsu.new_price == 60_380  # 75,000 × 0.805 = 60,375 → 10원 사사오입
+        assert samsu.total_rate == Fraction(-8, 100)
+        assert samsu.new_price == 69_000
         lb = moves["LB"]
-        assert lb.news_rate is None and lb.total_rate == lb.rate == Fraction(24, 100)
-        assert lb.new_price == 17_360  # §2.4 표와 같다
+        assert lb.news_rate is None and lb.total_rate == lb.rate == Fraction(-1, 5)
+        assert lb.new_price == 11_200
 
     def test_bad_news_can_exceed_daily_limit(self) -> None:
-        """뉴스는 ±30% 클램프에 묶이지 않는다: 악재 -20% × 쏠림 -30% → -44%."""
-        moves = settle_stocks(PRICES, self.buys, P0, news={"SAMSU": Fraction(-1, 5)})
-        assert moves["SAMSU"].total_rate == Fraction(-44, 100)
-        assert moves["SAMSU"].new_price == 42_000
+        """뉴스는 ±30%에 묶이지 않는다: 악재 -20% × 확률 변동 -20% → -36%."""
+        news = {"SAMSU": Fraction(-1, 5)}
+        moves = settle_stocks(PRICES, {}, {}, P, same_draw(0.99, 1.0), news=news)
+        assert moves["SAMSU"].total_rate == Fraction(-36, 100)
+        assert moves["SAMSU"].new_price == 48_000
 
     def test_news_validation(self) -> None:
+        draws = same_draw(0.5, 0.5)
         with pytest.raises(ValueError):
-            settle_stocks(PRICES, {}, P, news={"BYUNG": Fraction(1, 10)})
+            settle_stocks(PRICES, {}, {}, P, draws, news={"BYUNG": Fraction(1, 10)})
         with pytest.raises(ValueError):
-            settle_stocks(PRICES, {}, P, news={"LB": Fraction(-1)})
+            settle_stocks(PRICES, {}, {}, P, draws, news={"LB": Fraction(-1)})
 
     def test_draw_news_sequence(self) -> None:
         """발생 여부 → 종목 → 호재·악재 → 크기 → 제목 순으로 균등난수를 쓴다."""
@@ -531,7 +444,7 @@ class TestParams:
             0.8,
             -0.4,
         )
-        assert P.stock_sensitivity == 0.30 and P.daily_buy_limit_ratio == 0.40
+        assert P.stock_p_shift == 0.30 and P.daily_buy_limit_ratio == 0.40
         assert (P.coin_calm_rounds, P.coin_calm_cap, P.coin_calm_floor) == (3, 0.30, -0.10)
 
     def test_reward_is_quarter_of_seed(self) -> None:
