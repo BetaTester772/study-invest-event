@@ -242,7 +242,7 @@ export function PriceHistoryChart({ history, name }: { history: PricePoint[]; na
 
       {on.size > 0 && (
         <Text as="p" size="xs" tone="muted">
-          참고용 지표입니다. 이 게임의 주식 가격은 참가자들의 매수 쏠림과 뉴스로 움직여서 실제 주식과 다르게 읽힐 수
+          참고용 지표입니다. 이 게임의 주식 가격은 참가자들의 순매수와 뉴스로 움직여서 실제 주식과 다르게 읽힐 수
           있어요.
         </Text>
       )}
