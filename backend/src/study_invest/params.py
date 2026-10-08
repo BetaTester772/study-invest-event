@@ -47,7 +47,7 @@ STOCK_RATE_JITTER_MAX = 0.50
 NEWS_RATE_MAX = 1.0
 """호재·악재 효과 크기의 최대값(±100%)."""
 NEWS_PER_DAY_MAX = 4
-"""하루 무작위 뉴스 건수 파라미터의 최대값. 운영일·종목당 뉴스가 1건이라 주식 종목 수(4)까지."""
+"""하루 무작위 뉴스 건수(호재+악재) 상한. 운영일·종목당 뉴스가 1건이라 주식 종목 수(4)까지."""
 
 STOCK_DAILY_LIMIT = Fraction(3, 10)
 """주식 일일 변동률 한계 ±30% (SPEC-STOCK-2). 감도 계수와 별개로 고정."""
@@ -96,13 +96,11 @@ class EventParams:
     않는다. 0이면 배율 없음(kᵢ = 1)."""
 
     # 호재·악재 (03-pricing §3)
-    news_probability: float = 0.50
-    """정산 때 다음 운영일(반영일이 있는 날)의 무작위 뉴스 '자리' 하나가 채워질 확률. 자리는 하루
-    `news_max_per_day`개이고 자리마다 따로 뽑는다. 0이면 무작위 뉴스 없음(관리자가 쓴 뉴스만).
-    호재·악재는 반반, 종목은 아직 뉴스가 없는 주식 중 균등."""
-    news_max_per_day: int = 3
-    """하루 무작위 뉴스 건수의 상한(1~4). 한 종목에는 하루 1건만 붙으므로 서로 다른 종목에
-    최대 이만큼 나온다. 기본 3·확률 0.5이면 하루 평균 1.5건이고 절반은 여러 건이 나온다."""
+    news_good_per_day: int = 1
+    """하루 무작위 호재 건수. 정산 때 다음 운영일(반영일이 있는 날) 몫으로 이만큼 뽑는다."""
+    news_bad_per_day: int = 1
+    """하루 무작위 악재 건수. 호재·악재는 서로 다른 종목(주식 4종목 중 균등)에 붙는다. 호재와 악재
+    건수가 모두 0이면 무작위 뉴스 없음(관리자가 쓴 뉴스만). 합은 4 이하."""
     news_rate_min: float = 0.10
     """무작위 뉴스 효과 크기의 하한(+10% / -10%)."""
     news_rate_max: float = 0.20
@@ -135,7 +133,6 @@ class EventParams:
             "stock_sensitivity": self.stock_sensitivity,
             "stock_noise_scale": self.stock_noise_scale,
             "stock_rate_jitter": self.stock_rate_jitter,
-            "news_probability": self.news_probability,
             "news_rate_min": self.news_rate_min,
             "news_rate_max": self.news_rate_max,
             "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
@@ -185,10 +182,17 @@ class EventParams:
                 0 <= self.virtual_liquidity <= AMOUNT_MAX,
                 f"virtual_liquidity must be in [0, {AMOUNT_MAX:,}]",
             ),
-            (0 <= self.news_probability <= 1, "news_probability must be in [0, 1]"),
             (
-                1 <= self.news_max_per_day <= NEWS_PER_DAY_MAX,
-                f"news_max_per_day must be in [1, {NEWS_PER_DAY_MAX}]",
+                0 <= self.news_good_per_day <= NEWS_PER_DAY_MAX,
+                f"news_good_per_day must be in [0, {NEWS_PER_DAY_MAX}]",
+            ),
+            (
+                0 <= self.news_bad_per_day <= NEWS_PER_DAY_MAX,
+                f"news_bad_per_day must be in [0, {NEWS_PER_DAY_MAX}]",
+            ),
+            (
+                self.news_good_per_day + self.news_bad_per_day <= NEWS_PER_DAY_MAX,
+                f"news_good_per_day + news_bad_per_day must be at most {NEWS_PER_DAY_MAX}",
             ),
             # 하한·상한은 따로 검사한다(엇갈려 저장돼도 배치가 멈추지 않게. 추출 때 정렬해 쓴다).
             (

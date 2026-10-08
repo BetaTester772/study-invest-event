@@ -116,22 +116,21 @@ class NewsDraw:
 
 
 def draw_news(codes: Sequence[str], params: EventParams, rng: random.Random) -> list[NewsDraw]:
-    """균등난수로 다음 운영일의 무작위 뉴스를 뽑는다. 하루 최대 news_max_per_day건, 종목은 다르다.
+    """균등난수로 다음 운영일의 무작위 뉴스를 뽑는다: 호재 news_good_per_day건, 이어서 악재
+    news_bad_per_day건. 종목은 서로 달라서 한 종목에 호재와 악재가 함께 붙지 않는다.
 
-    자리(최대 건수)마다 순서대로: 발생 여부(u ≥ news_probability면 그 자리는 비움) → 종목(아직
-    뉴스가 없는 종목 중 균등) → 호재·악재(반반) → 크기 U(min, max)를 0.01 단위로 → 제목.
-    뉴스가 없으면 빈 목록이다.
+    뉴스마다 순서대로: 종목(아직 뉴스가 없는 종목 중 균등) → 크기 U(min, max)를 0.01 단위로 → 제목.
+    종류는 건수로 정해지므로 난수를 쓰지 않는다. 건수가 0이거나 종목이 모자라면 그만큼만 뽑는다.
     """
     lo, hi = sorted((params.news_rate_min, params.news_rate_max))
+    kinds: list[Literal["good", "bad"]] = ["good"] * params.news_good_per_day
+    kinds += ["bad"] * params.news_bad_per_day
     remaining = list(codes)
     draws: list[NewsDraw] = []
-    for _ in range(params.news_max_per_day):
+    for kind in kinds:
         if not remaining:
             break
-        if rng.random() >= params.news_probability:
-            continue
         code = remaining.pop(min(int(rng.random() * len(remaining)), len(remaining) - 1))
-        kind: Literal["good", "bad"] = "good" if rng.random() < 0.5 else "bad"
         rate = min(hi, max(lo, round(lo + (hi - lo) * rng.random(), 2)))
         draws.append(NewsDraw(code, kind, rate, rng.random()))
     return draws

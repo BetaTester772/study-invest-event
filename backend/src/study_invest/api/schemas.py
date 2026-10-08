@@ -476,11 +476,11 @@ class Params(Schema):
     stock_rate_jitter: float | None = None
     """종목별 변동 배율 폭 w(0~0.5). 쏠림 변동률에 U(1 − w, 1 + w) 배율을 곱한다.
     null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
-    news_probability: float
-    """정산 때 다음 운영일의 무작위 뉴스 자리 하나가 채워질 확률(0~1). 0이면 관리자 작성 뉴스만."""
-    news_max_per_day: int | None = None
-    """하루 무작위 뉴스 건수 상한(1~4). 서로 다른 종목에 최대 이만큼 나온다.
-    null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
+    news_good_per_day: int | None = None
+    """하루 무작위 호재 건수(0~4). 호재·악재는 서로 다른 종목에 붙고 합은 4 이하, 둘 다 0이면
+    관리자 작성 뉴스만. null이면 현재 값 유지(이 값을 모르는 이전 화면 호환)."""
+    news_bad_per_day: int | None = None
+    """하루 무작위 악재 건수(0~4). null이면 현재 값 유지."""
     news_rate_min: float
     news_rate_max: float
     """무작위 뉴스 효과 크기 범위(0~1]."""

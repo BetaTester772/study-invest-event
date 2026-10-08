@@ -80,12 +80,12 @@ def all_news(s: Session) -> list[NewsItem]:
 def create_random_news(
     s: Session, day: date, now: datetime, params: EventParams, rng: random.Random
 ) -> list[NewsItem]:
-    """day 몫의 무작위 뉴스를 하루 최대 news_max_per_day건(서로 다른 종목) 만든다. 그날 뉴스가
-    이미 있으면(관리자 작성) 만들지 않는다.
+    """day 몫의 무작위 뉴스를 만든다: 호재 news_good_per_day건·악재 news_bad_per_day건, 서로 다른
+    종목에. 그날 뉴스가 이미 있으면(관리자 작성) 만들지 않는다.
 
     호출자(정산)가 코인·주식 잡음 난수를 뽑은 뒤에 부른다.
     """
-    if params.news_probability <= 0 or news_on(s, day):
+    if news_on(s, day):
         return []
     items: list[NewsItem] = []
     for draw in draw_news([i.code for i in STOCKS], params, rng):

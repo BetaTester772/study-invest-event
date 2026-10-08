@@ -12,6 +12,7 @@ from conftest import (
     Clock,
     StubRandom,
     email_code,
+    enable_random_news,
     open_day,
     order,
     register,
@@ -232,7 +233,9 @@ class TestSettlement:
         assert r.status_code == 200 and r.json()["stock_rate_jitter"] == 0.2
         # 이 값을 모르는 이전 화면이 보내지 않아도 저장된 값을 유지한다
         legacy = {k: v for k, v in params.items() if k != "stock_rate_jitter"}
-        r = client.put("/api/admin/params", json=dict(legacy, news_probability=0.6), headers=admin)
+        r = client.put(
+            "/api/admin/params", json=dict(legacy, daily_buy_limit_ratio=0.5), headers=admin
+        )
         assert r.status_code == 200 and r.json()["stock_rate_jitter"] == 0.2
         bad = client.put(
             "/api/admin/params", json=dict(params, stock_rate_jitter=0.6), headers=admin
@@ -245,22 +248,43 @@ class TestSettlement:
         logs = client.get("/api/admin/settlements", headers=admin).json()
         assert all(x["rate_factor"] is None for x in logs[0]["stocks"])
 
-    def test_news_max_per_day_param(self, client: TestClient, admin: dict[str, str]) -> None:
+    def test_news_per_day_params(self, client: TestClient, admin: dict[str, str]) -> None:
         params = client.get("/api/admin/params", headers=admin).json()
-        assert params["news_max_per_day"] == 3
-        r = client.put("/api/admin/params", json=dict(params, news_max_per_day=2), headers=admin)
-        assert r.status_code == 200 and r.json()["news_max_per_day"] == 2
+        assert "news_probability" not in params and "news_max_per_day" not in params
+        r = client.put(
+            "/api/admin/params",
+            json=dict(params, news_good_per_day=2, news_bad_per_day=1),
+            headers=admin,
+        )
+        assert r.status_code == 200, r.text
+        assert (r.json()["news_good_per_day"], r.json()["news_bad_per_day"]) == (2, 1)
         # 이 값을 모르는 이전 화면이 보내지 않거나 null로 보내도 저장된 값을 유지한다
-        legacy = {k: v for k, v in params.items() if k != "news_max_per_day"}
-        r = client.put("/api/admin/params", json=dict(legacy, news_probability=0.6), headers=admin)
-        assert r.status_code == 200 and r.json()["news_max_per_day"] == 2
-        r = client.put("/api/admin/params", json=dict(params, news_max_per_day=None), headers=admin)
-        assert r.status_code == 200 and r.json()["news_max_per_day"] == 2
-        for bad in (0, 5):
+        legacy = {k: v for k, v in params.items() if not k.startswith("news_") or "rate" in k}
+        legacy["news_probability"] = 0.6  # 없어진 항목을 보내도 무시한다
+        r = client.put(
+            "/api/admin/params", json=dict(legacy, daily_buy_limit_ratio=0.5), headers=admin
+        )
+        assert r.status_code == 200, r.text
+        assert (r.json()["news_good_per_day"], r.json()["news_bad_per_day"]) == (2, 1)
+        r = client.put(
+            "/api/admin/params",
+            json=dict(params, news_good_per_day=None, news_bad_per_day=None),
+            headers=admin,
+        )
+        assert r.status_code == 200
+        assert (r.json()["news_good_per_day"], r.json()["news_bad_per_day"]) == (2, 1)
+        # 범위: 각 0~4, 합은 4 이하(한 종목에는 하루 1건이라 주식 종목 수가 한계)
+        for good, bad in ((-1, 0), (0, 5), (3, 2), (5, 0)):
             r = client.put(
-                "/api/admin/params", json=dict(params, news_max_per_day=bad), headers=admin
+                "/api/admin/params",
+                json=dict(params, news_good_per_day=good, news_bad_per_day=bad),
+                headers=admin,
             )
-            assert r.status_code == 422, bad
+            assert r.status_code == 422, (good, bad)
+        ok = dict(params, news_good_per_day=2, news_bad_per_day=2)
+        assert client.put("/api/admin/params", json=ok, headers=admin).status_code == 200
+        ok = dict(params, news_good_per_day=0, news_bad_per_day=0)
+        assert client.put("/api/admin/params", json=ok, headers=admin).status_code == 200
 
     def test_coin_is_calm_for_first_three_rounds(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
@@ -364,10 +388,11 @@ class TestNews:
     def test_random_news_is_drawn_and_applied_in_the_previous_settlement(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
+        enable_random_news(client, good=1, bad=0)
         open_day(client, clock, D1)
         assert client.get("/api/news").json() == []
-        # 코인(p, X) → 주식 잡음 4개 → 뉴스(발생, 종목, 종류, 크기, 제목) 순서로 난수를 쓴다
-        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+        # 코인(p, X) → 주식 잡음 4개 → 뉴스(종목, 크기, 제목) 순서로 난수를 쓴다
+        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.3, 0.5, 0.0]
         result = settle_day(client, clock, D1)
         applied = result["detail"]["news"]
         assert [(n["day"], n["code"], n["kind"], n["rate"], n["source"]) for n in applied] == [
@@ -403,18 +428,18 @@ class TestNews:
         other = next(x for x in logs[0]["stocks"] if x["code"] == "SAMSU")
         assert other["news_rate"] is None and other["total_rate"] == 0
 
-    def test_several_random_news_in_one_day(
+    def test_a_good_and_a_bad_news_each_day_on_different_stocks(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
-        """하루 최대 3건이 서로 다른 종목에 생기고, 같은 정산에서 곱해져 09:00에 함께 발표된다."""
+        """기본값(호재 1·악재 1)이면 매일 호재 하나와 악재 하나가 서로 다른 종목에 붙는다."""
+        enable_random_news(client)  # good=1, bad=1 (= EventParams 기본값)
         open_day(client, clock, D1)
-        # 코인(p, X) → 주식 잡음 4개 → 뉴스 자리 3개 → (배율은 큐가 비어 0.5)
+        # 코인(p, X) → 주식 잡음 4개 → 호재(종목, 크기, 제목) → 악재(종목, 크기, 제목)
         rng.queue = (
             [0.9, 0.0]
             + [0.5] * 4
-            + [0.1, 0.0, 0.2, 0.5, 0.0]  # 1번 자리: SAMSU 호재 15%
-            + [0.1, 0.0, 0.9, 0.5, 0.0]  # 2번 자리: 남은 종목 중 첫째(SKLOW) 악재 15%
-            + [0.9]  # 3번 자리: 비움
+            + [0.0, 0.5, 0.0]  # 호재: 4종목 중 첫째(SAMSU), 15%
+            + [0.0, 0.5, 0.0]  # 악재: 남은 3종목 중 첫째(SKLOW), 15%
         )
         result = settle_day(client, clock, D1)
         applied = result["detail"]["news"]
@@ -441,41 +466,46 @@ class TestNews:
         rates = {x["code"]: x["news_rate"] for x in logs[0]["stocks"]}
         assert rates == {"SAMSU": 0.15, "SKLOW": -0.15, "MIRAE": None, "LB": None}
 
-    def test_news_max_per_day_caps_random_news(
+    def test_good_and_bad_never_share_a_stock_over_the_whole_event(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
-        params = client.get("/api/admin/params", headers=admin).json()
-        client.put(
-            "/api/admin/params",
-            json=dict(params, news_probability=1, news_max_per_day=4),
-            headers=admin,
-        )
+        """난수가 같은 종목을 가리켜도(0.0) 호재와 악재는 서로 다른 종목에 간다."""
+        enable_random_news(client)
+        for d in (D1, D2, D3):
+            open_day(client, clock, d)
+            rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.0, 0.5, 0.0, 0.0, 0.5, 0.0]
+            news = settle_day(client, clock, d)["detail"]["news"]
+            assert [n["kind"] for n in news] == ["good", "bad"]
+            assert news[0]["code"] != news[1]["code"]
+        per_day: dict[str, list[str]] = {}
+        for n in client.get("/api/admin/news", headers=admin).json():
+            per_day.setdefault(n["day"], []).append(n["code"])
+        assert len(per_day) == 3
+        assert all(len(codes) == 2 and len(set(codes)) == 2 for codes in per_day.values())
+
+    def test_news_counts_are_adjustable(
+        self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
+    ) -> None:
+        # 호재 2·악재 2: 4종목 모두에 하나씩(난수 0.5라도 겹치지 않는다)
+        enable_random_news(client, good=2, bad=2)
         open_day(client, clock, D1)
-        result = settle_day(client, clock, D1)  # 난수 0.5 → 확률 1이라 네 자리가 모두 찬다
-        assert sorted(n["code"] for n in result["detail"]["news"]) == [
-            "LB",
-            "MIRAE",
-            "SAMSU",
-            "SKLOW",
-        ]
+        news = settle_day(client, clock, D1)["detail"]["news"]
+        assert sorted(n["code"] for n in news) == ["LB", "MIRAE", "SAMSU", "SKLOW"]
+        assert [n["kind"] for n in news].count("good") == 2
+        # 호재만 1건
+        enable_random_news(client, good=1, bad=0)
         open_day(client, clock, D2)
-        client.put(
-            "/api/admin/params",
-            json=dict(params, news_probability=1, news_max_per_day=1),
-            headers=admin,
-        )
-        result = settle_day(client, clock, D2)
-        assert len(result["detail"]["news"]) == 1
+        news = settle_day(client, clock, D2)["detail"]["news"]
+        assert [n["kind"] for n in news] == ["good"]
+        # 둘 다 0이면 무작위 뉴스 없음
+        enable_random_news(client, good=0, bad=0)
+        open_day(client, clock, D3)
+        assert settle_day(client, clock, D3)["detail"]["news"] == []
 
     def test_admin_written_news_suppresses_random_news_that_day(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
-        params = client.get("/api/admin/params", headers=admin).json()
-        client.put(
-            "/api/admin/params",
-            json=dict(params, news_probability=1, news_max_per_day=4),
-            headers=admin,
-        )
+        enable_random_news(client)
         open_day(client, clock, D1)
         client.put(
             f"/api/admin/news/{D2}/LB",
@@ -488,6 +518,7 @@ class TestNews:
     def test_manual_news_overrides_random_and_locks_once_priced(
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
+        enable_random_news(client, good=1, bad=0)
         open_day(client, clock, D1)
         r = client.put(
             f"/api/admin/news/{D2}/LB",
@@ -501,8 +532,8 @@ class TestNews:
             "LB, 공장 화재",
         )
         assert (r.json()["subtitle"], r.json()["body"], r.json()["byline"]) == (None, None, None)
-        # 무작위 뉴스가 나올 난수여도 D2에 이미 뉴스가 있어 만들지 않고 관리자 뉴스를 곱한다
-        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+        # 무작위 뉴스를 켜 놨어도 D2에 이미 뉴스가 있어 만들지 않고 관리자 뉴스를 곱한다
+        rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.3, 0.5, 0.0]
         result = settle_day(client, clock, D1)
         assert [(n["code"], n["source"]) for n in result["detail"]["news"]] == [("LB", "manual")]
         assert result["detail"]["new_prices"]["LB"] == 11_200  # 14,000 × 0.8
@@ -538,11 +569,12 @@ class TestNews:
         self, client: TestClient, clock: Clock, rng: StubRandom, admin: dict[str, str]
     ) -> None:
         """같은 종목에 같은 pick 값이 와도 이미 나온 제목은 피한다."""
+        enable_random_news(client, good=1, bad=0)
         headlines = []
         for d in (D1, D2, D3):
             open_day(client, clock, d)
             # 매번 SKLOW 호재, pick=0
-            rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.1, 0.3, 0.2, 0.5, 0.0]
+            rng.queue = [0.9, 0.0] + [0.5] * 4 + [0.3, 0.5, 0.0]
             headlines.append(settle_day(client, clock, d)["detail"]["news"][0]["headline"])
         assert len(set(headlines)) == 3
         listed = client.get("/api/admin/news", headers=admin).json()

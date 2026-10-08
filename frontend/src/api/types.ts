@@ -395,10 +395,10 @@ export interface Params {
   stock_noise_scale: number;
   /** 종목별 변동 배율 폭 w (0~0.5). 쏠림 변동률에 U(1−w, 1+w) 배율을 곱한다. 0이면 없음. */
   stock_rate_jitter: number;
-  /** 정산 때 다음 운영일의 무작위 뉴스 자리 하나가 채워질 확률(0~1). */
-  news_probability: number;
-  /** 하루 무작위 뉴스 건수 상한(1~4). 서로 다른 종목에 최대 이만큼 나온다. */
-  news_max_per_day: number;
+  /** 하루 무작위 호재 건수(0~4). 호재·악재는 서로 다른 종목에 붙고 합은 4 이하, 둘 다 0이면 무작위 뉴스 없음. */
+  news_good_per_day: number;
+  /** 하루 무작위 악재 건수(0~4). */
+  news_bad_per_day: number;
   /** 무작위 뉴스 효과 크기 범위(0~1]. */
   news_rate_min: number;
   news_rate_max: number;

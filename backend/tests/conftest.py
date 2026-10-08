@@ -5,7 +5,8 @@ import os
 import random
 import re
 from collections.abc import Iterator
-from datetime import date, datetime, time
+from dataclasses import replace
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,8 @@ from fastapi.testclient import TestClient
 from study_invest.api.app import create_app
 from study_invest.config import Settings
 from study_invest.db import Base
-from study_invest.params import KST
+from study_invest.models import ParamsRecord
+from study_invest.params import KST, EventParams
 
 ADMIN_KEY = "test-admin-key"
 # 기본은 SQLite 메모리 DB. PostgreSQL로 돌리려면:
@@ -106,6 +108,12 @@ def client(
         Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
     with TestClient(app) as c:
+        # 기본값(호재 1·악재 1)이면 정산마다 뉴스가 생겨 가격 기대값이 틀어진다. 뉴스를 보는
+        # 테스트가 아니면 무작위 뉴스를 끈 채로 시작하고, 필요한 곳에서 `enable_random_news`로 켠다.
+        quiet = replace(EventParams(), news_good_per_day=0, news_bad_per_day=0)
+        with app.state.study_invest.session_factory() as s:
+            s.add(ParamsRecord(values=quiet.to_dict(), created_at=datetime.now(UTC)))
+            s.commit()
         yield c
     if TEST_DB_URL != "sqlite://":
         Base.metadata.drop_all(engine)
@@ -181,5 +189,21 @@ def settle_day(client: TestClient, clock: Clock, d: date) -> dict[str, Any]:
 def order(client: TestClient, h: dict[str, str], code: str, side: str, qty: int) -> dict[str, Any]:
     r = client.post("/api/me/orders", json={"code": code, "side": side, "quantity": qty}, headers=h)
     assert r.status_code == 201, r.text
+    body: dict[str, Any] = r.json()
+    return body
+
+
+def enable_random_news(
+    client: TestClient, good: int = 1, bad: int = 1, **overrides: Any
+) -> dict[str, Any]:
+    """하루 무작위 호재·악재 건수를 정한다(`client` 픽스처는 둘 다 0으로 시작한다)."""
+    headers = {"X-Admin-Key": ADMIN_KEY}
+    params = client.get("/api/admin/params", headers=headers).json()
+    r = client.put(
+        "/api/admin/params",
+        json=dict(params, news_good_per_day=good, news_bad_per_day=bad, **overrides),
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
     body: dict[str, Any] = r.json()
     return body

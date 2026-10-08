@@ -266,7 +266,7 @@ interface AdminCertification extends Certification {
 }
 // 범위: 가격 파라미터는 10원 단위로 10원~1,000,000,000원, reward_cash 0~100,000,000,
 // virtual_liquidity 0~10^15, coin_cap·coin_calm_cap (0, 10], coin_floor·coin_calm_floor (-1, 0),
-// coin_calm_rounds 0~100, stock_noise_scale 0~2, stock_rate_jitter 0~0.5, news_probability 0~1, news_max_per_day 1~4, news_rate_min·max (0, 1],
+// coin_calm_rounds 0~100, stock_noise_scale 0~2, stock_rate_jitter 0~0.5, news_good_per_day·news_bad_per_day 각 0~4(합 4 이하), news_rate_min·max (0, 1],
 // 실수 파라미터는 유한값만(NaN·Infinity는 422).
 interface Params {
   coin_p_up: number; coin_up_exp: number; coin_down_exp: number;
@@ -276,8 +276,8 @@ interface Params {
   stock_sensitivity: number; stock_min_price: number; virtual_liquidity: number;
   stock_noise_scale: number;             // 매수지분 Gumbel 잡음 세기 τ(기본 0.1, 0이면 잡음 없음)
   stock_rate_jitter?: number | null;     // 종목별 변동 배율 폭 w(기본 0.1 → 0.9~1.1배, 0이면 없음). PUT에서 생략·null이면 현재 값 유지
-  news_probability: number;              // 정산 때 다음 운영일 무작위 뉴스 '자리' 하나가 채워질 확률(기본 0.5)
-  news_max_per_day?: number | null;      // 하루 무작위 뉴스 건수 상한(기본 3, 1~4. 서로 다른 종목). PUT에서 생략·null이면 현재 값 유지
+  news_good_per_day?: number | null;     // 하루 무작위 호재 건수(기본 1, 0~4). 호재·악재는 서로 다른 종목, 합은 4 이하, 둘 다 0이면 무작위 뉴스 없음. PUT에서 생략·null이면 현재 값 유지
+  news_bad_per_day?: number | null;      // 하루 무작위 악재 건수(기본 1, 0~4). 위와 같음
   news_rate_min: number; news_rate_max: number;   // 무작위 뉴스 효과 범위(기본 0.1~0.2)
   daily_buy_limit_ratio: number;
   reward_cash: number;                   // 인증 1건당 지급 현금(기본 250,000원 = 시드의 1/4)
