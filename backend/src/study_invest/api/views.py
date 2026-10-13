@@ -132,8 +132,13 @@ def admin_notification(i: notifications.AdminItem) -> schemas.AdminNotification:
 def admin_notification_detail(
     i: notifications.AdminItem, readers: list[notifications.Reader]
 ) -> schemas.AdminNotificationDetail:
+    # 읽음 수·받는 사람 수는 함께 돌려주는 readers에서 센다. 따로 센 값(admin_list)을 쓰면 그 사이에
+    # 누가 읽거나 가입했을 때 '0 / 2'와 '1명 읽음'처럼 서로 어긋난 숫자가 보인다.
+    base = admin_notification(i).model_dump()
+    base["read_count"] = sum(1 for r in readers if r.read_at is not None)
+    base["recipients"] = len(readers)
     return schemas.AdminNotificationDetail(
-        **admin_notification(i).model_dump(),
+        **base,
         readers=[
             schemas.NotificationReader(
                 participant_id=r.participant_id, nickname=r.nickname, read_at=r.read_at

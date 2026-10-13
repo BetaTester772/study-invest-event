@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { adminApi, ApiError, type AdminNotificationDetail, type NotificationReader } from '../../api';
 import {
   Alert,
@@ -48,6 +48,9 @@ export function NotificationDetailModal({
   const [resetReads, setResetReads] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // 지금 열려 있는 알림. 저장 응답이 오기 전에 창을 닫거나 다른 알림을 열었으면 그 응답으로 화면을 덮지 않는다.
+  const currentId = useRef(id);
+  currentId.current = id;
 
   useEffect(() => {
     setDetail(null);
@@ -80,20 +83,23 @@ export function NotificationDetailModal({
       setSaveError('제목과 내용을 모두 적어 주세요.');
       return;
     }
+    const savingId = detail.id;
     setSaving(true);
     setSaveError(null);
     try {
-      const saved = await adminApi.updateNotification(detail.id, {
+      const saved = await adminApi.updateNotification(savingId, {
         title: title.trim(),
         body: body.trim(),
         reset_reads: resetReads,
       });
-      setDetail(saved);
-      setEditing(false);
       toast.success('알림을 고쳤습니다', resetReads ? '받는 사람 모두에게 다시 새 알림으로 보입니다.' : saved.title);
       onChanged();
+      if (currentId.current !== savingId) return;
+      setDetail(saved);
+      setEditing(false);
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : '알림을 고치지 못했습니다.');
+      if (currentId.current === savingId)
+        setSaveError(err instanceof ApiError ? err.message : '알림을 고치지 못했습니다.');
     } finally {
       setSaving(false);
     }

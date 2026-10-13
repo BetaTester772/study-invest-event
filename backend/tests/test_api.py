@@ -1220,6 +1220,9 @@ class TestNotifications:
             ("bob", False),
         ]
         assert d["readers"][0]["participant_id"] == alice_id
+        # 숫자는 함께 돌려준 받는 사람 목록과 늘 맞는다
+        assert d["recipients"] == len(d["readers"])
+        assert d["read_count"] == sum(1 for r in d["readers"] if r["read_at"])
 
         # 내용만 고치면 읽음은 그대로, 참가자에게 수정 시각이 보인다
         r = client.patch(

@@ -58,4 +58,26 @@ describe('NotificationDetailModal', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(await screen.findByText('마지막 수정')).toBeInTheDocument();
   });
+
+  it('ignores a save that finishes after another notification was opened', async () => {
+    const other: AdminNotificationDetail = { ...detail, id: 2, title: '다른 알림', body: '다른 내용', readers: [] };
+    vi.spyOn(adminApi, 'notification').mockImplementation(async (id) => (id === 1 ? detail : other));
+    let finish: (d: AdminNotificationDetail) => void = () => {};
+    vi.spyOn(adminApi, 'updateNotification').mockImplementation(
+      () => new Promise<AdminNotificationDetail>((resolve) => (finish = resolve)),
+    );
+    const view = (id: number) => (
+      <ToastProvider>
+        <NotificationDetailModal id={id} onClose={() => {}} onChanged={() => {}} />
+      </ToastProvider>
+    );
+    const { rerender } = render(view(1));
+    fireEvent.click(await screen.findByRole('button', { name: '수정' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    rerender(view(2));
+    expect(await screen.findByText('다른 내용')).toBeInTheDocument();
+    finish({ ...detail, title: '저장된 옛 알림' });
+    await waitFor(() => expect(screen.queryByText('저장된 옛 알림')).not.toBeInTheDocument());
+    expect(screen.getByText('다른 내용')).toBeInTheDocument();
+  });
 });
