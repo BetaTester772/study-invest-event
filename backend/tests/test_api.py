@@ -1201,3 +1201,8 @@ class TestNotifications:
         )
         assert blank.status_code == 422
         assert client.delete("/api/admin/notifications/9999", headers=admin).status_code == 404
+        alice = register(client, "alice")
+        too_many = client.post(
+            "/api/me/notifications/read", json={"ids": list(range(201))}, headers=alice
+        )
+        assert too_many.status_code == 422

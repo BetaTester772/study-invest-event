@@ -369,7 +369,9 @@ class NotificationRead(Base):
     __table_args__ = (UniqueConstraint("notification_id", "participant_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"), index=True)
+    notification_id: Mapped[int] = mapped_column(
+        ForeignKey("notifications.id", ondelete="CASCADE"), index=True
+    )
     participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id"), index=True)
     read_at: Mapped[datetime] = mapped_column(AwareDateTime())
 

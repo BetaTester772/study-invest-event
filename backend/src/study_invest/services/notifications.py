@@ -42,10 +42,12 @@ def mark_read(s: Session, participant_id: int, ids: Iterable[int] | None, now: d
     """알림을 읽음으로 표시한다. ids가 None이면 보이는 알림 전부. 이미 읽은 것은 건너뛴다.
 
     참가자 행을 잠가 같은 참가자의 동시 요청(두 번 누르기)이 같은 읽음 행을 두 번 넣지 않게 한다.
+    알림 행은 공유 잠금(FOR SHARE)으로 읽어, 진행 중인 삭제(remove의 FOR UPDATE)가 끝난 뒤에
+    판단하고 이 트랜잭션이 끝날 때까지 삭제가 끼어들지 못하게 한다.
     돌려주는 값은 새로 읽음 처리한 개수.
     """
     lock_participant(s, participant_id)
-    query = select(Notification.id).where(_visible_to(participant_id))
+    query = select(Notification.id).where(_visible_to(participant_id)).with_for_update(read=True)
     if ids is not None:
         wanted = set(ids)
         if not wanted:
@@ -96,7 +98,11 @@ def create(
 
 
 def remove(s: Session, notification_id: int, now: datetime) -> None:
-    item = s.get(Notification, notification_id)
+    # 배타 잠금: 진행 중인 읽음 처리(mark_read의 FOR SHARE)가 끝난 뒤 지우고, 그동안 새 읽음 행이
+    # 끼어들지 못하게 한다(읽음 행 FK 위반 → 500 방지).
+    item = s.scalars(
+        select(Notification).where(Notification.id == notification_id).with_for_update()
+    ).one_or_none()
     if item is None:
         raise DomainError("NOT_FOUND", "알림을 찾을 수 없습니다.", 404)
     s.execute(delete(NotificationRead).where(NotificationRead.notification_id == notification_id))

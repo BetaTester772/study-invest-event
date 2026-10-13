@@ -42,6 +42,29 @@ describe('NotificationsCard', () => {
     expect(onRead).not.toHaveBeenCalled();
   });
 
+  it('keeps an opened old notification in place after it becomes read', () => {
+    const read = (id: number) => ({
+      id,
+      title: `읽은 알림 ${id}`,
+      body: '본문',
+      created_at: '2026-10-12T10:00:00+09:00',
+      personal: false,
+      read_at: '2026-10-12T11:00:00+09:00',
+    });
+    const old = { ...read(1), title: '오래된 안 읽은 알림', read_at: null };
+    const before: NotificationInbox = { unread: 1, items: [read(7), read(6), read(5), read(4), read(3), read(2), old] };
+    const after: NotificationInbox = { unread: 0, items: [...before.items.slice(0, 6), { ...old, read_at: '2026-10-13T16:00:00+09:00' }] };
+    const { rerender } = render(<NotificationsCard inbox={before} onRead={() => {}} />);
+    const main = () => screen.getByRole('list', { name: '알림' });
+    expect(main()).toHaveTextContent('오래된 안 읽은 알림');
+    const details = screen.getByText('오래된 안 읽은 알림').closest('details') as HTMLDetailsElement;
+    details.open = true;
+    fireEvent(details, new Event('toggle'));
+    rerender(<NotificationsCard inbox={after} onRead={() => {}} />);
+    expect(main()).toHaveTextContent('오래된 안 읽은 알림');
+    expect(screen.getByText('오래된 안 읽은 알림').closest('details')).toHaveProperty('open', true);
+  });
+
   it('shows an empty state and no button when there is nothing', () => {
     render(<NotificationsCard inbox={{ unread: 0, items: [] }} onRead={() => {}} />);
     expect(screen.getByText('아직 받은 알림이 없습니다.')).toBeInTheDocument();

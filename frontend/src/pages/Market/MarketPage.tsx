@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { meApi, publicApi, useApi } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { InstrumentBoard } from '../../components/app/InstrumentBoard';
@@ -9,18 +10,29 @@ import { Card, Container, LinkButton, Skeleton, Stack, Text } from '../../compon
 import { formatDay } from '../../lib/format';
 
 export function MarketPage() {
-  const { status } = useAuth();
+  const { status, participant } = useAuth();
   const event = useApi(() => publicApi.event(), [], { refreshInterval: 60_000 });
   const instruments = useApi(() => publicApi.instruments(), [], { refreshInterval: 60_000 });
   const news = useApi(() => publicApi.news(), [], { refreshInterval: 60_000 });
   const certs = useApi(() => meApi.certifications(), [status], { enabled: status === 'authenticated' });
-  const notifications = useApi(() => meApi.notifications(), [status], {
+  const participantId = participant?.id ?? null;
+  // 참가자가 바뀌면(로그아웃 후 다른 계정) 알림을 새로 불러온다.
+  const notifications = useApi(() => meApi.notifications(), [status, participantId], {
     enabled: status === 'authenticated',
     refreshInterval: 60_000,
   });
+  const currentParticipant = useRef(participantId);
+  currentParticipant.current = participantId;
   const readNotifications = (ids?: number[]) => {
-    // 읽음 표시는 서버가 돌려준 최신 목록으로 바꾼다. 실패하면 다음 새로고침 때 다시 보인다.
-    meApi.readNotifications(ids).then(notifications.setData, () => undefined);
+    // 읽음 표시는 서버가 돌려준 최신 목록으로 바꾼다. 응답이 오기 전에 다른 계정으로 바뀌었으면
+    // 그 목록(이전 참가자의 알림)은 버린다. 실패하면 다음 새로고침 때 다시 보인다.
+    const requestedBy = participantId;
+    meApi.readNotifications(ids).then(
+      (inbox) => {
+        if (currentParticipant.current === requestedBy) notifications.setData(inbox);
+      },
+      () => undefined,
+    );
   };
 
   const stamped = certs.data?.filter((c) => c.status === 'approved').map((c) => c.target_date);

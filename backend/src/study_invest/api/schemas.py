@@ -666,9 +666,13 @@ class NotificationInbox(Schema):
     """최신부터."""
 
 
+READ_IDS_MAX = 200
+"""한 번에 읽음 처리할 수 있는 알림 id 수. 화면은 한 번에 1개(또는 생략 = 전부)만 보낸다."""
+
+
 class ReadNotificationsRequest(BaseModel):
-    ids: list[int] | None = None
-    """읽음으로 표시할 알림 id. 생략·null이면 보이는 알림 전부."""
+    ids: list[int] | None = Field(default=None, max_length=READ_IDS_MAX)
+    """읽음으로 표시할 알림 id(최대 200개). 생략·null이면 보이는 알림 전부."""
 
 
 class NotificationRequest(BaseModel):

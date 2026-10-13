@@ -29,6 +29,8 @@ from study_invest.models import (
     CertStatus,
     EmailVerification,
     Holding,
+    Notification,
+    NotificationRead,
     Order,
     OrderStatus,
     Participant,
@@ -38,7 +40,14 @@ from study_invest.models import (
 )
 from study_invest.normalize import parse_school_email
 from study_invest.params import KST, EventParams
-from study_invest.services import auth, certification, email_verification, market, trading
+from study_invest.services import (
+    auth,
+    certification,
+    email_verification,
+    market,
+    notifications,
+    trading,
+)
 from study_invest.services.common import (
     DomainError,
     get_params,
@@ -451,3 +460,39 @@ class TestRewardsShareTheParticipantLock:
             lb = s.get(Holding, (pid, "LB"))
             assert me is not None and me.cash == 1_000_000 - 14_000 + 250_000
             assert lb is not None and lb.quantity == 1
+
+
+class TestNotifications:
+    def test_delete_waits_for_inflight_read_and_does_not_500(
+        self, factory: sessionmaker[Session]
+    ) -> None:
+        """읽음 처리(알림 행 FOR SHARE) 중에 들어온 삭제(FOR UPDATE)는 읽음 트랜잭션이 끝난 뒤
+        진행되어, 읽음 행 FK 위반 없이 알림과 읽음 기록을 함께 지운다."""
+        pid = setup_participant(factory)
+        with factory() as s:
+            nid = notifications.create(s, "공지", "본문", None, at(D1, 10)).id
+            s.commit()
+        reading = threading.Event()
+        timeline: list[str] = []
+
+        def read() -> None:
+            with factory() as s:
+                notifications.mark_read(s, pid, [nid], at(D1, 11))
+                reading.set()
+                time_mod.sleep(0.5)
+                timeline.append("read-commit")
+                s.commit()
+
+        def remove() -> None:
+            reading.wait(5)
+            with factory() as s:
+                notifications.remove(s, nid, at(D1, 11))
+                s.commit()
+                timeline.append("delete-commit")
+
+        results = run_together(read, remove)
+        assert results == [None, None]
+        assert timeline == ["read-commit", "delete-commit"]
+        with factory() as s:
+            assert s.scalar(select(func.count()).select_from(Notification)) == 0
+            assert s.scalar(select(func.count()).select_from(NotificationRead)) == 0
