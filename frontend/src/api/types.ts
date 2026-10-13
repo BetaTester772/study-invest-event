@@ -560,6 +560,8 @@ export interface NotificationItem {
   created_at: string;
   /** 나에게만 온 알림이면 true, 전체 알림이면 false. */
   personal: boolean;
+  /** 관리자가 제목·내용을 고친 시각. 고친 적 없으면 null. */
+  updated_at?: string | null;
   /** 읽은 시각. 안 읽었으면 null. */
   read_at: string | null;
 }
@@ -582,10 +584,30 @@ export interface AdminNotification {
   title: string;
   body: string;
   created_at: string;
+  updated_at?: string | null;
   participant_id: number | null;
   /** 받는 참가자 닉네임. 전체 알림이면 null. */
   nickname: string | null;
   read_count: number;
   /** 받는 사람 수(전체 알림이면 지금 참가자 수). */
   recipients: number;
+}
+
+export interface NotificationReader {
+  participant_id: number;
+  nickname: string;
+  /** 읽은 시각. 안 읽었으면 null. */
+  read_at: string | null;
+}
+
+export interface AdminNotificationDetail extends AdminNotification {
+  /** 받는 사람 전원. 읽은 사람(읽은 순서) 다음에 안 읽은 사람(참가자 번호 순). */
+  readers: NotificationReader[];
+}
+
+export interface NotificationUpdate {
+  title?: string;
+  body?: string;
+  /** true면 읽음 기록을 지워 받는 사람 모두에게 다시 안 읽은 알림으로 보인다. */
+  reset_reads?: boolean;
 }

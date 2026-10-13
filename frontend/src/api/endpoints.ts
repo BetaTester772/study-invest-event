@@ -3,6 +3,7 @@ import type {
   AdminCertification,
   AdminNewsItem,
   AdminNotification,
+  AdminNotificationDetail,
   AdminParticipant,
   AdminPosition,
   AuditEntry,
@@ -20,6 +21,7 @@ import type {
   NewsItem,
   NotificationInbox,
   NotificationRequest,
+  NotificationUpdate,
   Order,
   OrderRequest,
   Params,
@@ -126,6 +128,9 @@ export const adminApi = {
   notifications: () => request<AdminNotification[]>('/admin/notifications', { auth: 'admin' }),
   createNotification: (body: NotificationRequest) =>
     request<AdminNotification>('/admin/notifications', { method: 'POST', auth: 'admin', body }),
+  notification: (id: number) => request<AdminNotificationDetail>(`/admin/notifications/${id}`, { auth: 'admin' }),
+  updateNotification: (id: number, body: NotificationUpdate) =>
+    request<AdminNotificationDetail>(`/admin/notifications/${id}`, { method: 'PATCH', auth: 'admin', body }),
   deleteNotification: (id: number) =>
     request<void>(`/admin/notifications/${id}`, { method: 'DELETE', auth: 'admin' }),
   overridePrice: (day: string, code: string, body: PriceOverrideRequest) =>

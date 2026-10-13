@@ -12,7 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from ..clock import OffsetClock
 from ..event_calendar import to_kst
@@ -491,11 +491,35 @@ def create_notification(
     item = notifications.create(s, body.title, body.body, body.participant_id, now)
     s.commit()
     log.info("notification created: id=%s to=%s", item.id, body.participant_id or "all")
-    return next(
-        views.admin_notification(i)
-        for i in notifications.admin_list(s)
-        if i.notification.id == item.id
+    return views.admin_notification(_admin_item(s, item.id))
+
+
+def _admin_item(s: Session, notification_id: int) -> notifications.AdminItem:
+    item = next(
+        (i for i in notifications.admin_list(s) if i.notification.id == notification_id), None
     )
+    if item is None:
+        raise DomainError("NOT_FOUND", "알림을 찾을 수 없습니다.", 404)
+    return item
+
+
+@router.get("/notifications/{notification_id}", response_model=schemas.AdminNotificationDetail)
+def notification_detail(notification_id: int, s: SessionDep) -> schemas.AdminNotificationDetail:
+    """알림 내용과 받는 사람별 읽은 시각(읽은 사람 먼저)."""
+    item = _admin_item(s, notification_id)
+    return views.admin_notification_detail(item, notifications.readers(s, item.notification))
+
+
+@router.patch("/notifications/{notification_id}", response_model=schemas.AdminNotificationDetail)
+def update_notification(
+    notification_id: int, body: schemas.NotificationUpdate, s: SessionDep, now: RealNowDep
+) -> schemas.AdminNotificationDetail:
+    """제목·내용을 고친다. reset_reads면 모두에게 다시 안 읽은 알림으로 보인다."""
+    notifications.update(s, notification_id, body.title, body.body, body.reset_reads, now)
+    s.commit()
+    log.info("notification updated: id=%s reset_reads=%s", notification_id, body.reset_reads)
+    item = _admin_item(s, notification_id)
+    return views.admin_notification_detail(item, notifications.readers(s, item.notification))
 
 
 @router.delete("/notifications/{notification_id}", status_code=204)

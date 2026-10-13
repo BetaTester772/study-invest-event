@@ -75,7 +75,7 @@
 | 필드 | 설명 |
 |---|---|
 | `notifications.participant_id` | 받는 참가자. NULL이면 전체 알림(나중에 가입한 참가자에게도 보인다) |
-| `notifications.title`, `body`, `created_at` | 제목(≤120), 본문(≤2000, 줄바꿈 유지), 보낸 시각 |
+| `notifications.title`, `body`, `created_at`, `updated_at` | 제목(≤120), 본문(≤2000, 줄바꿈 유지), 보낸 시각, 관리자가 마지막으로 고친 시각(없으면 NULL). 받는 사람은 고칠 수 없다 |
 | `notification_reads (notification_id, participant_id)` 유일 | 참가자가 읽은 기록과 `read_at`. 전체 알림도 참가자마다 1행 |
 
 ### 정산 로그 (SettlementLog)

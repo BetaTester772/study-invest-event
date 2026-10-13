@@ -65,6 +65,12 @@ describe('NotificationsCard', () => {
     expect(screen.getByText('오래된 안 읽은 알림').closest('details')).toHaveProperty('open', true);
   });
 
+  it('marks an edited notification', () => {
+    const edited: NotificationInbox = { unread: 0, items: [{ ...inbox.items[1]!, updated_at: '2026-10-13T17:00:00+09:00' }] };
+    render(<NotificationsCard inbox={edited} onRead={() => {}} />);
+    expect(screen.getByRole('list', { name: '알림' })).toHaveTextContent('수정됨');
+  });
+
   it('shows an empty state and no button when there is nothing', () => {
     render(<NotificationsCard inbox={{ unread: 0, items: [] }} onRead={() => {}} />);
     expect(screen.getByText('아직 받은 알림이 없습니다.')).toBeInTheDocument();

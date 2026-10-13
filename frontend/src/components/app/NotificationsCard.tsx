@@ -30,7 +30,10 @@ function Notification({ item, onOpen }: { item: NotificationItem; onOpen: (item:
             )}
             <span className={styles.title}>{item.title}</span>
           </span>
-          <span className={styles.meta}>{formatDateTime(item.created_at)}</span>
+          <span className={styles.meta}>
+            {formatDateTime(item.created_at)}
+            {item.updated_at && ' · 수정됨'}
+          </span>
         </summary>
         <p className={styles.body}>{item.body}</p>
       </details>

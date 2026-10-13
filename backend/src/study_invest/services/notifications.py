@@ -138,3 +138,75 @@ def admin_list(s: Session) -> list[AdminItem]:
         AdminItem(n, nick, int(reads.get(n.id, 0)), everyone if n.participant_id is None else 1)
         for n, nick in rows
     ]
+
+
+def update(
+    s: Session,
+    notification_id: int,
+    title: str | None,
+    body: str | None,
+    reset_reads: bool,
+    now: datetime,
+) -> Notification:
+    """제목·내용을 고친다(받는 사람은 바꾸지 않는다). reset_reads면 읽음 기록을 지워 모두에게 다시
+    안 읽은 알림으로 보인다. 읽음 처리와 겹치지 않게 삭제와 같은 배타 잠금을 쓴다."""
+    item = s.scalars(
+        select(Notification).where(Notification.id == notification_id).with_for_update()
+    ).one_or_none()
+    if item is None:
+        raise DomainError("NOT_FOUND", "알림을 찾을 수 없습니다.", 404)
+    before = {"title": item.title, "body": item.body}
+    if title is not None:
+        if not title.strip():
+            raise DomainError("INVALID_NOTIFICATION", "제목을 비울 수 없습니다.", 422)
+        item.title = title.strip()
+    if body is not None:
+        if not body.strip():
+            raise DomainError("INVALID_NOTIFICATION", "내용을 비울 수 없습니다.", 422)
+        item.body = body.strip()
+    changed = before != {"title": item.title, "body": item.body}
+    cleared = 0
+    if reset_reads:
+        mine = NotificationRead.notification_id == notification_id
+        cleared = s.scalar(select(func.count()).select_from(NotificationRead).where(mine)) or 0
+        s.execute(delete(NotificationRead).where(mine))
+    if changed:
+        item.updated_at = now
+    s.flush()
+    audit(
+        s,
+        now,
+        "admin",
+        "notification.update",
+        notification_id=notification_id,
+        title_before=before["title"],
+        title_after=item.title,
+        body_changed=before["body"] != item.body,
+        reads_cleared=cleared,
+    )
+    return item
+
+
+@dataclass(frozen=True)
+class Reader:
+    participant_id: int
+    nickname: str
+    read_at: datetime | None
+
+
+def readers(s: Session, item: Notification) -> list[Reader]:
+    """받는 사람별 읽은 시각. 전체 알림이면 모든 참가자(안 읽었으면 read_at None).
+    읽은 사람을 먼저(읽은 순서대로), 그다음 안 읽은 사람을 참가자 번호 순으로."""
+    query = select(Participant.id, Participant.nickname, NotificationRead.read_at).outerjoin(
+        NotificationRead,
+        (NotificationRead.participant_id == Participant.id)
+        & (NotificationRead.notification_id == item.id),
+    )
+    if item.participant_id is not None:
+        query = query.where(Participant.id == item.participant_id)
+    rows = [Reader(pid, nick, read_at) for pid, nick, read_at in s.execute(query)]
+    read = sorted(
+        (r for r in rows if r.read_at is not None), key=lambda r: (r.read_at, r.participant_id)
+    )
+    unread = sorted((r for r in rows if r.read_at is None), key=lambda r: r.participant_id)
+    return read + unread

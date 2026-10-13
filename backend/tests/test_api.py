@@ -1206,3 +1206,56 @@ class TestNotifications:
             "/api/me/notifications/read", json={"ids": list(range(201))}, headers=alice
         )
         assert too_many.status_code == 422
+
+    def test_admin_detail_and_edit(self, client: TestClient, admin: dict[str, str]) -> None:
+        alice, bob = register(client, "alice"), register(client, "bob")
+        alice_id = client.get("/api/me", headers=alice).json()["id"]
+        n = self.send(client, admin, title="공지", body="첫 내용")
+        client.post("/api/me/notifications/read", json={"ids": [n["id"]]}, headers=alice)
+
+        d = client.get(f"/api/admin/notifications/{n['id']}", headers=admin).json()
+        assert d["body"] == "첫 내용" and d["read_count"] == 1 and d["updated_at"] is None
+        assert [(r["nickname"], r["read_at"] is not None) for r in d["readers"]] == [
+            ("alice", True),
+            ("bob", False),
+        ]
+        assert d["readers"][0]["participant_id"] == alice_id
+
+        # 내용만 고치면 읽음은 그대로, 참가자에게 수정 시각이 보인다
+        r = client.patch(
+            f"/api/admin/notifications/{n['id']}", json={"body": "고친 내용"}, headers=admin
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["title"] == "공지" and r.json()["body"] == "고친 내용"
+        assert r.json()["updated_at"] is not None and r.json()["read_count"] == 1
+        item = client.get("/api/me/notifications", headers=alice).json()["items"][0]
+        assert item["body"] == "고친 내용" and item["updated_at"] is not None
+        assert item["read_at"] is not None
+
+        # reset_reads면 모두에게 다시 안 읽은 알림
+        r = client.patch(
+            f"/api/admin/notifications/{n['id']}",
+            json={"title": "공지(정정)", "reset_reads": True},
+            headers=admin,
+        )
+        assert r.json()["title"] == "공지(정정)" and r.json()["read_count"] == 0
+        assert client.get("/api/me/notifications", headers=alice).json()["unread"] == 1
+        assert client.get("/api/me/notifications", headers=bob).json()["unread"] == 1
+
+        # 개인 알림의 받는 사람 목록은 그 사람뿐
+        p = self.send(client, admin, title="개인", body="b", participant_id=alice_id)
+        d = client.get(f"/api/admin/notifications/{p['id']}", headers=admin).json()
+        assert [r["nickname"] for r in d["readers"]] == ["alice"]
+
+        audit = client.get("/api/admin/audit", headers=admin).json()
+        assert sum(1 for x in audit if x["action"] == "notification.update") == 2
+        bad = client.patch(f"/api/admin/notifications/{n['id']}", json={"title": ""}, headers=admin)
+        assert bad.status_code == 422
+        blank = client.patch(
+            f"/api/admin/notifications/{n['id']}", json={"body": "   "}, headers=admin
+        )
+        assert blank.status_code == 422
+        assert client.get("/api/admin/notifications/9999", headers=admin).status_code == 404
+        assert (
+            client.patch("/api/admin/notifications/9999", json={}, headers=admin).status_code == 404
+        )

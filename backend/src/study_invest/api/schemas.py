@@ -656,6 +656,8 @@ class NotificationItem(Schema):
     created_at: datetime
     personal: bool
     """나에게만 온 알림이면 참, 전체 알림이면 거짓."""
+    updated_at: datetime | None = None
+    """관리자가 제목·내용을 고친 시각. 고친 적 없으면 null."""
     read_at: datetime | None
     """읽은 시각. 안 읽었으면 null."""
 
@@ -687,9 +689,31 @@ class AdminNotification(Schema):
     title: str
     body: str
     created_at: datetime
+    updated_at: datetime | None = None
     participant_id: int | None
     nickname: str | None
     """받는 참가자 닉네임. 전체 알림이면 null."""
     read_count: int
     recipients: int
     """받는 사람 수(전체 알림이면 지금 참가자 수)."""
+
+
+class NotificationUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    """새 제목. 생략·null이면 그대로."""
+    body: str | None = Field(default=None, min_length=1, max_length=2000)
+    """새 내용. 생략·null이면 그대로."""
+    reset_reads: bool = False
+    """참이면 읽음 기록을 지워 받는 사람 모두에게 다시 안 읽은 알림으로 보인다."""
+
+
+class NotificationReader(Schema):
+    participant_id: int
+    nickname: str
+    read_at: datetime | None
+    """읽은 시각. 안 읽었으면 null."""
+
+
+class AdminNotificationDetail(AdminNotification):
+    readers: list[NotificationReader]
+    """받는 사람 전원. 읽은 사람(읽은 순서) 다음에 안 읽은 사람(참가자 번호 순)."""

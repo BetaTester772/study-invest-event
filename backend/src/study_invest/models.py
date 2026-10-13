@@ -360,6 +360,8 @@ class Notification(Base):
     body: Mapped[str] = mapped_column(String(2000))
     """본문(줄바꿈 그대로 보인다)."""
     created_at: Mapped[datetime] = mapped_column(AwareDateTime(), index=True)
+    updated_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
+    """관리자가 제목·내용을 마지막으로 고친 시각. 고친 적 없으면 None."""
 
 
 class NotificationRead(Base):

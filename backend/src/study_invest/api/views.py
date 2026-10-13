@@ -106,6 +106,7 @@ def notification_inbox(items: list[notifications.InboxItem]) -> schemas.Notifica
                 body=i.notification.body,
                 created_at=i.notification.created_at,
                 personal=i.notification.participant_id is not None,
+                updated_at=i.notification.updated_at,
                 read_at=i.read_at,
             )
             for i in items
@@ -120,8 +121,23 @@ def admin_notification(i: notifications.AdminItem) -> schemas.AdminNotification:
         title=n.title,
         body=n.body,
         created_at=n.created_at,
+        updated_at=n.updated_at,
         participant_id=n.participant_id,
         nickname=i.nickname,
         read_count=i.read_count,
         recipients=i.recipients,
+    )
+
+
+def admin_notification_detail(
+    i: notifications.AdminItem, readers: list[notifications.Reader]
+) -> schemas.AdminNotificationDetail:
+    return schemas.AdminNotificationDetail(
+        **admin_notification(i).model_dump(),
+        readers=[
+            schemas.NotificationReader(
+                participant_id=r.participant_id, nickname=r.nickname, read_at=r.read_at
+            )
+            for r in readers
+        ],
     )

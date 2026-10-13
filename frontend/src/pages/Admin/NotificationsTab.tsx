@@ -15,6 +15,7 @@ import {
   type Column,
 } from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
+import { NotificationDetailModal } from './NotificationDetailModal';
 import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
 const EVERYONE = 'all';
@@ -30,6 +31,7 @@ export function NotificationsTab() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formRef] = useScrollToFormError(errors, formError);
+  const [openId, setOpenId] = useState<number | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -77,16 +79,34 @@ export function NotificationsTab() {
       render: (n) =>
         n.participant_id == null ? <Badge tone="info">전체</Badge> : `#${n.participant_id} ${n.nickname ?? ''}`,
     },
-    { key: 'title', header: '제목', render: (n) => n.title },
+    {
+      key: 'title',
+      header: '제목',
+      render: (n) => (
+        <>
+          {n.title}
+          {n.updated_at && (
+            <Badge tone="neutral" size="sm">
+              수정됨
+            </Badge>
+          )}
+        </>
+      ),
+    },
     { key: 'read', header: '읽음', numeric: true, nowrap: true, render: (n) => `${n.read_count} / ${n.recipients}` },
     {
       key: 'actions',
       header: '',
       align: 'right',
       render: (n) => (
-        <Button variant="ghost" size="sm" onClick={() => void remove(n)}>
-          지우기
-        </Button>
+        <Stack direction="row" gap={1} justify="end">
+          <Button variant="secondary" size="sm" onClick={() => setOpenId(n.id)}>
+            보기
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void remove(n)}>
+            지우기
+          </Button>
+        </Stack>
       ),
     },
   ];
@@ -136,7 +156,11 @@ export function NotificationsTab() {
           </Stack>
         </form>
       </Card>
-      <Card title="보낸 알림" description="읽음은 '읽은 사람 / 받는 사람'입니다. 전체 알림의 받는 사람은 지금 참가자 수입니다.">
+      <NotificationDetailModal id={openId} onClose={() => setOpenId(null)} onChanged={() => void list.refetch()} />
+      <Card
+        title="보낸 알림"
+        description="읽음은 '읽은 사람 / 받는 사람'입니다. 전체 알림의 받는 사람은 지금 참가자 수입니다. '보기'에서 내용과 읽은 사람 목록을 확인하고 고칠 수 있습니다."
+      >
         {list.error ? (
           <LoadError error={list.error} onRetry={list.refetch} what="보낸 알림" />
         ) : (
