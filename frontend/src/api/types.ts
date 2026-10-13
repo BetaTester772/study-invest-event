@@ -126,11 +126,12 @@ export interface Portfolio {
   /** profit / principal. */
   return_rate: number;
   day: string | null;
+  /** 1일 1종목 매수 상한. 한도가 없으면 null. */
   buy_limit: {
     ratio: number;
     limit_amount: number;
     remaining: Record<string, number>;
-  };
+  } | null;
 }
 
 export interface Order {
@@ -194,7 +195,8 @@ export interface EventInfo {
   certification: { cutoff: string; target_date: string; reward_cash: number };
   coin: CoinInfo;
   initial_cash: number;
-  daily_buy_limit_ratio: number;
+  /** 1일 1종목 매수 상한 비율. null이면 한도 없음. */
+  daily_buy_limit_ratio: number | null;
   /** Test clock (QA servers only). `null` on the real clock. */
   clock: ClockInfo | null;
   signup: SignupInfo;
@@ -406,7 +408,8 @@ export interface Params {
   /** 무작위 뉴스 효과 크기 범위(0~1]. */
   news_rate_min: number;
   news_rate_max: number;
-  daily_buy_limit_ratio: number;
+  /** 1일 1종목 매수 상한 비율(0~1]. null이면 한도 없음. */
+  daily_buy_limit_ratio: number | null;
   reward_cash: number;
   certification_cutoff: string;
   /** 인증된 참가자만 거래. 파라미터 폼은 보내지 않는다(서버가 현재 값 유지). */

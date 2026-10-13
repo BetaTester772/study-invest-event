@@ -49,9 +49,10 @@ def bought_today(s: Session, participant_id: int, day: date) -> dict[str, int]:
     return {code: int(total or 0) for code, total in rows}
 
 
-def buy_limit_amount(total: int, params: EventParams) -> int:
-    """1일 1종목 매수 상한 금액 = floor(총자산 × 비율)."""
-    return int(exact(params.daily_buy_limit_ratio) * total)
+def buy_limit_amount(total: int, params: EventParams) -> int | None:
+    """1일 1종목 매수 상한 금액 = floor(총자산 × 비율). 비율이 None(한도 없음)이면 None."""
+    ratio = params.daily_buy_limit_ratio
+    return None if ratio is None else int(exact(ratio) * total)
 
 
 def place_order(
@@ -98,9 +99,10 @@ def place_order(
                     reason = RejectReason.INSUFFICIENT_CASH
                 else:
                     limit = buy_limit_amount(total_assets(participant, prices), params)
-                    already = bought_today(s, participant.id, trade_day).get(code, 0)
-                    if already + cost > limit:
-                        reason = RejectReason.DAILY_BUY_LIMIT
+                    if limit is not None:
+                        already = bought_today(s, participant.id, trade_day).get(code, 0)
+                        if already + cost > limit:
+                            reason = RejectReason.DAILY_BUY_LIMIT
             else:
                 held = next((h.quantity for h in participant.holdings if h.code == code), 0)
                 if held < quantity:
@@ -166,9 +168,10 @@ class PortfolioView:
     return_rate: float
     """투자 손익 / 투입 원금."""
     day: date | None
-    limit_ratio: float
-    limit_amount: int
-    remaining: dict[str, int]
+    limit_ratio: float | None
+    """1일 1종목 매수 상한 비율. None이면 한도 없음(limit_amount·remaining도 None)."""
+    limit_amount: int | None
+    remaining: dict[str, int] | None
 
 
 def portfolio(
@@ -199,8 +202,11 @@ def portfolio(
     rewards = rewards_received(s, participant.id).get(participant.id, 0)
     valuation = valuate(participant, prices, rewards)
     limit = buy_limit_amount(valuation.total_assets, params)
-    today = to_kst(now).date()
-    spent = bought_today(s, participant.id, today) if day == today else {}
+    remaining: dict[str, int] | None = None
+    if limit is not None:
+        today = to_kst(now).date()
+        spent = bought_today(s, participant.id, today) if day == today else {}
+        remaining = {i.code: max(0, limit - spent.get(i.code, 0)) for i in INSTRUMENTS}
     return PortfolioView(
         cash=participant.cash,
         holdings=views,
@@ -214,5 +220,5 @@ def portfolio(
         day=day,
         limit_ratio=params.daily_buy_limit_ratio,
         limit_amount=limit,
-        remaining={i.code: max(0, limit - spent.get(i.code, 0)) for i in INSTRUMENTS},
+        remaining=remaining,
     )

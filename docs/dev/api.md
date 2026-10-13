@@ -42,7 +42,7 @@ type RejectReason =
   | "UNKNOWN_INSTRUMENT"
   | "INSUFFICIENT_CASH"
   | "INSUFFICIENT_HOLDINGS"
-  | "DAILY_BUY_LIMIT"        // 1일 1종목 매수 상한(총자산 40%) 초과
+  | "DAILY_BUY_LIMIT"        // 1일 1종목 매수 상한(총자산 40%) 초과. 한도를 끄면(null) 나오지 않음
   | "DISQUALIFIED";
 type CertStatus = "pending" | "approved" | "rejected";
 type PriceSource = "initial" | "settlement" | "carry_over" | "manual";
@@ -108,11 +108,11 @@ interface Portfolio {
   profit: number;               // 투자 손익 = total_assets − principal (실현·미실현 합)
   return_rate: number;          // profit / principal. 인증 보상은 손익이 아니라 원금
   day: string | null;           // 평가 기준 운영일
-  buy_limit: {                  // 당일 종목별 남은 매수 한도
+  buy_limit: {                  // 당일 종목별 남은 매수 한도. 한도가 없으면(daily_buy_limit_ratio = null) null
     ratio: number;              // 0.4
     limit_amount: number;       // floor(total_assets × ratio)
-    remaining: Record<string, number>;  // code → 남은 금액
-  };
+    remaining: Record<string, number>;  // code → 남은 금액(그날 산 금액 합계를 뺀 값, 매도는 무관)
+  } | null;
 }
 
 interface Order {
@@ -172,7 +172,7 @@ interface EventInfo {
     calm_cap: number; calm_floor: number;  // 안정기 상·하한(0.3, -0.1)
   };
   initial_cash: number;
-  daily_buy_limit_ratio: number;
+  daily_buy_limit_ratio: number | null;  // null이면 1일 1종목 매수 한도 없음
   clock: {                       // 테스트 시계(STUDY_INVEST_TIME_*)일 때만. 운영(실제 시계)은 null
     scale: number;               // 24면 실제 1시간이 이벤트 하루
     real_now: string;            // 실제 시각. 위 now는 테스트 시계 시각
@@ -282,7 +282,7 @@ interface Params {
   news_good_per_day?: number | null;     // 하루 무작위 호재 건수(기본 1, 0~4). 호재·악재는 서로 다른 종목, 합은 4 이하, 둘 다 0이면 무작위 뉴스 없음. PUT에서 생략·null이면 현재 값 유지
   news_bad_per_day?: number | null;      // 하루 무작위 악재 건수(기본 1, 0~4). 위와 같음
   news_rate_min: number; news_rate_max: number;   // 무작위 뉴스 효과 범위(기본 0.05~0.15)
-  daily_buy_limit_ratio: number;
+  daily_buy_limit_ratio: number | null;  // null이면 1일 1종목 매수 한도 없음
   reward_cash: number;                   // 인증 1건당 지급 현금(기본 250,000원 = 시드의 1/4)
   certification_cutoff: string;          // "23:59"
   verified_only_trading?: boolean | null; // 인증된 참가자만 거래. PUT에서 null·생략이면 현재 값 유지

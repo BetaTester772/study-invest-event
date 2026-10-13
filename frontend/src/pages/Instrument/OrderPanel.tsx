@@ -91,7 +91,9 @@ export function OrderPanel({
   const price = instrument.price;
   const holding = portfolio.holdings.find((h) => h.code === instrument.code);
   const held = holding?.quantity ?? 0;
-  const remainingLimit = portfolio.buy_limit.remaining[instrument.code] ?? portfolio.buy_limit.limit_amount;
+  const buyLimit = portfolio.buy_limit;
+  // 한도가 없으면(null) 현금만큼 살 수 있다.
+  const remainingLimit = buyLimit ? (buyLimit.remaining[instrument.code] ?? buyLimit.limit_amount) : Infinity;
   const buyBudget = Math.min(portfolio.cash, remainingLimit);
   const maxQty = side === 'buy' ? (price > 0 ? Math.floor(buyBudget / price) : 0) : held;
   const quantity = Math.min(qty, Math.max(maxQty, 1));
@@ -102,21 +104,16 @@ export function OrderPanel({
   let blocker: string | null = null;
   if (maxQty < 1) {
     if (side === 'sell') blocker = '아직 이 종목을 갖고 있지 않습니다. 먼저 매수해 보세요.';
-    else if (remainingLimit < price)
-      blocker = `오늘 이 종목의 매수 한도(총자산의 ${formatPercent(portfolio.buy_limit.ratio, { digits: 0 })})를 다 썼습니다. 내일 다시 살 수 있습니다.`;
+    else if (buyLimit && remainingLimit < price)
+      blocker = `오늘 이 종목의 매수 한도(총자산의 ${formatPercent(buyLimit.ratio, { digits: 0 })})를 다 썼습니다. 내일 다시 살 수 있습니다.`;
     else blocker = `현금이 부족해서 1${unit}도 살 수 없습니다. 가진 종목을 팔면 현금이 생깁니다.`;
   }
 
   const details: KeyValueItem[] = [{ label: '주문 가격(오늘 시작가)', value: <Money value={price} /> }];
   if (side === 'buy') {
-    details.push(
-      { label: '주문 가능 현금', value: <Money value={portfolio.cash} /> },
-      {
-        label: `오늘 남은 매수 한도`,
-        value: <Money value={remainingLimit} />,
-      },
-      { label: '보유 수량', value: formatQuantity(held, instrument.kind) },
-    );
+    details.push({ label: '주문 가능 현금', value: <Money value={portfolio.cash} /> });
+    if (buyLimit) details.push({ label: `오늘 남은 매수 한도`, value: <Money value={remainingLimit} /> });
+    details.push({ label: '보유 수량', value: formatQuantity(held, instrument.kind) });
   } else {
     details.push(
       { label: '보유 수량', value: formatQuantity(held, instrument.kind) },
@@ -189,10 +186,10 @@ export function OrderPanel({
           }
         />
         <KeyValueList items={details} />
-        {side === 'buy' && (
+        {side === 'buy' && buyLimit && (
           <Text size="xs" tone="muted">
-            한 종목은 하루에 총자산의 {formatPercent(portfolio.buy_limit.ratio, { digits: 0 })}(
-            {formatWon(portfolio.buy_limit.limit_amount)})까지만 살 수 있습니다.
+            한 종목은 하루에 총자산의 {formatPercent(buyLimit.ratio, { digits: 0 })}(
+            {formatWon(buyLimit.limit_amount)})까지만 살 수 있습니다.
           </Text>
         )}
         {disqualified && <Alert tone="danger" title="실격 처리되어 주문할 수 없습니다" />}

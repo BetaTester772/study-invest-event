@@ -62,7 +62,9 @@ def portfolio(p: PortfolioView) -> schemas.Portfolio:
         profit=p.profit,
         return_rate=p.return_rate,
         day=p.day,
-        buy_limit=schemas.BuyLimit(
+        buy_limit=None
+        if p.limit_ratio is None or p.limit_amount is None or p.remaining is None
+        else schemas.BuyLimit(
             ratio=p.limit_ratio, limit_amount=p.limit_amount, remaining=p.remaining
         ),
     )

@@ -143,6 +143,30 @@ class TestTrading:
         open_day(client, clock, D2)
         assert order(client, h, "SAMSU", "buy", 1)["status"] == "filled"  # 다음 날 초기화
 
+    def test_daily_buy_limit_can_be_turned_off(
+        self, client: TestClient, clock: Clock, admin: dict[str, str]
+    ) -> None:
+        """daily_buy_limit_ratio = null이면 한도 없음: 현금만큼 사고, 팔았다 다시 사도 된다."""
+        params = client.get("/api/admin/params", headers=admin).json()
+        r = client.put(
+            "/api/admin/params", json=dict(params, daily_buy_limit_ratio=None), headers=admin
+        )
+        assert r.status_code == 200 and r.json()["daily_buy_limit_ratio"] is None
+        assert client.get("/api/event").json()["daily_buy_limit_ratio"] is None
+        h = register(client)
+        open_day(client, clock, D1)
+        assert order(client, h, "SAMSU", "buy", 13)["status"] == "filled"  # 975,000 (40% 초과)
+        assert order(client, h, "SAMSU", "sell", 13)["status"] == "filled"
+        assert order(client, h, "SAMSU", "buy", 13)["status"] == "filled"  # 같은 날 다시
+        assert order(client, h, "SAMSU", "buy", 1)["reject_reason"] == "INSUFFICIENT_CASH"
+        pf = client.get("/api/me/portfolio", headers=h).json()
+        assert pf["buy_limit"] is None
+        # 다시 켜면 한도가 돌아온다
+        r = client.put(
+            "/api/admin/params", json=dict(params, daily_buy_limit_ratio=0.4), headers=admin
+        )
+        assert client.get("/api/me/portfolio", headers=h).json()["buy_limit"]["ratio"] == 0.4
+
     def test_disqualified_cannot_trade(
         self, client: TestClient, clock: Clock, admin: dict[str, str]
     ) -> None:

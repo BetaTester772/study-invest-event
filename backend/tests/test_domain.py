@@ -525,6 +525,7 @@ class TestParams:
             -0.4,
         )
         assert P.stock_p_shift == 0.30 and P.daily_buy_limit_ratio == 0.40
+        assert EventParams(daily_buy_limit_ratio=None).daily_buy_limit_ratio is None
         assert (P.coin_calm_rounds, P.coin_calm_cap, P.coin_calm_floor) == (3, 0.30, -0.10)
 
     def test_reward_is_quarter_of_seed(self) -> None:
@@ -546,6 +547,8 @@ class TestParams:
             {"coin_p_up": 1.0},
             {"coin_floor": -1.0},
             {"daily_buy_limit_ratio": 0},
+            {"daily_buy_limit_ratio": 1.5},
+            {"daily_buy_limit_ratio": float("nan")},
             {"stock_min_price": 0},
             {"reward_cash": -1},
             {"reward_cash": REWARD_CASH_MAX + 1},

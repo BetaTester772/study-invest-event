@@ -4,7 +4,7 @@ import { LoadError } from '../../components/app/LoadError';
 import { Alert, Button, Card, Grid, Skeleton, Stack, TextField, useToast } from '../../components/ui';
 import { useScrollToFormError } from '../../lib/useScrollToFormError';
 
-type Kind = 'float' | 'int' | 'nullableInt' | 'time';
+type Kind = 'float' | 'nullableFloat' | 'int' | 'nullableInt' | 'time';
 
 const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; group: string }[] = [
   { key: 'coin_p_up', label: '코인 상승 확률', hint: '0~1. 기본 0.30 (상승일 30%)', kind: 'float', group: 'coin' },
@@ -119,8 +119,8 @@ const FIELDS: { key: keyof Params; label: string; hint: string; kind: Kind; grou
   {
     key: 'daily_buy_limit_ratio',
     label: '1일 1종목 매수 상한',
-    hint: '소수. 0.4 = 총자산의 40%',
-    kind: 'float',
+    hint: '소수. 0.4 = 총자산의 40%(그날 산 금액 합계 기준, 팔아도 돌아오지 않음). 비우면 한도 없음',
+    kind: 'nullableFloat',
     group: 'trade',
   },
   {
@@ -171,12 +171,13 @@ function parseDraft(d: Draft): { params?: Params; errors: Partial<Record<keyof P
     if (f.kind === 'time') {
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) errors[f.key] = 'HH:MM 형식으로 입력하세요. 예: 23:59';
       out[f.key] = raw;
-    } else if (f.kind === 'nullableInt' && raw === '') {
+    } else if ((f.kind === 'nullableInt' || f.kind === 'nullableFloat') && raw === '') {
       out[f.key] = null;
     } else {
       const n = Number(raw);
       if (raw === '' || !Number.isFinite(n)) errors[f.key] = '숫자를 입력하세요.';
-      else if (f.kind !== 'float' && !Number.isInteger(n)) errors[f.key] = '정수로 입력하세요.';
+      else if (f.kind !== 'float' && f.kind !== 'nullableFloat' && !Number.isInteger(n))
+        errors[f.key] = '정수로 입력하세요.';
       out[f.key] = n;
     }
   }

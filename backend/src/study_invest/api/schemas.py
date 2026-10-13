@@ -117,7 +117,8 @@ class EventInfo(Schema):
     certification: CertificationInfo
     coin: CoinInfo
     initial_cash: int
-    daily_buy_limit_ratio: float
+    daily_buy_limit_ratio: float | None
+    """1일 1종목 매수 상한(총자산 대비 비율). null이면 한도 없음."""
     clock: ClockInfo | None = None
     """테스트 시계로 돌 때만 채운다. 실제 시계(운영)면 null."""
     signup: SignupInfo
@@ -344,7 +345,8 @@ class Portfolio(Schema):
     return_rate: float
     """profit / principal."""
     day: date | None
-    buy_limit: BuyLimit
+    buy_limit: BuyLimit | None
+    """1일 1종목 매수 상한. 한도가 없으면(daily_buy_limit_ratio = null) null."""
 
 
 class OrderRequest(BaseModel):
@@ -487,7 +489,8 @@ class Params(Schema):
     news_rate_min: float
     news_rate_max: float
     """무작위 뉴스 효과 크기 범위(0~1]."""
-    daily_buy_limit_ratio: float
+    daily_buy_limit_ratio: float | None
+    """1일 1종목 매수 상한(총자산 대비 비율). null이면 한도 없음."""
     reward_cash: int
     certification_cutoff: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     verified_only_trading: bool | None = None

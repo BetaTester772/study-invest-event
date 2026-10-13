@@ -108,8 +108,9 @@ class EventParams:
     """무작위 뉴스 효과 크기의 상한(+15% / -15%). 하한보다 작게 저장돼 있으면 둘을 바꿔 쓴다."""
 
     # 거래 (04-trading §2)
-    daily_buy_limit_ratio: float = 0.40
-    """1일 1종목 매수 상한(총자산 대비 비율)."""
+    daily_buy_limit_ratio: float | None = 0.40
+    """1일 1종목 매수 상한(총자산 대비 비율). 그날 그 종목을 산 금액의 합계로 잰다(팔아도 돌아오지
+    않는다). None이면 한도 없음(현금만큼 살 수 있다)."""
 
     # 인증 (05-certification)
     reward_cash: int = INITIAL_CASH // 4
@@ -137,7 +138,6 @@ class EventParams:
             "stock_move_exp": self.stock_move_exp,
             "news_rate_min": self.news_rate_min,
             "news_rate_max": self.news_rate_max,
-            "daily_buy_limit_ratio": self.daily_buy_limit_ratio,
         }
         for name, value in floats.items():  # NaN·Infinity는 모든 계산을 깨뜨린다
             if not math.isfinite(value):
@@ -210,7 +210,14 @@ class EventParams:
                 0 < self.news_rate_max <= NEWS_RATE_MAX,
                 f"news_rate_max must be in (0, {NEWS_RATE_MAX:g}]",
             ),
-            (0 < self.daily_buy_limit_ratio <= 1, "daily_buy_limit_ratio must be in (0, 1]"),
+            (
+                self.daily_buy_limit_ratio is None
+                or (
+                    math.isfinite(self.daily_buy_limit_ratio)
+                    and 0 < self.daily_buy_limit_ratio <= 1
+                ),
+                "daily_buy_limit_ratio must be in (0, 1] or None",
+            ),
             (
                 0 <= self.reward_cash <= REWARD_CASH_MAX,
                 f"reward_cash must be in [0, {REWARD_CASH_MAX:,}]",
