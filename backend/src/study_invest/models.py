@@ -343,6 +343,37 @@ class StudyCertification(Base):
     participant: Mapped[Participant] = relationship()
 
 
+class Notification(Base):
+    """참가자 알림. 관리자가 쓰고, 참가자는 메인 화면에서 읽은·안 읽은 알림을 구분해 본다.
+
+    participant_id가 None이면 전체 알림(모든 참가자에게, 나중에 가입한 참가자에게도 보인다).
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    participant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("participants.id"), index=True, nullable=True
+    )
+    """받는 참가자. None이면 전체."""
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(String(2000))
+    """본문(줄바꿈 그대로 보인다)."""
+    created_at: Mapped[datetime] = mapped_column(AwareDateTime(), index=True)
+
+
+class NotificationRead(Base):
+    """참가자가 알림을 읽은 기록. 참가자·알림당 1행(전체 알림도 참가자마다 따로 읽는다)."""
+
+    __tablename__ = "notification_reads"
+    __table_args__ = (UniqueConstraint("notification_id", "participant_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"), index=True)
+    participant_id: Mapped[int] = mapped_column(ForeignKey("participants.id"), index=True)
+    read_at: Mapped[datetime] = mapped_column(AwareDateTime())
+
+
 class ParamsRecord(Base):
     """관리자 파라미터 변경 이력. 가장 최근 행이 현재값."""
 

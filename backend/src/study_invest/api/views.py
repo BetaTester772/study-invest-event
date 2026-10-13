@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..instruments import BY_CODE
 from ..models import REJECT_MESSAGES, NewsItem, Order, StudyCertification
+from ..services import notifications
 from ..services.trading import PortfolioView
 from . import schemas
 
@@ -92,4 +93,35 @@ def admin_news_item(n: NewsItem, applied: bool) -> schemas.AdminNewsItem:
         source=n.source.value,
         created_at=n.created_at,
         applied=applied,
+    )
+
+
+def notification_inbox(items: list[notifications.InboxItem]) -> schemas.NotificationInbox:
+    return schemas.NotificationInbox(
+        unread=sum(1 for i in items if i.read_at is None),
+        items=[
+            schemas.NotificationItem(
+                id=i.notification.id,
+                title=i.notification.title,
+                body=i.notification.body,
+                created_at=i.notification.created_at,
+                personal=i.notification.participant_id is not None,
+                read_at=i.read_at,
+            )
+            for i in items
+        ],
+    )
+
+
+def admin_notification(i: notifications.AdminItem) -> schemas.AdminNotification:
+    n = i.notification
+    return schemas.AdminNotification(
+        id=n.id,
+        title=n.title,
+        body=n.body,
+        created_at=n.created_at,
+        participant_id=n.participant_id,
+        nickname=i.nickname,
+        read_count=i.read_count,
+        recipients=i.recipients,
     )

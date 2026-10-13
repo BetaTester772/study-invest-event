@@ -643,3 +643,49 @@ def int_range(model: type[BaseModel], field: str) -> IntRange:
         if getattr(meta, "le", None) is not None:
             bounds["max"] = meta.le
     return IntRange(min=bounds["min"], max=bounds["max"], default=info.default)
+
+
+# --- 알림 -----------------------------------------------------------------------
+
+
+class NotificationItem(Schema):
+    id: int
+    title: str
+    body: str
+    """본문. 줄바꿈을 그대로 보인다."""
+    created_at: datetime
+    personal: bool
+    """나에게만 온 알림이면 참, 전체 알림이면 거짓."""
+    read_at: datetime | None
+    """읽은 시각. 안 읽었으면 null."""
+
+
+class NotificationInbox(Schema):
+    unread: int
+    items: list[NotificationItem]
+    """최신부터."""
+
+
+class ReadNotificationsRequest(BaseModel):
+    ids: list[int] | None = None
+    """읽음으로 표시할 알림 id. 생략·null이면 보이는 알림 전부."""
+
+
+class NotificationRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    body: str = Field(min_length=1, max_length=2000)
+    participant_id: int | None = None
+    """받는 참가자. 생략·null이면 전체 알림."""
+
+
+class AdminNotification(Schema):
+    id: int
+    title: str
+    body: str
+    created_at: datetime
+    participant_id: int | None
+    nickname: str | None
+    """받는 참가자 닉네임. 전체 알림이면 null."""
+    read_count: int
+    recipients: int
+    """받는 사람 수(전체 알림이면 지금 참가자 수)."""

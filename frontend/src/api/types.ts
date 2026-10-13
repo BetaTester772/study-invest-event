@@ -550,3 +550,42 @@ export interface PriceOverrideRequest {
 export interface ApiErrorBody {
   detail?: { code?: string; message?: string } | Array<{ loc?: unknown[]; msg?: string; type?: string }> | string;
 }
+
+/** 참가자 알림 하나. */
+export interface NotificationItem {
+  id: number;
+  title: string;
+  /** 본문. 줄바꿈을 그대로 보인다. */
+  body: string;
+  created_at: string;
+  /** 나에게만 온 알림이면 true, 전체 알림이면 false. */
+  personal: boolean;
+  /** 읽은 시각. 안 읽었으면 null. */
+  read_at: string | null;
+}
+
+export interface NotificationInbox {
+  unread: number;
+  /** 최신부터. */
+  items: NotificationItem[];
+}
+
+export interface NotificationRequest {
+  title: string;
+  body: string;
+  /** 받는 참가자. null이면 전체 알림. */
+  participant_id: number | null;
+}
+
+export interface AdminNotification {
+  id: number;
+  title: string;
+  body: string;
+  created_at: string;
+  participant_id: number | null;
+  /** 받는 참가자 닉네임. 전체 알림이면 null. */
+  nickname: string | null;
+  read_count: number;
+  /** 받는 사람 수(전체 알림이면 지금 참가자 수). */
+  recipients: number;
+}

@@ -135,3 +135,4 @@ SQLite(테스트 기본)는 행 잠금이 없으므로 동시성 테스트(`test
 - 코인 누적 분포(v0.4 중앙값 약 0.88배, 현행 기본값 중앙값 약 0.74배)에 대한 판단 — `study-invest simulate` 또는 관리자 시뮬레이터로 확인([08](../spec/08-open-questions.md)).
 - F-13의 "순위 분산" 시뮬레이션(참가자 전략 모델 필요)은 미구현. 현재는 코인 분포만.
 - F-12 알림은 미구현(선택 항목).
+- **참가자 알림**(2026-10-13): `services/notifications.py`. 전체 알림은 `participant_id = NULL` 한 행이고, 읽음은 `notification_reads`에 참가자마다 남긴다(마이그레이션 0010). 읽음 처리는 `lock_participant`로 같은 참가자의 동시 요청을 직렬화해 유일 제약 충돌 없이 한 번만 넣는다. 메인 화면 `NotificationsCard`는 안 읽은 알림을 먼저 강조해 보이고, 펼치면 `POST /api/me/notifications/read {ids:[id]}`로 읽음 처리한다. 관리자 화면 '알림' 탭에서 전체·개인 알림을 보내고 읽은 사람 수를 본다.

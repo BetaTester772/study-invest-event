@@ -29,7 +29,7 @@ from ..models import (
     StudyCertification,
 )
 from ..params import EventParams
-from ..services import auth, certification, market, news
+from ..services import auth, certification, market, news, notifications
 from ..services.common import (
     DomainError,
     audit,
@@ -47,6 +47,7 @@ from .deps import (
     BatchSessionDep,
     NowDep,
     ParamsDep,
+    RealNowDep,
     SessionDep,
     SessionReleasingRoute,
     StateDep,
@@ -474,3 +475,32 @@ async def simulate(
     else:
         report = await asyncio.get_running_loop().run_in_executor(state.cpu_executor, job)
     return report.to_dict()
+
+
+@router.get("/notifications", response_model=list[schemas.AdminNotification])
+def list_notifications(s: SessionDep) -> list[schemas.AdminNotification]:
+    """보낸 알림, 최신부터. 읽은 사람 수를 함께 돌려준다."""
+    return [views.admin_notification(i) for i in notifications.admin_list(s)]
+
+
+@router.post("/notifications", response_model=schemas.AdminNotification, status_code=201)
+def create_notification(
+    body: schemas.NotificationRequest, s: SessionDep, now: RealNowDep
+) -> schemas.AdminNotification:
+    """알림을 보낸다. participant_id를 비우면 전체 알림."""
+    item = notifications.create(s, body.title, body.body, body.participant_id, now)
+    s.commit()
+    log.info("notification created: id=%s to=%s", item.id, body.participant_id or "all")
+    return next(
+        views.admin_notification(i)
+        for i in notifications.admin_list(s)
+        if i.notification.id == item.id
+    )
+
+
+@router.delete("/notifications/{notification_id}", status_code=204)
+def delete_notification(notification_id: int, s: SessionDep, now: RealNowDep) -> Response:
+    notifications.remove(s, notification_id, now)
+    s.commit()
+    log.info("notification deleted: id=%s", notification_id)
+    return Response(status_code=204)

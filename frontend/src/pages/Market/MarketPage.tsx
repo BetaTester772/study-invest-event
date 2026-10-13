@@ -4,6 +4,7 @@ import { InstrumentBoard } from '../../components/app/InstrumentBoard';
 import { LoadError } from '../../components/app/LoadError';
 import { MarketStatus } from '../../components/app/MarketStatus';
 import { NewsCard } from '../../components/app/NewsCard';
+import { NotificationsCard } from '../../components/app/NotificationsCard';
 import { Card, Container, LinkButton, Skeleton, Stack, Text } from '../../components/ui';
 import { formatDay } from '../../lib/format';
 
@@ -13,6 +14,14 @@ export function MarketPage() {
   const instruments = useApi(() => publicApi.instruments(), [], { refreshInterval: 60_000 });
   const news = useApi(() => publicApi.news(), [], { refreshInterval: 60_000 });
   const certs = useApi(() => meApi.certifications(), [status], { enabled: status === 'authenticated' });
+  const notifications = useApi(() => meApi.notifications(), [status], {
+    enabled: status === 'authenticated',
+    refreshInterval: 60_000,
+  });
+  const readNotifications = (ids?: number[]) => {
+    // 읽음 표시는 서버가 돌려준 최신 목록으로 바꾼다. 실패하면 다음 새로고침 때 다시 보인다.
+    meApi.readNotifications(ids).then(notifications.setData, () => undefined);
+  };
 
   const stamped = certs.data?.filter((c) => c.status === 'approved').map((c) => c.target_date);
   const priceDay = instruments.data?.find((i) => i.day)?.day;
@@ -29,6 +38,13 @@ export function MarketPage() {
             <Skeleton lines={3} height="1.5rem" />
           </Card>
         )}
+
+        {status === 'authenticated' &&
+          (notifications.error ? (
+            <LoadError error={notifications.error} onRetry={notifications.refetch} what="알림" />
+          ) : (
+            <NotificationsCard inbox={notifications.data} loading={notifications.loading} onRead={readNotifications} />
+          ))}
 
         {news.error ? (
           <LoadError error={news.error} onRetry={news.refetch} what="뉴스" />

@@ -2,6 +2,7 @@ import { request } from './client';
 import type {
   AdminCertification,
   AdminNewsItem,
+  AdminNotification,
   AdminParticipant,
   AdminPosition,
   AuditEntry,
@@ -17,6 +18,8 @@ import type {
   LoginRequest,
   ManualNewsRequest,
   NewsItem,
+  NotificationInbox,
+  NotificationRequest,
   Order,
   OrderRequest,
   Params,
@@ -88,6 +91,14 @@ export const meApi = {
     form.append('file', file);
     return request<Certification>('/me/certifications', { method: 'POST', auth: 'participant', form });
   },
+  notifications: () => request<NotificationInbox>('/me/notifications', { auth: 'participant' }),
+  /** ids를 생략하면 보이는 알림을 모두 읽음으로 표시한다. */
+  readNotifications: (ids?: number[]) =>
+    request<NotificationInbox>('/me/notifications/read', {
+      method: 'POST',
+      auth: 'participant',
+      body: ids ? { ids } : {},
+    }),
 };
 
 /** Admin endpoints (X-Admin-Key). */
@@ -112,6 +123,11 @@ export const adminApi = {
     request<AdminNewsItem>(`/admin/news/${day}/${encodeURIComponent(code)}`, { method: 'PUT', auth: 'admin', body }),
   deleteNews: (day: string, code: string) =>
     request<void>(`/admin/news/${day}/${encodeURIComponent(code)}`, { method: 'DELETE', auth: 'admin' }),
+  notifications: () => request<AdminNotification[]>('/admin/notifications', { auth: 'admin' }),
+  createNotification: (body: NotificationRequest) =>
+    request<AdminNotification>('/admin/notifications', { method: 'POST', auth: 'admin', body }),
+  deleteNotification: (id: number) =>
+    request<void>(`/admin/notifications/${id}`, { method: 'DELETE', auth: 'admin' }),
   overridePrice: (day: string, code: string, body: PriceOverrideRequest) =>
     request<PricePoint>(`/admin/prices/${day}/${encodeURIComponent(code)}`, { method: 'PUT', auth: 'admin', body }),
   batchOpen: (day?: string) =>

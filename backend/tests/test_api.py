@@ -1130,3 +1130,74 @@ class TestQaNextStep:
             ("open", D2.isoformat(), True),
             ("settle", D2.isoformat(), False),
         ]
+
+
+class TestNotifications:
+    def send(self, client: TestClient, admin: dict[str, str], **body: Any) -> Any:
+        r = client.post("/api/admin/notifications", json=body, headers=admin)
+        assert r.status_code == 201, r.text
+        return r.json()
+
+    def test_broadcast_and_personal_with_read_state(
+        self, client: TestClient, admin: dict[str, str]
+    ) -> None:
+        alice, bob = register(client, "alice"), register(client, "bob")
+        bob_id = client.get("/api/me", headers=bob).json()["id"]
+        everyone = self.send(client, admin, title="전체 공지", body="첫 줄\n둘째 줄")
+        personal = self.send(
+            client, admin, title="보상 안내", body="보상했습니다", participant_id=bob_id
+        )
+        assert everyone["participant_id"] is None and everyone["recipients"] == 2
+        assert personal["nickname"] == "bob" and personal["recipients"] == 1
+
+        a = client.get("/api/me/notifications", headers=alice).json()
+        assert a["unread"] == 1 and [i["title"] for i in a["items"]] == ["전체 공지"]
+        assert a["items"][0]["body"] == "첫 줄\n둘째 줄" and a["items"][0]["personal"] is False
+        b = client.get("/api/me/notifications", headers=bob).json()
+        assert b["unread"] == 2 and [i["title"] for i in b["items"]] == ["보상 안내", "전체 공지"]
+
+        # 하나만 읽음 → bob에게만 반영
+        r = client.post("/api/me/notifications/read", json={"ids": [everyone["id"]]}, headers=bob)
+        assert r.status_code == 200 and r.json()["unread"] == 1
+        read = {i["title"]: i["read_at"] for i in r.json()["items"]}
+        assert read["전체 공지"] is not None and read["보상 안내"] is None
+        assert client.get("/api/me/notifications", headers=alice).json()["unread"] == 1
+        # 남의 알림 id는 읽음 처리되지 않는다
+        client.post("/api/me/notifications/read", json={"ids": [personal["id"]]}, headers=alice)
+        listed = client.get("/api/admin/notifications", headers=admin).json()
+        assert {n["title"]: n["read_count"] for n in listed} == {"보상 안내": 0, "전체 공지": 1}
+        # 모두 읽음(두 번 눌러도 같다)
+        for _ in range(2):
+            r = client.post("/api/me/notifications/read", json={}, headers=bob)
+            assert r.json()["unread"] == 0
+        assert client.get("/api/me/notifications", headers=alice).json()["unread"] == 1
+
+        # 삭제하면 읽음 기록과 함께 사라진다
+        assert (
+            client.delete(f"/api/admin/notifications/{everyone['id']}", headers=admin).status_code
+            == 204
+        )
+        assert client.get("/api/me/notifications", headers=alice).json() == {
+            "unread": 0,
+            "items": [],
+        }
+        actions = [x["action"] for x in client.get("/api/admin/audit", headers=admin).json()]
+        assert "notification.create" in actions and "notification.delete" in actions
+
+    def test_validation_and_auth(self, client: TestClient, admin: dict[str, str]) -> None:
+        assert client.get("/api/me/notifications").status_code == 401
+        assert (
+            client.post("/api/admin/notifications", json={"title": "t", "body": "b"}).status_code
+            == 401
+        )
+        bad = client.post(
+            "/api/admin/notifications",
+            json={"title": "t", "body": "b", "participant_id": 9999},
+            headers=admin,
+        )
+        assert bad.status_code == 404
+        blank = client.post(
+            "/api/admin/notifications", json={"title": "  ", "body": "b"}, headers=admin
+        )
+        assert blank.status_code == 422
+        assert client.delete("/api/admin/notifications/9999", headers=admin).status_code == 404

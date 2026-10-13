@@ -68,6 +68,16 @@
 | 제목 / 부제 / 본문 / 바이라인 | 참가자에게 보이는 기사(제목 120자, 부제 120자, 본문 600자, 매체명 40자). 부제 이하는 선택([03 §3.3](03-pricing.md#33-기사-풀)). |
 | 출처 | 무작위 생성·관리자 작성. |
 
+### 알림 (Notification, NotificationRead)
+
+운영진이 참가자에게 보내는 알림. 참가자 메인 화면에 쌓이고, 참가자마다 읽음·안 읽음을 따로 표시한다.
+
+| 필드 | 설명 |
+|---|---|
+| `notifications.participant_id` | 받는 참가자. NULL이면 전체 알림(나중에 가입한 참가자에게도 보인다) |
+| `notifications.title`, `body`, `created_at` | 제목(≤120), 본문(≤2000, 줄바꿈 유지), 보낸 시각 |
+| `notification_reads (notification_id, participant_id)` 유일 | 참가자가 읽은 기록과 `read_at`. 전체 알림도 참가자마다 1행 |
+
 ### 정산 로그 (SettlementLog)
 
 | 필드 | 설명 · 제약 |

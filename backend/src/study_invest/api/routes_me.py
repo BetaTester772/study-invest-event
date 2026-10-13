@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from ..models import CodePurpose, Order, Participant, StudyCertification
 from ..normalize import mask_email
-from ..services import auth, certification, trading
+from ..services import auth, certification, notifications, trading
 from ..services.common import DomainError, get_params
 from . import schemas, views
 from .deps import (
@@ -214,3 +214,19 @@ def certification_image(
     if path is None:
         raise DomainError("NOT_FOUND", "사진이 삭제되었습니다.", 404)
     return FileResponse(path, media_type=cert.image_content_type)
+
+
+@router.get("/notifications", response_model=schemas.NotificationInbox)
+def my_notifications(participant: MeDep, s: SessionDep) -> schemas.NotificationInbox:
+    """나에게 보이는 알림(전체 + 나에게 온 것), 최신부터. 읽은·안 읽은 것을 구분한다."""
+    return views.notification_inbox(notifications.inbox(s, participant.id))
+
+
+@router.post("/notifications/read", response_model=schemas.NotificationInbox)
+def read_notifications(
+    body: schemas.ReadNotificationsRequest, participant: MeDep, s: SessionDep, now: RealNowDep
+) -> schemas.NotificationInbox:
+    """알림을 읽음으로 표시한다(ids를 생략하면 전부). 갱신된 알림 목록을 돌려준다."""
+    notifications.mark_read(s, participant.id, body.ids, now)
+    s.commit()
+    return views.notification_inbox(notifications.inbox(s, participant.id))

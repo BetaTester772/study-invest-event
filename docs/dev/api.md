@@ -244,6 +244,8 @@ interface RankingEntry {
 | GET | `/api/me/certification-status` | – | `CertificationStatus` — 지금 올릴 수 있는지(제출 API와 같은 판단). 화면은 이 값만 따른다 |
 | POST | `/api/me/certifications` | multipart `file` (image/jpeg·png·webp·heic, ≤10MB) | 201 `Certification` / 409 `ALREADY_CERTIFIED`, 422 `OUTSIDE_EVENT`, `INVALID_IMAGE` |
 | GET | `/api/me/certifications/{id}/image` | – | 이미지 바이너리 |
+| GET | `/api/me/notifications` | – | `{unread, items: [{id, title, body, created_at, personal, read_at}]}` — 나에게 보이는 알림(전체 + 나에게 온 것), 최신부터. `personal`: 나에게만 온 알림, `read_at`: 안 읽었으면 null |
+| POST | `/api/me/notifications/read` | `{ids?}` | 갱신된 알림 목록(위와 같은 형식). `ids`를 생략·null로 보내면 보이는 알림 전부를 읽음으로. 남에게 온 알림 id는 무시. 이미 읽은 것은 그대로 |
 
 ## 관리자 (X-Admin-Key)
 
@@ -342,6 +344,9 @@ interface AuditEntry { id: number; at: string; actor: string; action: string; de
 | GET | `/api/admin/news` | – | `AdminNewsItem[]` (`NewsItem` + `source: "random"\|"manual"`, `created_at`, `applied`(발표일 시작가에 이미 반영됨)). 미래 날짜 포함, 최신 날짜부터 |
 | PUT | `/api/admin/news/{day}/{code}` | `{kind, rate, headline, subtitle?, body?, byline?}` | `AdminNewsItem` — 시작가가 아직 정해지지 않은 운영일(전날 정산 전)의 뉴스를 쓴다(같은 날·종목이 있으면 덮어씀). 전날 정산에서 곱해진다. 부제·본문·바이라인은 선택이며 공백은 정리되고 비면 null. 감사 로그 `news.manual` / 404 `UNKNOWN_INSTRUMENT`, 409 `PRICE_ALREADY_FIXED`, 422 `NOT_A_STOCK`, `NOT_OPERATING_DAY`, `NO_ROUND`, `NO_PREVIOUS_SETTLEMENT`(첫 운영일), `INVALID_RATE`, `HEADLINE_REQUIRED`, `HEADLINE_TOO_LONG`, `ARTICLE_TOO_LONG` |
 | DELETE | `/api/admin/news/{day}/{code}` | – | 204. 감사 로그 `news.delete` / 404 `NEWS_NOT_FOUND`, 409 `PRICE_ALREADY_FIXED` |
+| GET | `/api/admin/notifications` | – | `AdminNotification[]` `{id, title, body, created_at, participant_id, nickname, read_count, recipients}` 최신부터. 전체 알림은 `participant_id`·`nickname`이 null, `recipients`는 지금 참가자 수 |
+| POST | `/api/admin/notifications` | `{title(≤120), body(≤2000), participant_id?}` | 201 `AdminNotification`. `participant_id`를 생략·null이면 전체 알림. 감사 로그 `notification.create` / 404 참가자 없음, 422 빈 제목·내용 |
+| DELETE | `/api/admin/notifications/{id}` | – | 204. 읽음 기록도 함께 지운다. 감사 로그 `notification.delete` / 404 |
 | POST | `/api/admin/batch/open` | `{day?}` (기본 오늘) | `BatchResult` |
 | POST | `/api/admin/batch/settle` | `{day?}` | `BatchResult` — `detail.news`: 이 정산에서 다음 운영일 시작가에 곱한 뉴스 목록(종목마다 최대 1건, 하루 여러 건 가능. `day, code, kind, rate, headline, source`) |
 | POST | `/api/admin/batch/run-due` | – | `BatchResult[]` (현재 시각에 밀린 배치 실행) |
